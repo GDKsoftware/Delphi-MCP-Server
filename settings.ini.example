@@ -1,0 +1,17 @@
+[Server]
+Port=3000
+Host=localhost
+Protocol=http
+Name=delphi-mcp-server
+Version=1.0.0
+Endpoint=/mcp
+
+[Protocol]
+Version=2025-03-26
+
+[CORS]
+Enabled=True
+; Comma-separated list of allowed origins
+; Use * to allow all origins (not recommended for production)
+; Default: localhost and 127.0.0.1 with http and https
+AllowedOrigins=http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000

@@ -1,0 +1,331 @@
+# Delphi MCP Server
+
+A Model Context Protocol (MCP) server implementation in Delphi, designed to integrate with Claude Code and other MCP-compatible clients for AI-powered Delphi development workflows.
+
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Using as a Library](#using-as-a-library)
+- [Integration with Claude Code](#integration-with-claude-code)
+- [Available Example Tools](#available-example-tools)
+- [Available Example Resources](#available-example-resources)
+- [Configuration](#configuration)
+- [License](#license)
+- [About GDK Software](#about-gdk-software)
+- [Support](#support)
+
+## Features
+
+- **Full MCP Protocol Support**: Implements the Model Context Protocol specification for seamless AI integration
+- **Tool System**: Extensible tool system with RTTI-based discovery and execution
+- **Resource Management**: Modular resource system supporting various content types
+- **JSON-RPC 2.0**: Standards-compliant JSON-RPC implementation
+- **Security**: Built-in security features including CORS configuration
+- **High Performance**: Native implementation using Indy HTTP Server
+- **Optional Parameters**: Support for optional tool parameters using custom attributes
+- **Cross-Platform**: Supports Windows (Win32/Win64) and Linux (x64)
+
+## Requirements
+
+- Delphi 12 Athens or later
+- Windows (Win32/Win64) or Linux (x64)
+- No external dependencies (all required libraries included)
+
+## Installation
+
+### For Standalone Usage
+
+1. Clone the repository:
+```bash
+git clone https://github.com/GDKsoftware/delphi-mcp-server.git
+cd delphi-mcp-server
+```
+
+2. Build the project:
+
+#### Windows Build
+```bash
+build.bat
+```
+
+Or specify configuration and platform:
+```bash
+build.bat Debug Win32
+build.bat Release Win64
+```
+
+#### Linux Build
+
+**Prerequisites:**
+- Delphi Enterprise with Linux platform support
+- PAServer running on Linux target machine
+- Linux SDK configured in RAD Studio
+
+From the batch file:
+```bash
+build.bat Release Linux64
+```
+
+Or from RAD Studio IDE:
+1. Open MCPServer.dproj
+2. Select Linux64 platform
+3. Build
+
+## Using as a Library
+
+The Delphi MCP Server is designed to be used both as a standalone application and as a library for your own MCP server implementations. This section covers how to integrate it into your existing Delphi projects.
+
+### Project Setup for Library Usage
+
+#### Option 1: Git Submodule (Recommended)
+
+```bash
+# Add MCPServer as a submodule to your project
+git submodule add https://github.com/GDKsoftware/delphi-mcp-server.git lib/mcpserver
+git submodule update --init --recursive
+```
+
+#### Option 2: Direct Source Inclusion
+
+Copy the `src` folder from MCPServer into your project and add the units to your uses clauses.
+
+#### Delphi Project Configuration
+
+1. **Search Paths**: Add the MCPServer source directories to your project search path:
+   - `lib\mcpserver\src\Core`
+   - `lib\mcpserver\src\Managers` 
+   - `lib\mcpserver\src\Protocol`
+   - `lib\mcpserver\src\Server`
+   - `lib\mcpserver\src\Tools`
+   - `lib\mcpserver\src\Resources`
+
+2. **Required Units**: Include these core units in your project:
+   ```pascal
+   MCPServer.Types,
+   MCPServer.Settings,
+   MCPServer.Registration,
+   MCPServer.ManagerRegistry,
+   MCPServer.IdHTTPServer
+   ```
+
+### Library Integration
+
+Once you have the project setup complete, the simplest way to add MCP capabilities to your application:
+
+```pascal
+program YourMCPServer;
+
+{$APPTYPE CONSOLE}
+
+uses
+  System.SysUtils,
+  MCPServer.Types in 'lib\mcpserver\src\Protocol\MCPServer.Types.pas',
+  MCPServer.IdHTTPServer in 'lib\mcpserver\src\Server\MCPServer.IdHTTPServer.pas',
+  MCPServer.Settings in 'lib\mcpserver\src\Core\MCPServer.Settings.pas',
+  MCPServer.ManagerRegistry in 'lib\mcpserver\src\Core\MCPServer.ManagerRegistry.pas',
+  MCPServer.CoreManager in 'lib\mcpserver\src\Managers\MCPServer.CoreManager.pas',
+  MCPServer.ToolsManager in 'lib\mcpserver\src\Managers\MCPServer.ToolsManager.pas',
+  MCPServer.ResourcesManager in 'lib\mcpserver\src\Managers\MCPServer.ResourcesManager.pas';
+
+var
+  Server: TMCPIdHTTPServer;
+  Settings: TMCPSettings;
+  ManagerRegistry: IMCPManagerRegistry;
+  
+begin
+  Settings := TMCPSettings.Create;
+  try
+    ManagerRegistry := TMCPManagerRegistry.Create;
+    ManagerRegistry.RegisterManager(TMCPCoreManager.Create(Settings));
+    ManagerRegistry.RegisterManager(TMCPToolsManager.Create);
+    ManagerRegistry.RegisterManager(TMCPResourcesManager.Create);
+    
+    Server := TMCPIdHTTPServer.Create(nil);
+    try
+      Server.Settings := Settings;
+      Server.ManagerRegistry := ManagerRegistry;
+      Server.Start;
+      
+      Writeln('MCP Server running on port ', Settings.Port);
+      Readln; // Keep running
+      
+      Server.Stop;
+    finally
+      Server.Free;
+    end;
+  finally
+    Settings.Free;
+  end;
+end.
+```
+
+### Creating Custom Tools
+
+```pascal
+unit YourProject.Tool.Custom;
+
+interface
+
+uses
+  MCPServer.Tool.Base,
+  MCPServer.Types,
+  MCPServer.Registration;
+
+type
+  TCustomToolParams = class
+  private
+    FInput: string;
+    FCount: Integer;
+  public
+    [SchemaDescription('Text input to process')]
+    property Input: string read FInput write FInput;
+    
+    [Optional]
+    [SchemaDescription('Number of times to repeat (default: 1)')]
+    property Count: Integer read FCount write FCount;
+  end;
+
+  TCustomTool = class(TMCPToolBase<TCustomToolParams>)
+  protected
+    function ExecuteWithParams(const AParams: TCustomToolParams): string; override;
+  public
+    constructor Create; override;
+  end;
+
+implementation
+
+constructor TCustomTool.Create;
+begin
+  inherited;
+  FName := 'custom_tool';
+  FDescription := 'A custom tool that processes input';
+end;
+
+function TCustomTool.ExecuteWithParams(const AParams: TCustomToolParams): string;
+var
+  I: Integer;
+  Output: string;
+begin
+  Output := '';
+  for I := 1 to AParams.Count do
+    Output := Output + AParams.Input + #13#10;
+  Result := 'Processed: ' + Output;
+end;
+
+initialization
+  TMCPRegistry.RegisterTool('custom_tool',
+    function: IMCPTool
+    begin
+      Result := TCustomTool.Create;
+    end
+  );
+
+end.
+```
+
+### Creating Custom Resources
+
+```pascal
+unit YourProject.Resource.Custom;
+
+interface
+
+uses
+  MCPServer.Resource.Base,
+  MCPServer.Registration;
+
+type
+  TCustomData = class
+  private
+    FMessage: string;
+    FTimestamp: TDateTime;
+  public
+    property Message: string read FMessage write FMessage;
+    property Timestamp: TDateTime read FTimestamp write FTimestamp;
+  end;
+
+  TCustomResource = class(TMCPResourceBase<TCustomData>)
+  protected
+    function GetResourceData: TCustomData; override;
+  public
+    constructor Create; override;
+  end;
+
+implementation
+
+constructor TCustomResource.Create;
+begin
+  inherited;
+  FURI := 'custom://data';
+  FName := 'Custom Data';
+  FDescription := 'Custom resource data';
+  FMimeType := 'application/json';
+end;
+
+function TCustomResource.GetResourceData: TCustomData;
+begin
+  Result := TCustomData.Create;
+  Result.Message := 'Hello from custom resource';
+  Result.Timestamp := Now;
+end;
+
+initialization
+  TMCPRegistry.RegisterResource('custom://data',
+    function: IMCPResource
+    begin
+      Result := TCustomResource.Create;
+    end
+  );
+
+end.
+```
+
+## Integration with Claude Code
+
+Configure using the Streamable HTTP transport:
+
+```bash
+# Basic configuration
+claude mcp add --transport http delphi-mcp-server http://localhost:3000/mcp
+
+# With authentication (if configured)
+claude mcp add --transport http delphi-mcp-server http://localhost:3000/mcp --header "Authorization: Bearer your-token"
+```
+
+Make sure the server is running before connecting Claude Code.
+
+## Available Example tools
+
+- **echo**: Echo a message back to the user
+- **get_time**: Get the current server time
+- **list_files**: List files in a directory
+- **calculate**: Perform basic arithmetic calculations
+
+## Available Example resources
+
+The server provides four essential resources accessible via URIs:
+
+- **project://info** - Project information (JSON metadata with collections)
+- **project://readme** - This README file (markdown content) 
+- **logs://recent** - Recent log entries from all categories (with thread safety)
+- **server://status** - Current server status and health information
+
+## Configuration
+
+The server supports configuration through `settings.ini` files. A default `settings.ini.example` is provided in the repository.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## About GDK Software
+
+[GDK Software](https://www.gdksoftware.com) is a software company specializing in Delphi development Delphi upgrades/migrations. We provide Delphi development, upgrades, maintenance, and modernization of applications services. GDK Software also offers consulting and training related to Delphi and low-code development with Codolex. We have a global presence with offices in the Netherlands, UK, USA, and Brazil
+
+## Support
+
+- Create an issue on [GitHub](https://github.com/GDKsoftware/delphi-mcp-server/issues)
+- Visit our website at [www.gdksoftware.com](https://www.gdksoftware.com)
+- Contact us for commercial support
