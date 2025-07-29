@@ -1,5 +1,10 @@
 # Delphi MCP Server
 
+![Delphi](https://img.shields.io/badge/Delphi-12%2B-red)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![MCP](https://img.shields.io/badge/MCP-2025--03--26-green)
+
 A Model Context Protocol (MCP) server implementation in Delphi, designed to integrate with Claude Code and other MCP-compatible clients for AI-powered Delphi development workflows.
 
 ## Table of Contents
@@ -9,10 +14,12 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - [Installation](#installation)
 - [Using as a Library](#using-as-a-library)
 - [Integration with Claude Code](#integration-with-claude-code)
+- [Testing with MCP Inspector](#testing-with-mcp-inspector)
 - [Available Example Tools](#available-example-tools)
 - [Available Example Resources](#available-example-resources)
 - [Configuration](#configuration)
 - [License](#license)
+- [Contributing](#contributing)
 - [About GDK Software](#about-gdk-software)
 - [Support](#support)
 
@@ -296,6 +303,36 @@ claude mcp add --transport http delphi-mcp-server http://localhost:3000/mcp --he
 
 Make sure the server is running before connecting Claude Code.
 
+## Testing with MCP Inspector
+
+The easiest way to test and debug your MCP server is using the official MCP Inspector:
+
+1. **Start the server**:
+   ```bash
+   # Build and run the server
+   build.bat
+   Win32\Debug\MCPServer.exe
+   ```
+
+2. **Run MCP Inspector**:
+   ```bash
+   # Install and run the MCP Inspector
+   npx @modelcontextprotocol/inspector
+   ```
+
+3. **Connect to your server**:
+   - **Transport**: HTTP
+   - **URL**: `http://localhost:3000/mcp`
+   - Click **Connect**
+
+4. **Test functionality**:
+   - Browse available tools and resources
+   - Execute tools like `echo`, `get_time`, `calculate`
+   - View resources like `project://info`, `server://status`
+   - Monitor request/response JSON-RPC messages
+
+The Inspector provides a web interface to interact with your MCP server, making it perfect for development and debugging.
+
 ## Available Example tools
 
 - **echo**: Echo a message back to the user
@@ -320,9 +357,29 @@ The server supports configuration through `settings.ini` files. A default `setti
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Contributing
+
+We welcome contributions! Here's how to help:
+
+### Reporting Issues
+- Use [GitHub Issues](https://github.com/GDKsoftware/delphi-mcp-server/issues) for bugs and feature requests
+- Include Delphi version, platform, and reproduction steps
+
+### Pull Requests
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Follow existing code style (inline vars, named constants)
+4. Test your changes
+5. Submit a pull request
+
+### Development Setup
+- Requires Delphi 12+ 
+- Open `MCPServer.dproj` or build with `build.bat`
+- Test with `npx @modelcontextprotocol/inspector` or Claude Code or similar
+
 ## About GDK Software
 
-[GDK Software](https://www.gdksoftware.com) is a software company specializing in Delphi development Delphi upgrades/migrations. We provide Delphi development, upgrades, maintenance, and modernization of applications services. GDK Software also offers consulting and training related to Delphi and low-code development with Codolex. We have a global presence with offices in the Netherlands, UK, USA, and Brazil
+[GDK Software](https://www.gdksoftware.com) is a software company specializing in Delphi development, upgrades, and migrations. We provide Delphi development, upgrades, maintenance, and modernization of application services. GDK Software also offers consulting and training related to Delphi and low-code development with Codolex. We have a global presence with offices in the Netherlands, UK, USA, and Brazil.
 
 ## Support
 
