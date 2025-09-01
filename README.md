@@ -240,6 +240,7 @@ unit YourProject.Resource.Custom;
 interface
 
 uses
+  System.SysUtils,
   MCPServer.Resource.Base,
   MCPServer.Registration;
 
