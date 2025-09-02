@@ -89,7 +89,7 @@ begin
   
   var ResultJSON := TJSONObject.Create;
   try
-    ResultJSON.AddPair('protocolVersion', FSettings.ProtocolVersion);
+    ResultJSON.AddPair('protocolVersion', MCP_PROTOCOL_VERSION);
     
     var Capabilities := TJSONObject.Create;
     ResultJSON.AddPair('capabilities', Capabilities);

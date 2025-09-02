@@ -7,6 +7,9 @@ uses
   System.JSON,
   System.Rtti;
 
+const
+  MCP_PROTOCOL_VERSION = '2025-06-18';
+
 type
   OptionalAttribute = class(TCustomAttribute)
   end;

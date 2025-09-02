@@ -304,6 +304,31 @@ claude mcp add --transport http delphi-mcp-server http://localhost:3000/mcp --he
 
 Make sure the server is running before connecting Claude Code.
 
+### HTTPS/SSL Configuration
+
+The server supports HTTPS connections when configured with SSL certificates:
+
+1. **Generate SSL Certificates**:
+   ```bash
+   # Generate self-signed certificates (for development)
+   generate-ssl-cert.bat
+   ```
+   This creates certificates in the `certs` directory.
+
+2. **Configure SSL in settings.ini**:
+   ```ini
+   [SSL]
+   Enabled=1  ; Use 1 (true) or 0 (false)
+   CertFile=C:\path\to\server.crt
+   KeyFile=C:\path\to\server.key
+   RootCertFile=C:\path\to\ca.crt  ; Optional
+   ```
+
+3. **Start the server**:
+   The server will automatically use HTTPS when SSL is enabled.
+
+**Note**: For production, use certificates from a trusted Certificate Authority (CA) instead of self-signed certificates.
+
 ## Testing with MCP Inspector
 
 The easiest way to test and debug your MCP server is using the official MCP Inspector:
@@ -353,6 +378,76 @@ The server provides four essential resources accessible via URIs:
 ## Configuration
 
 The server supports configuration through `settings.ini` files. A default `settings.ini.example` is provided in the repository.
+
+### SSL/TLS Configuration
+
+The Delphi MCP Server supports two SSL/TLS implementations:
+
+1. **Standard Indy SSL** - Uses OpenSSL 1.0.2 (default if TaurusTLS not available)
+2. **TaurusTLS** - Uses OpenSSL 3.x with modern cipher support (recommended)
+
+#### Installing TaurusTLS
+
+TaurusTLS provides OpenSSL 3.x support with modern ECDHE cipher suites required by services like Cloudflare.
+
+**Via GetIt Package Manager (Easiest):**
+1. Open Delphi IDE
+2. Go to Tools > GetIt Package Manager
+3. Search for "TaurusTLS"
+4. Click Install
+
+**Manual Installation:**
+1. Clone from https://github.com/JPeterMugaas/TaurusTLS
+2. Open `TaurusTLS\Packages\d12\TaurusAll.groupproj`
+3. Compile `TaurusTLS_RT`
+4. Compile and install `TaurusTLS_DT`
+
+#### Switching Between SSL Implementations
+
+Edit `src\Server\MCPServer.IdHTTPServer.pas`:
+
+```pascal
+// To use TaurusTLS (OpenSSL 3.x):
+{$DEFINE USE_TAURUS_TLS}  // Keep this line uncommented
+
+// To use Standard Indy SSL (OpenSSL 1.0.2):
+// {$DEFINE USE_TAURUS_TLS}  // Comment out this line
+```
+
+#### OpenSSL DLL Requirements
+
+**For TaurusTLS:**
+
+*Windows:*
+- Requires OpenSSL 3.x DLLs:
+  - Win32: `libcrypto-3.dll`, `libssl-3.dll`
+  - Win64: `libcrypto-3-x64.dll`, `libssl-3-x64.dll`
+- Pre-compiled binaries:
+  - https://github.com/JPeterMugaas/OpenSSL-Distribution/tree/main/binaries/Windows
+  - https://github.com/TurboPack/OpenSSL-Distribution/tree/main/binaries/Windows
+- Current versions: 3.0.17, 3.2.5, 3.3.4, 3.4.2, 3.5.1, 3.5.2
+- Place DLLs in the same directory as your executable
+
+*Linux:*
+- OpenSSL is usually installed by default
+- Update if needed: `sudo apt-get install libssl-dev` (Debian/Ubuntu) or `sudo yum install openssl-devel` (RHEL/CentOS)
+- Build scripts available: https://github.com/TurboPack/OpenSSL-Distribution/tree/main/build-scripts
+
+*macOS:*
+- Use static libraries (.a files) for OpenSSL 3.x
+- Install via Homebrew: `brew install openssl@3`
+- Or use pre-compiled libraries from TaurusTLS distributions
+- Build scripts available: https://github.com/TurboPack/OpenSSL-Distribution/tree/main/build-scripts
+
+**For Standard Indy:**
+- Requires OpenSSL 1.0.2 DLLs (`libeay32.dll`, `ssleay32.dll`)
+- Limited cipher support, not recommended for modern clients
+
+#### Known Issues & Solutions
+
+- **Cloudflare Tunnel**: Standard Indy SSL lacks ECDHE cipher support. Use TaurusTLS or run Cloudflare Tunnel with HTTP: `cloudflared tunnel --url http://localhost:8080`
+- **Self-Signed Certificates**: Claude Desktop doesn't accept self-signed certificates. Use Cloudflare Tunnel or a valid certificate from a trusted CA
+- **"No shared cipher" error**: Install and enable TaurusTLS for modern cipher support
 
 ## License
 

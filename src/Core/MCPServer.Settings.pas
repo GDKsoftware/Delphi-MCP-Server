@@ -12,14 +12,17 @@ type
   private
     FPort: Integer;
     FHost: string;
-    FProtocol: string;
     FServerName: string;
     FServerVersion: string;
     FEndpoint: string;
-    FProtocolVersion: string;
     FCorsEnabled: Boolean;
     FCorsAllowedOrigins: string;
     FSettingsFile: string;
+    FSSLEnabled: Boolean;
+    FSSLCertFile: string;
+    FSSLKeyFile: string;
+    FSSLRootCertFile: string;
+    function GetProtocol: string;
     
     procedure LoadDefaults;
     procedure CreateDefaultSettingsFile;
@@ -32,14 +35,17 @@ type
     
     property Port: Integer read FPort write FPort;
     property Host: string read FHost write FHost;
-    property Protocol: string read FProtocol write FProtocol;
+    property Protocol: string read GetProtocol;
     property ServerName: string read FServerName write FServerName;
     property ServerVersion: string read FServerVersion write FServerVersion;
     property Endpoint: string read FEndpoint write FEndpoint;
-    property ProtocolVersion: string read FProtocolVersion write FProtocolVersion;
     property CorsEnabled: Boolean read FCorsEnabled write FCorsEnabled;
     property CorsAllowedOrigins: string read FCorsAllowedOrigins write FCorsAllowedOrigins;
     property SettingsFile: string read FSettingsFile;
+    property SSLEnabled: Boolean read FSSLEnabled write FSSLEnabled;
+    property SSLCertFile: string read FSSLCertFile write FSSLCertFile;
+    property SSLKeyFile: string read FSSLKeyFile write FSSLKeyFile;
+    property SSLRootCertFile: string read FSSLRootCertFile write FSSLRootCertFile;
   end;
 
 implementation
@@ -78,13 +84,23 @@ procedure TMCPSettings.LoadDefaults;
 begin
   FPort := 3000;
   FHost := 'localhost';
-  FProtocol := 'http';
   FServerName := 'delphi-mcp-server';
   FServerVersion := '1.0.0';
   FEndpoint := '/mcp';
-  FProtocolVersion := '2025-03-26';
   FCorsEnabled := True;
   FCorsAllowedOrigins := 'http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1';
+  FSSLEnabled := False;
+  FSSLCertFile := '';
+  FSSLKeyFile := '';
+  FSSLRootCertFile := '';
+end;
+
+function TMCPSettings.GetProtocol: string;
+begin
+  if FSSLEnabled then
+    Result := 'https'
+  else
+    Result := 'http';
 end;
 
 procedure TMCPSettings.CreateDefaultSettingsFile;
@@ -94,18 +110,20 @@ begin
     IniFile.WriteString('Server', '; Server configuration', '');
     IniFile.WriteInteger('Server', 'Port', FPort);
     IniFile.WriteString('Server', 'Host', FHost);
-    IniFile.WriteString('Server', 'Protocol', FProtocol);
     IniFile.WriteString('Server', 'Name', FServerName);
     IniFile.WriteString('Server', 'Version', FServerVersion);
     IniFile.WriteString('Server', 'Endpoint', FEndpoint);
-    
-    IniFile.WriteString('Protocol', '; MCP Protocol configuration', '');
-    IniFile.WriteString('Protocol', 'Version', FProtocolVersion);
     
     IniFile.WriteString('CORS', '; Cross-Origin Resource Sharing configuration', '');
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', '; Comma-separated list of allowed origins', '');
     IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
+    
+    IniFile.WriteString('SSL', '; SSL/TLS configuration (optional)', '');
+    IniFile.WriteBool('SSL', 'Enabled', FSSLEnabled);
+    IniFile.WriteString('SSL', 'CertFile', FSSLCertFile);
+    IniFile.WriteString('SSL', 'KeyFile', FSSLKeyFile);
+    IniFile.WriteString('SSL', 'RootCertFile', FSSLRootCertFile);
   finally
     IniFile.Free;
   end;
@@ -120,18 +138,26 @@ begin
   try
     FPort := IniFile.ReadInteger('Server', 'Port', FPort);
     FHost := IniFile.ReadString('Server', 'Host', FHost);
-    FProtocol := IniFile.ReadString('Server', 'Protocol', FProtocol);
     FServerName := IniFile.ReadString('Server', 'Name', FServerName);
     FServerVersion := IniFile.ReadString('Server', 'Version', FServerVersion);
     FEndpoint := IniFile.ReadString('Server', 'Endpoint', FEndpoint);
     
-    FProtocolVersion := IniFile.ReadString('Protocol', 'Version', FProtocolVersion);
-    
     FCorsEnabled := IniFile.ReadBool('CORS', 'Enabled', FCorsEnabled);
     FCorsAllowedOrigins := IniFile.ReadString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
     
+    FSSLEnabled := IniFile.ReadBool('SSL', 'Enabled', FSSLEnabled);
+    FSSLCertFile := IniFile.ReadString('SSL', 'CertFile', FSSLCertFile);
+    FSSLKeyFile := IniFile.ReadString('SSL', 'KeyFile', FSSLKeyFile);
+    FSSLRootCertFile := IniFile.ReadString('SSL', 'RootCertFile', FSSLRootCertFile);
+    
     TLogger.Info('Settings loaded from: ' + FSettingsFile);
-    TLogger.Info('Server: ' + FHost + ':' + IntToStr(FPort));
+    TLogger.Info('Server: ' + Protocol + '://' + FHost + ':' + IntToStr(FPort));
+    if FSSLEnabled then
+    begin
+      TLogger.Info('SSL Enabled: True');
+      if FSSLCertFile <> '' then
+        TLogger.Info('SSL Certificate: ' + FSSLCertFile);
+    end;
     TLogger.Info('CORS Enabled: ' + BoolToStr(FCorsEnabled, True));
     if FCorsEnabled then
       TLogger.Info('CORS Allowed Origins: ' + FCorsAllowedOrigins);
@@ -146,15 +172,17 @@ begin
   try
     IniFile.WriteInteger('Server', 'Port', FPort);
     IniFile.WriteString('Server', 'Host', FHost);
-    IniFile.WriteString('Server', 'Protocol', FProtocol);
     IniFile.WriteString('Server', 'Name', FServerName);
     IniFile.WriteString('Server', 'Version', FServerVersion);
     IniFile.WriteString('Server', 'Endpoint', FEndpoint);
     
-    IniFile.WriteString('Protocol', 'Version', FProtocolVersion);
-    
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
+    
+    IniFile.WriteBool('SSL', 'Enabled', FSSLEnabled);
+    IniFile.WriteString('SSL', 'CertFile', FSSLCertFile);
+    IniFile.WriteString('SSL', 'KeyFile', FSSLKeyFile);
+    IniFile.WriteString('SSL', 'RootCertFile', FSSLRootCertFile);
   finally
     IniFile.Free;
   end;

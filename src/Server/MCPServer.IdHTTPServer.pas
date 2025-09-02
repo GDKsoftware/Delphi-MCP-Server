@@ -2,17 +2,28 @@ unit MCPServer.IdHTTPServer;
 
 interface
 
+// TaurusTLS provides OpenSSL 3.x support with modern ECDHE cipher suites
+// Install via GetIt Package Manager: Search for "TaurusTLS" or get from https://github.com/JPeterMugaas/TaurusTLS
+{$DEFINE USE_TAURUS_TLS}  // Comment this line to use standard Indy SSL (OpenSSL 1.0.2)
+
 uses
   System.SysUtils,
   System.Classes,
   System.JSON,
   System.Rtti,
+  System.IOUtils,
   System.Generics.Collections,
   IdHTTPServer,
   IdContext,
   IdCustomHTTPServer,
   IdGlobal,
   IdGlobalProtocols,
+  {$IFDEF USE_TAURUS_TLS}
+  TaurusTLS,
+  {$ELSE}
+  IdSSLOpenSSL,
+  {$ENDIF}
+  IdServerIOHandler,
   MCPServer.Types,
   MCPServer.Settings;
 
@@ -20,11 +31,18 @@ type
   TMCPIdHTTPServer = class(TComponent)
   private
     FHTTPServer: TIdHTTPServer;
+    {$IFDEF USE_TAURUS_TLS}
+    FSSLHandler: TTaurusTLSServerIOHandler;
+    {$ELSE}
+    FSSLHandler: TIdServerIOHandlerSSLOpenSSL;
+    {$ENDIF}
     FManagerRegistry: IMCPManagerRegistry;
     FCoreManager: IMCPCapabilityManager;
     FPort: Word;
     FActive: Boolean;
     FSettings: TMCPSettings;
+    procedure ConfigureSSL;
+    procedure HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean);
     procedure HandleHTTPRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     function VerifyAndSetCORSHeaders(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
     procedure HandleOptionsRequest(ResponseInfo: TIdHTTPResponseInfo);
@@ -89,6 +107,8 @@ begin
   FHTTPServer := TIdHTTPServer.Create(Self);
   FHTTPServer.OnCommandGet := HandleHTTPRequest;
   FHTTPServer.OnCommandOther := HandleHTTPRequest;
+  FHTTPServer.OnQuerySSLPort := HandleQuerySSLPort;
+  FSSLHandler := nil;
 end;
 
 destructor TMCPIdHTTPServer.Destroy;
@@ -96,6 +116,8 @@ begin
   if FActive then
     Stop;
   FHTTPServer.Free;
+  if Assigned(FSSLHandler) then
+    FSSLHandler.Free;
   inherited;
 end;
 
@@ -105,12 +127,19 @@ begin
     Exit;
     
   if Assigned(FSettings) then
+  begin
     FPort := Word(FSettings.Port);
+    
+    // Configure SSL if enabled
+    if FSettings.SSLEnabled then
+      ConfigureSSL;
+  end;
     
   FHTTPServer.DefaultPort := FPort;
   FHTTPServer.Active := True;
   FActive := True;
-  TLogger.Info('MCP Server started on port ' + IntToStr(FPort));
+  
+  TLogger.Info('MCP Server started on ' + FSettings.Protocol + '://' + FSettings.Host + ':' + IntToStr(FPort));
 end;
 
 procedure TMCPIdHTTPServer.Stop;
@@ -231,13 +260,6 @@ end;
 procedure TMCPIdHTTPServer.HandlePostRequest(RequestInfo: TIdHTTPRequestInfo; 
   ResponseInfo: TIdHTTPResponseInfo);
 begin
-  var AcceptHeader := RequestInfo.RawHeaders.Values['Accept'];
-  if (AcceptHeader <> '') and (Pos('application/json', AcceptHeader) = 0) then
-  begin
-    ResponseInfo.ResponseNo := HTTP_NOT_ACCEPTABLE;
-    ResponseInfo.ResponseText := 'Not Acceptable - application/json required';
-    Exit;
-  end;
 
   var ReqBody: string;
   if Assigned(RequestInfo.PostStream) and (RequestInfo.PostStream.Size > 0) then
@@ -264,6 +286,24 @@ begin
   
   ResponseInfo.ContentType := 'application/json';
   ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
+  
+  if (SessID = '') and (Pos('"sessionId"', ResponseBody) > 0) then
+  begin
+    var ResponseJSON := TJSONObject.ParseJSONValue(ResponseBody) as TJSONObject;
+    try
+      var ResultObj := ResponseJSON.GetValue('result') as TJSONObject;
+      if Assigned(ResultObj) then
+      begin
+        var SessionValue := ResultObj.GetValue('sessionId');
+        if Assigned(SessionValue) then
+          ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionValue.Value;
+      end;
+    finally
+      ResponseJSON.Free;
+    end;
+  end
+  else if SessID <> '' then
+    ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessID;
 
   ResponseInfo.ContentStream := TStringStream.Create(ResponseBody, TEncoding.UTF8);
   ResponseInfo.FreeContentStream := True;
@@ -418,6 +458,58 @@ begin
     JSONRequest.Free;
     JSONResponse.Free;    
   end;
+end;
+
+procedure TMCPIdHTTPServer.ConfigureSSL;
+begin
+  // Check if certificate files exist
+  if not TFile.Exists(FSettings.SSLCertFile) then
+  begin
+    TLogger.Error('SSL Certificate file not found: ' + FSettings.SSLCertFile);
+    raise Exception.Create('SSL Certificate file not found: ' + FSettings.SSLCertFile);
+  end;
+  
+  if not TFile.Exists(FSettings.SSLKeyFile) then
+  begin
+    TLogger.Error('SSL Key file not found: ' + FSettings.SSLKeyFile);
+    raise Exception.Create('SSL Key file not found: ' + FSettings.SSLKeyFile);
+  end;
+  
+  // Create and configure SSL handler
+  {$IFDEF USE_TAURUS_TLS}
+  // TaurusTLS with OpenSSL 3.x support
+  FSSLHandler := TTaurusTLSServerIOHandler.Create(Self);
+  FSSLHandler.DefaultCert.PublicKey := FSettings.SSLCertFile;
+  FSSLHandler.DefaultCert.PrivateKey := FSettings.SSLKeyFile;
+  {$ELSE}
+  // Standard Indy SSL with OpenSSL 1.0.2
+  FSSLHandler := TIdServerIOHandlerSSLOpenSSL.Create(Self);
+  FSSLHandler.SSLOptions.CertFile := FSettings.SSLCertFile;
+  FSSLHandler.SSLOptions.KeyFile := FSettings.SSLKeyFile;
+  
+  if (FSettings.SSLRootCertFile <> '') and TFile.Exists(FSettings.SSLRootCertFile) then
+    FSSLHandler.SSLOptions.RootCertFile := FSettings.SSLRootCertFile;
+  
+  // Configure SSL options
+  FSSLHandler.SSLOptions.Method := sslvTLSv1_2;
+  FSSLHandler.SSLOptions.SSLVersions := [sslvTLSv1, sslvTLSv1_1, sslvTLSv1_2];
+  FSSLHandler.SSLOptions.Mode := sslmServer;
+  {$ENDIF}
+  
+  // Assign handler to HTTP server
+  FHTTPServer.IOHandler := FSSLHandler;
+  
+  TLogger.Info('SSL configured successfully');
+  TLogger.Info('Certificate: ' + FSettings.SSLCertFile);
+  TLogger.Info('Private Key: ' + FSettings.SSLKeyFile);
+  if FSettings.SSLRootCertFile <> '' then
+    TLogger.Info('Root Certificate: ' + FSettings.SSLRootCertFile);
+end;
+
+procedure TMCPIdHTTPServer.HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean);
+begin
+  // Enable SSL for our configured port when SSL is enabled
+  VUseSSL := FSettings.SSLEnabled and (APort = FPort);
 end;
 
 end.

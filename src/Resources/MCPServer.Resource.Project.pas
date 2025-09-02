@@ -6,6 +6,7 @@ uses
   System.SysUtils,
   System.IOUtils,
   System.Generics.Collections,
+  MCPServer.Types,
   MCPServer.Resource.Base;
 
 type
@@ -97,7 +98,7 @@ begin
   Result.Description := 'A Model Context Protocol (MCP) server implementation in Delphi';
   Result.Language := 'Delphi';
   Result.Framework := 'Indy HTTP Server (TIdHTTPServer)';
-  Result.Protocol := 'MCP 2025-03-26';
+  Result.Protocol := 'MCP ' + MCP_PROTOCOL_VERSION;
   Result.Transport := 'Streamable HTTP';
   Result.Author := 'GDK Software';
   Result.Repository := 'https://github.com/GDKsoftware/delphi-mcp-server';

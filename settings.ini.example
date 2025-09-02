@@ -1,17 +1,42 @@
+; Delphi MCP Server Configuration
+; Copy this file to settings.ini and modify as needed
+
 [Server]
+; Server configuration
 Port=3000
 Host=localhost
-Protocol=http
 Name=delphi-mcp-server
 Version=1.0.0
 Endpoint=/mcp
 
-[Protocol]
-Version=2025-03-26
-
 [CORS]
-Enabled=True
+; Cross-Origin Resource Sharing configuration
+; Boolean values: use 1 (true) or 0 (false)
+Enabled=1
 ; Comma-separated list of allowed origins
 ; Use * to allow all origins (not recommended for production)
 ; Default: localhost and 127.0.0.1 with http and https
 AllowedOrigins=http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000
+
+[SSL]
+; SSL/TLS configuration (optional)
+; Boolean values: use 1 (true) or 0 (false)
+Enabled=0
+
+; Path to SSL certificate file (PEM format)
+; Example: C:\dev\Delphi-MCP-Server\certs\server.crt
+CertFile=
+
+; Path to SSL private key file (PEM format)
+; Example: C:\dev\Delphi-MCP-Server\certs\server.key
+KeyFile=
+
+; Path to root certificate file (optional, PEM format)
+; Example: C:\dev\Delphi-MCP-Server\certs\ca.crt
+RootCertFile=
+
+; Note: To generate self-signed certificates for development:
+; Run: generate-ssl-cert.bat
+; This will create certificates in the certs directory
+
+; For production, use certificates from a trusted Certificate Authority
