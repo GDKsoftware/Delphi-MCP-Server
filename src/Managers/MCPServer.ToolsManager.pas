@@ -16,7 +16,7 @@ type
   TMCPToolsManager = class(TInterfacedObject, IMCPCapabilityManager)
   strict private
     function ExtractToolNameAndArguments(const Params: System.JSON.TJSONObject; out ToolName: string; out Arguments: TJSONObject): Boolean;
-    function ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject): string;
+    function ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject): TJSONObject;
     function BuildToolCallResponse(const ResultText: string): TJSONObject;
     function BuildToolListResponse: TJSONObject;
     function CreateToolJSON(const Tool: IMCPTool): TJSONObject;
@@ -111,13 +111,31 @@ begin
     Arguments := ArgsValue as TJSONObject;
 end;
 
-function TMCPToolsManager.ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject): string;
+function TMCPToolsManager.ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject): TJSONObject;
+var
+  ToolResult: TMCPToolResult;
 begin
   try
-    Result := Tool.Execute(Arguments);
+    if Tool.SupportsStructuredOutput then
+    begin
+      ToolResult := Tool.ExecuteStructured(Arguments);
+      try
+        Result := ToolResult.ToJSON;
+      finally
+        ToolResult.Free;
+      end;
+    end
+    else
+    begin
+      var ResultText := Tool.Execute(Arguments);
+      Result := BuildToolCallResponse(ResultText);
+    end;
   except
     on E: Exception do
-      Result := 'Error executing tool: ' + E.Message;
+    begin
+      var ErrorText := 'Error executing tool: ' + E.Message;
+      Result := BuildToolCallResponse(ErrorText);
+    end;
   end;
 end;
 
@@ -126,7 +144,7 @@ begin
   Result := TJSONObject.Create;
   var ContentArray := TJSONArray.Create;
   Result.AddPair('content', ContentArray);
-  
+
   var ContentItem := TJSONObject.Create;
   ContentArray.AddElement(ContentItem);
   ContentItem.AddPair('type', 'text');
@@ -171,18 +189,18 @@ begin
     Result := TValue.From<TJSONObject>(BuildToolCallResponse('Error: Invalid tool parameters'));
     Exit;
   end;
-  
+
   TLogger.Info('MCP CallTool called for tool: ' + ToolName);
-  
+
   var Tool: IMCPTool;
-  var ResultText: string;
-  
+  var ResultJSON: TJSONObject;
+
   if FTools.TryGetValue(ToolName, Tool) then
-    ResultText := ExecuteTool(Tool, Arguments)
+    ResultJSON := ExecuteTool(Tool, Arguments)
   else
-    ResultText := 'Error: Tool not found: ' + ToolName;
-    
-  Result := TValue.From<TJSONObject>(BuildToolCallResponse(ResultText));
+    ResultJSON := BuildToolCallResponse('Error: Tool not found: ' + ToolName);
+
+  Result := TValue.From<TJSONObject>(ResultJSON);
 end;
 
 function TMCPToolsManager.ListTools: TValue;

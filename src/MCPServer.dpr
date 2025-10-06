@@ -29,6 +29,7 @@ uses
   MCPServer.Tool.GetTime in 'Tools\MCPServer.Tool.GetTime.pas',
   MCPServer.Tool.ListFiles in 'Tools\MCPServer.Tool.ListFiles.pas',
   MCPServer.Tool.Calculate in 'Tools\MCPServer.Tool.Calculate.pas',
+  MCPServer.Tool.RunCommand in 'Tools\MCPServer.Tool.RunCommand.pas',
   MCPServer.Resource.Logs in 'Resources\MCPServer.Resource.Logs.pas',
   MCPServer.Resource.Project in 'Resources\MCPServer.Resource.Project.pas';
 

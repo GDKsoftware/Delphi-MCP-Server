@@ -3,7 +3,7 @@
 ![Delphi](https://img.shields.io/badge/Delphi-12%2B-red)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![MCP](https://img.shields.io/badge/MCP-2025--03--26-green)
+![MCP](https://img.shields.io/badge/MCP-2025--06--18-green)
 
 A Model Context Protocol (MCP) server implementation in Delphi, designed to integrate with Claude Code and other MCP-compatible clients for AI-powered Delphi development workflows.
 
@@ -25,8 +25,9 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 
 ## Features
 
-- **Full MCP Protocol Support**: Implements the Model Context Protocol specification for seamless AI integration
+- **Full MCP Protocol Support**: Implements the Model Context Protocol specification (2025-06-18) for seamless AI integration
 - **Tool System**: Extensible tool system with RTTI-based discovery and execution
+- **Structured Output**: Tools can return structured JSON data alongside text content for improved AI parsing
 - **Resource Management**: Modular resource system supporting various content types
 - **JSON-RPC 2.0**: Standards-compliant JSON-RPC implementation
 - **Security**: Built-in security features including CORS configuration
@@ -232,6 +233,98 @@ initialization
 end.
 ```
 
+### Creating Tools with Structured Output
+
+Tools can return structured data alongside text content using `TMCPToolResult`:
+
+```pascal
+unit YourProject.Tool.StructuredExample;
+
+interface
+
+uses
+  System.SysUtils,
+  System.JSON,
+  MCPServer.Tool.Base,
+  MCPServer.Types,
+  MCPServer.Registration;
+
+type
+  TStructuredToolParams = class
+  private
+    FInput: string;
+  public
+    [SchemaDescription('Input to process')]
+    property Input: string read FInput write FInput;
+  end;
+
+  TStructuredTool = class(TMCPToolBase<TStructuredToolParams>)
+  protected
+    function ExecuteWithParams(const AParams: TStructuredToolParams): string; override;
+    function ExecuteWithParamsStructured(const AParams: TStructuredToolParams): TMCPToolResult; override;
+  public
+    constructor Create; override;
+    function SupportsStructuredOutput: Boolean; override;
+  end;
+
+implementation
+
+constructor TStructuredTool.Create;
+begin
+  inherited;
+  FName := 'structured_example';
+  FDescription := 'Example tool with structured output';
+end;
+
+function TStructuredTool.SupportsStructuredOutput: Boolean;
+begin
+  Result := True;
+end;
+
+function TStructuredTool.ExecuteWithParams(const AParams: TStructuredToolParams): string;
+var
+  ToolResult: TMCPToolResult;
+  ResultJSON: TJSONObject;
+begin
+  ToolResult := ExecuteWithParamsStructured(AParams);
+  try
+    ResultJSON := ToolResult.ToJSON;
+    try
+      Result := ResultJSON.ToJSON;
+    finally
+      ResultJSON.Free;
+    end;
+  finally
+    ToolResult.Free;
+  end;
+end;
+
+function TStructuredTool.ExecuteWithParamsStructured(const AParams: TStructuredToolParams): TMCPToolResult;
+var
+  StructuredData: TJSONObject;
+begin
+  Result := TMCPToolResult.Create;
+
+  Result.AddTextContent('Processing completed');
+
+  StructuredData := TJSONObject.Create;
+  StructuredData.AddPair('input', AParams.Input);
+  StructuredData.AddPair('length', TJSONNumber.Create(Length(AParams.Input)));
+  StructuredData.AddPair('timestamp', FormatDateTime('yyyy-mm-dd hh:nn:ss', Now));
+  Result.SetStructuredContent(StructuredData);
+end;
+
+initialization
+  TMCPRegistry.RegisterTool('structured_example',
+    function: IMCPTool
+    begin
+      Result := TStructuredTool.Create;
+    end
+  );
+
+end.
+```
+
 ### Creating Custom Resources
 
 ```pascal
@@ -365,6 +458,7 @@ The Inspector provides a web interface to interact with your MCP server, making 
 - **get_time**: Get the current server time
 - **list_files**: List files in a directory
 - **calculate**: Perform basic arithmetic calculations
+- **run_command**: Dummy tool demonstrating structured output with simulated command execution
 
 ## Available Example resources
 

@@ -108,6 +108,24 @@ type
     property Tools: TArray<TMCPTool> read FTools write FTools;
   end;
 
+  TMCPToolResult = class
+  private
+    FContent: TJSONArray;
+    FStructuredContent: TJSONObject;
+    FIsError: Boolean;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure AddTextContent(const AText: string);
+    procedure SetStructuredContent(AContent: TJSONObject);
+    function ToJSON: TJSONObject;
+
+    property Content: TJSONArray read FContent;
+    property StructuredContent: TJSONObject read FStructuredContent;
+    property IsError: Boolean read FIsError write FIsError;
+  end;
+
 implementation
 
 { SchemaDescriptionAttribute }
@@ -199,6 +217,56 @@ begin
   inherited;
   FSupportsProgress := False;
   FSupportsCancellation := False;
+end;
+
+{ TMCPToolResult }
+
+constructor TMCPToolResult.Create;
+begin
+  inherited;
+  FContent := TJSONArray.Create;
+  FStructuredContent := nil;
+  FIsError := False;
+end;
+
+destructor TMCPToolResult.Destroy;
+begin
+  if Assigned(FContent) then
+    FContent.Free;
+  if Assigned(FStructuredContent) then
+    FStructuredContent.Free;
+  inherited;
+end;
+
+procedure TMCPToolResult.AddTextContent(const AText: string);
+var
+  ContentItem: TJSONObject;
+begin
+  ContentItem := TJSONObject.Create;
+  ContentItem.AddPair('type', 'text');
+  ContentItem.AddPair('text', AText);
+  FContent.AddElement(ContentItem);
+end;
+
+procedure TMCPToolResult.SetStructuredContent(AContent: TJSONObject);
+begin
+  FStructuredContent := AContent;
+end;
+
+function TMCPToolResult.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair('content', FContent);
+  FContent := nil;
+
+  if Assigned(FStructuredContent) then
+  begin
+    Result.AddPair('structuredContent', FStructuredContent);
+    FStructuredContent := nil;
+  end;
+
+  if FIsError then
+    Result.AddPair('isError', TJSONBool.Create(True));
 end;
 
 end.

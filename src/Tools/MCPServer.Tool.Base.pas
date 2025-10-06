@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils,
   System.Rtti,
-  System.JSON;
+  System.JSON,
+  MCPServer.Types;
 
 type
   IMCPTool = interface
@@ -14,7 +15,9 @@ type
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function Execute(const Arguments: TJSONObject): string;
-    
+    function SupportsStructuredOutput: Boolean;
+    function ExecuteStructured(const Arguments: TJSONObject): TMCPToolResult;
+
     property Name: string read GetName;
     property Description: string read GetDescription;
     property InputSchema: TJSONObject read GetInputSchema;
@@ -27,11 +30,13 @@ type
     function BuildSchema: TJSONObject; virtual; abstract;
   public
     constructor Create; virtual;
-    
+
     function GetName: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function Execute(const Arguments: TJSONObject): string; virtual; abstract;
+    function SupportsStructuredOutput: Boolean; virtual;
+    function ExecuteStructured(const Arguments: TJSONObject): TMCPToolResult; virtual;
   end;
   
   TMCPToolBase<T: class, constructor> = class(TInterfacedObject, IMCPTool)
@@ -39,14 +44,17 @@ type
     FName: string;
     FDescription: string;
     function ExecuteWithParams(const Params: T): string; virtual; abstract;
+    function ExecuteWithParamsStructured(const Params: T): TMCPToolResult; virtual;
     function GetParamsClass: TClass; virtual;
   public
     constructor Create; virtual;
-    
+
     function GetName: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function Execute(const Arguments: TJSONObject): string;
+    function SupportsStructuredOutput: Boolean; virtual;
+    function ExecuteStructured(const Arguments: TJSONObject): TMCPToolResult; virtual;
   end;
 
 implementation
@@ -75,6 +83,16 @@ end;
 function TMCPToolBase.GetInputSchema: TJSONObject;
 begin
   Result := BuildSchema;
+end;
+
+function TMCPToolBase.SupportsStructuredOutput: Boolean;
+begin
+  Result := False;
+end;
+
+function TMCPToolBase.ExecuteStructured(const Arguments: TJSONObject): TMCPToolResult;
+begin
+  raise Exception.Create('Structured output not supported by this tool');
 end;
 
 { TMCPToolBase<T> }
@@ -114,6 +132,28 @@ end;
 function TMCPToolBase<T>.GetParamsClass: TClass;
 begin
   Result := T;
+end;
+
+function TMCPToolBase<T>.SupportsStructuredOutput: Boolean;
+begin
+  Result := False;
+end;
+
+function TMCPToolBase<T>.ExecuteStructured(const Arguments: TJSONObject): TMCPToolResult;
+var
+  ParamsInstance: T;
+begin
+  ParamsInstance := TMCPSerializer.Deserialize<T>(Arguments);
+  try
+    Result := ExecuteWithParamsStructured(ParamsInstance);
+  finally
+    ParamsInstance.Free;
+  end;
+end;
+
+function TMCPToolBase<T>.ExecuteWithParamsStructured(const Params: T): TMCPToolResult;
+begin
+  raise Exception.Create('Structured output not supported by this tool');
 end;
 
 end.
