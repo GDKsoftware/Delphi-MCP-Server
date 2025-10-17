@@ -124,11 +124,12 @@ end;
 function TMCPToolsManager.BuildToolCallResponse(const ResultValue: TValue): TJSONObject;
 begin
   Result := TJSONObject.Create;
-  var ContentArray := TJSONArray.Create;
-  Result.AddPair('content', ContentArray);
 
   if ResultValue.IsType<string> then
   begin
+    var ContentArray := TJSONArray.Create;
+    Result.AddPair('content', ContentArray);
+
     var ContentItem := TJSONObject.Create;
     ContentArray.AddElement(ContentItem);
     ContentItem.AddPair('type', 'text');
@@ -136,10 +137,8 @@ begin
   end
   else if ResultValue.IsType<TJsonObject> then
   begin
-    var ContentItem := TJSONObject.Create;
-    ContentArray.AddElement(ContentItem);
-    var jsonResult := ResultValue.AsType<TJsonObject>;
-    ContentItem.AddPair('result', jsonResult);
+    var JsonResult := ResultValue.AsType<TJsonObject>;
+    Result.AddPair('structuredContent', TJSONObject(JsonResult.Clone));
   end;
 
 end;

@@ -218,9 +218,18 @@ begin
     tkClass:
       if Value.IsObject and (Value.AsObject <> nil) then
       begin
-        var ChildJson := TJSONObject.Create;
-        Serialize(Value.AsObject, ChildJson);
-        Result := ChildJson;
+        var Obj := Value.AsObject;
+
+        if Obj is TJSONValue then
+        begin
+          Result := TJSONValue(Obj).Clone as TJSONValue;
+        end
+        else
+        begin
+          var ChildJson := TJSONObject.Create;
+          Serialize(Obj, ChildJson);
+          Result := ChildJson;
+        end;
       end;
   end;
 end;
