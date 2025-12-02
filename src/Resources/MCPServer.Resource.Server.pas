@@ -34,11 +34,13 @@ type
     class var FServerStartTime: TDateTime;
     class var FRequestCount: Int64;
     class var FActiveConnections: Integer;
+    class var FNamePrefix: string;
   protected
     function GetResourceData: TServerStatus; override;
   public
     constructor Create; override;
     class procedure Initialize;
+    class procedure SetNamePrefix(const Prefix: string);
     class procedure IncrementRequestCount;
     class procedure ConnectionOpened;
     class procedure ConnectionClosed;
@@ -63,6 +65,12 @@ begin
   FServerStartTime := Now;
   FRequestCount := 0;
   FActiveConnections := 0;
+  FNamePrefix := '';
+end;
+
+class procedure TServerStatusResource.SetNamePrefix(const Prefix: string);
+begin
+  FNamePrefix := Prefix;
 end;
 
 class procedure TServerStatusResource.IncrementRequestCount;
@@ -85,7 +93,10 @@ constructor TServerStatusResource.Create;
 begin
   inherited;
   FURI := 'server://status';
-  FName := 'Server Status';
+  if FNamePrefix <> '' then
+    FName := FNamePrefix + 'server_status'
+  else
+    FName := 'server_status';
   FDescription := 'Current server status and health information';
   FMimeType := 'application/json';
 end;
