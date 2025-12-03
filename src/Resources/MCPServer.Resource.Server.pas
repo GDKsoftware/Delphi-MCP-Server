@@ -92,11 +92,16 @@ end;
 constructor TServerStatusResource.Create;
 begin
   inherited;
-  FURI := 'server://status';
   if FNamePrefix <> '' then
-    FName := FNamePrefix + 'server_status'
+  begin
+    FURI := 'server://' + FNamePrefix + 'status';
+    FName := FNamePrefix + 'server_status';
+  end
   else
+  begin
+    FURI := 'server://status';
     FName := 'server_status';
+  end;
   FDescription := 'Current server status and health information';
   FMimeType := 'application/json';
 end;
