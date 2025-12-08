@@ -41,6 +41,7 @@ type
     constructor Create; override;
     class procedure Initialize;
     class procedure SetNamePrefix(const Prefix: string);
+    class procedure RegisterServerStatusResource;
     class procedure IncrementRequestCount;
     class procedure ConnectionOpened;
     class procedure ConnectionClosed;
@@ -71,6 +72,23 @@ end;
 class procedure TServerStatusResource.SetNamePrefix(const Prefix: string);
 begin
   FNamePrefix := Prefix;
+  RegisterServerStatusResource;
+end;
+
+class procedure TServerStatusResource.RegisterServerStatusResource;
+begin
+  var URI: string;
+  if FNamePrefix <> '' then
+    URI := 'server://' + FNamePrefix + 'status'
+  else
+    URI := 'server://status';
+
+  TMCPRegistry.RegisterResource(URI,
+    function: IMCPResource
+    begin
+      Result := TServerStatusResource.Create;
+    end
+  );
 end;
 
 class procedure TServerStatusResource.IncrementRequestCount;
@@ -134,13 +152,5 @@ end;
 
 initialization
   TServerStatusResource.Initialize;
-  
-  TMCPRegistry.RegisterResource('server://status',
-    function: IMCPResource
-    begin
-      Result := TServerStatusResource.Create;
-    end
-  );
-  
 
 end.
