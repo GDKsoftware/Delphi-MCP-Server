@@ -17,16 +17,19 @@ type
 
     class procedure DeserializeObject(Instance: TObject; const Json: TJSONObject);
     class function DeserializeArray(RttiType: TRttiType; const JsonArray: TJSONArray): TValue;
-    
+
     // Extracted type conversion methods
     class function ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function ConvertValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
     class function CreateInstanceFromType(const RttiType: TRttiType): TObject;
-    
+
     // Array deserialization helpers
     class function DeserializeDynamicArray(const DynArrayType: TRttiDynamicArrayType; const JsonArray: TJSONArray): TValue;
     class function DeserializeGenericList(const ListType: TRttiInstanceType; const JsonArray: TJSONArray): TValue;
     class function FindAddMethod(const ListType: TRttiInstanceType): TRttiMethod;
+
+    // Case-insensitive JSON value lookup
+    class function GetJsonValueCaseInsensitive(const Json: TJSONObject; const PropName: string): TJSONValue;
   public
     class constructor Create;
     class destructor Destroy;
@@ -62,6 +65,23 @@ begin
   end;
 end;
 
+class function TMCPSerializer.GetJsonValueCaseInsensitive(const Json: TJSONObject; const PropName: string): TJSONValue;
+begin
+  Result := Json.GetValue(PropName);
+  if Assigned(Result) then
+    Exit;
+
+  var LowerPropName := LowerCase(PropName);
+  for var Pair in Json do
+  begin
+    if SameText(Pair.JsonString.Value, PropName) or (LowerCase(Pair.JsonString.Value) = LowerPropName) then
+    begin
+      Result := Pair.JsonValue;
+      Exit;
+    end;
+  end;
+end;
+
 class procedure TMCPSerializer.DeserializeObject(Instance: TObject; const Json: TJSONObject);
 begin
   var RttiType := FContext.GetType(Instance.ClassType);
@@ -70,15 +90,14 @@ begin
   begin
     if not RttiProp.IsWritable then
       Continue;
-      
-    var PropName := LowerCase(RttiProp.Name);
-    var JsonValue := Json.GetValue(PropName);
-    
+
+    var JsonValue := GetJsonValueCaseInsensitive(Json, RttiProp.Name);
+
     if not Assigned(JsonValue) then
       Continue;
-      
+
     var PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
-    
+
     if not PropValue.IsEmpty then
     begin
       {$WARN UNSAFE_CAST OFF}
@@ -156,7 +175,13 @@ begin
         if JsonValue is TJSONNumber then
           Result := TValue.FromOrdinal(RttiType.Handle, (JsonValue as TJSONNumber).AsInt)
         else
-          Result := TValue.FromOrdinal(RttiType.Handle, StrToIntDef(JsonValue.Value, 0));
+        begin
+          var EnumValue := GetEnumValue(RttiType.Handle, JsonValue.Value);
+          if EnumValue >= 0 then
+            Result := TValue.FromOrdinal(RttiType.Handle, EnumValue)
+          else
+            Result := TValue.FromOrdinal(RttiType.Handle, StrToIntDef(JsonValue.Value, 0));
+        end;
       end;
       
     tkClass:
