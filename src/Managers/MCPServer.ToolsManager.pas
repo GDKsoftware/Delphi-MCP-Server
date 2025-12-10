@@ -147,6 +147,8 @@ function TMCPToolsManager.CreateToolJSON(const Tool: IMCPTool): TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('name', Tool.Name);
+  if Tool.Title <> Tool.Name then
+    Result.AddPair('title', Tool.Title);
   Result.AddPair('description', Tool.Description);
 
   var Schema := Tool.InputSchema;

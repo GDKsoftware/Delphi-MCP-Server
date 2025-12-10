@@ -93,10 +93,12 @@ type
   TMCPTool = class
   private
     FName: string;
+    FTitle: string;
     FDescription: string;
     FInputSchema: string;
   public
     property Name: string read FName write FName;
+    property Title: string read FTitle write FTitle;
     property Description: string read FDescription write FDescription;
     property InputSchema: string read FInputSchema write FInputSchema;
   end;

@@ -11,12 +11,14 @@ type
   IMCPTool = interface
     ['{F1E2D3C4-B5A6-4798-8901-234567890ABC}']
     function GetName: string;
+    function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
     function Execute(const Arguments: TJSONObject): TValue;
 
     property Name: string read GetName;
+    property Title: string read GetTitle;
     property Description: string read GetDescription;
     property InputSchema: TJSONObject read GetInputSchema;
     property OutputSchema: TJSONObject read GetOutputSchema;
@@ -25,12 +27,14 @@ type
   TMCPToolBase = class(TInterfacedObject, IMCPTool)
   protected
     FName: string;
+    FTitle: string;
     FDescription: string;
     function BuildSchema: TJSONObject; virtual; abstract;
   public
     constructor Create; virtual;
 
     function GetName: string;
+    function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
@@ -40,13 +44,15 @@ type
   TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool)
   protected
     FName: string;
+    FTitle: string;
     FDescription: string;
     function ExecuteWithParams(const Params: T): string;virtual; abstract;
-    function GetParamsClass: TClass; virtual; //what is this for??
+    function GetParamsClass: TClass; virtual;
   public
     constructor Create; virtual;
 
     function GetName: string;
+    function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
@@ -56,17 +62,18 @@ type
   TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool)
   protected
     FName: string;
+    FTitle: string;
     FDescription: string;
     function ExecuteWithParams(const Params: T): R;virtual; abstract;
   public
     constructor Create; virtual;
 
     function GetName: string;
+    function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
     function Execute(const Arguments: TJSONObject): TValue;
-
   end;
 
 
@@ -88,6 +95,14 @@ end;
 function TMCPToolBase.GetName: string;
 begin
   Result := FName;
+end;
+
+function TMCPToolBase.GetTitle: string;
+begin
+  if FTitle <> '' then
+    Result := FTitle
+  else
+    Result := FName;
 end;
 
 function TMCPToolBase.GetOutputSchema: TJSONObject;
@@ -115,6 +130,14 @@ end;
 function TMCPToolBase<T>.GetName: string;
 begin
   Result := FName;
+end;
+
+function TMCPToolBase<T>.GetTitle: string;
+begin
+  if FTitle <> '' then
+    Result := FTitle
+  else
+    Result := FName;
 end;
 
 function TMCPToolBase<T>.GetOutputSchema: TJSONObject;
@@ -190,7 +213,15 @@ end;
 
 function TMCPToolBase<T, R>.GetName: string;
 begin
-  result := FName;
+  Result := FName;
+end;
+
+function TMCPToolBase<T, R>.GetTitle: string;
+begin
+  if FTitle <> '' then
+    Result := FTitle
+  else
+    Result := FName;
 end;
 
 function TMCPToolBase<T, R>.GetOutputSchema: TJSONObject;
