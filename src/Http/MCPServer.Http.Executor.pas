@@ -16,7 +16,8 @@ type
   private
     FHttpClient: THTTPClient;
 
-    function CreateResponse(const Response: IHTTPResponse): IHttpResponse;
+    function CreateResponse(const Response: System.Net.HttpClient.IHTTPResponse): MCPServer.Http.Response.Interfaces.IHttpResponse;
+    function ExtractHeaders(const Response: System.Net.HttpClient.IHTTPResponse): TArray<TNetHeader>;
   public
     constructor Create(const Config: THttpClientConfig);
     destructor Destroy; override;
@@ -24,6 +25,7 @@ type
     function Get(const Url: string; const Headers: TArray<TNetHeader>): IHttpResponse;
     function Post(const Url: string; const Body: string; const Headers: TArray<TNetHeader>): IHttpResponse; overload;
     function Post(const Url: string; const Body: TStream; const Headers: TArray<TNetHeader>): IHttpResponse; overload;
+    function PostToStream(const Url: string; const DestStream: TStream; const Headers: TArray<TNetHeader>): IHttpResponse;
     function Put(const Url: string; const Body: string; const Headers: TArray<TNetHeader>): IHttpResponse;
     function Patch(const Url: string; const Body: string; const Headers: TArray<TNetHeader>): IHttpResponse;
     function Delete(const Url: string; const Headers: TArray<TNetHeader>): IHttpResponse;
@@ -49,9 +51,17 @@ begin
   inherited Destroy;
 end;
 
-function THttpExecutor.CreateResponse(const Response: IHTTPResponse): IHttpResponse;
+function THttpExecutor.ExtractHeaders(const Response: System.Net.HttpClient.IHTTPResponse): TArray<TNetHeader>;
 begin
-  Result := THttpResponse.Create(Response.StatusCode, Response.ContentAsString(TEncoding.UTF8));
+  Result := Response.GetHeaders;
+end;
+
+function THttpExecutor.CreateResponse(const Response: System.Net.HttpClient.IHTTPResponse): MCPServer.Http.Response.Interfaces.IHttpResponse;
+begin
+  Result := THttpResponse.Create(
+    Response.StatusCode,
+    Response.ContentAsString(TEncoding.UTF8),
+    ExtractHeaders(Response));
 end;
 
 function THttpExecutor.Get(const Url: string; const Headers: TArray<TNetHeader>): IHttpResponse;
@@ -77,6 +87,16 @@ function THttpExecutor.Post(const Url: string; const Body: TStream; const Header
 begin
   var Response := FHttpClient.Post(Url, Body, nil, Headers);
   Result := CreateResponse(Response);
+end;
+
+function THttpExecutor.PostToStream(const Url: string; const DestStream: TStream;
+  const Headers: TArray<TNetHeader>): IHttpResponse;
+begin
+  var Response := FHttpClient.Post(Url, TStream(nil), DestStream, Headers);
+  Result := THttpResponse.Create(
+    Response.StatusCode,
+    '',
+    ExtractHeaders(Response));
 end;
 
 function THttpExecutor.Put(const Url: string; const Body: string; const Headers: TArray<TNetHeader>): IHttpResponse;

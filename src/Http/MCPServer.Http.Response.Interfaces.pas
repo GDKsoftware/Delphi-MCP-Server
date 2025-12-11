@@ -8,6 +8,7 @@ type
     function GetStatusCode: Integer;
     function GetContent: string;
     function GetIsSuccess: Boolean;
+    function GetHeader(const Name: string): string;
 
     property StatusCode: Integer read GetStatusCode;
     property Content: string read GetContent;
