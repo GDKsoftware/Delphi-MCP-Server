@@ -31,26 +31,30 @@ class function TMCPSchemaGenerator.GenerateSchema(Cls: TClass): TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('type', 'object');
-  
+
   var Properties := TJSONObject.Create;
   Result.AddPair('properties', Properties);
   var RequiredArray := TJSONArray.Create;
-  Result.AddPair('required', RequiredArray);
-  
+
   var RttiContext := TRttiContext.Create;
   try
     var RttiType := RttiContext.GetType(Cls);
-    
+
     for var RttiProp in RttiType.GetProperties do
     begin
       if RttiProp.IsReadable and RttiProp.IsWritable then
       begin
         var JsonName := GetPropertyJsonName(RttiProp, RttiType);
-        
+
         var PropSchema := TJSONObject.Create;
         Properties.AddPair(JsonName, PropSchema);
-        PropSchema.AddPair('type', GetJsonTypeFromRttiType(RttiProp.PropertyType));
-        
+
+        var JsonType := GetJsonTypeFromRttiType(RttiProp.PropertyType);
+        PropSchema.AddPair('type', JsonType);
+
+        if JsonType = 'array' then
+          PropSchema.AddPair('items', TJSONObject.Create);
+
         for var Attr in RttiProp.GetAttributes do
         begin
           if Attr is SchemaDescriptionAttribute then
@@ -65,11 +69,16 @@ begin
             PropSchema.AddPair('enum', EnumArray);
           end;
         end;
-        
+
         if IsRequiredProperty(RttiProp) then
           RequiredArray.Add(JsonName);
       end;
     end;
+
+    if RequiredArray.Count > 0 then
+      Result.AddPair('required', RequiredArray)
+    else
+      RequiredArray.Free;
   finally
     RttiContext.Free;
   end;
@@ -92,7 +101,11 @@ begin
       else
         Result := 'string';
     tkSet: Result := 'array';
-    tkClass: Result := 'object';
+    tkClass:
+      if RttiType.Name = 'TJSONArray' then
+        Result := 'array'
+      else
+        Result := 'object';
     tkArray, tkDynArray: Result := 'array';
   else
     Result := 'string';
