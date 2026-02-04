@@ -127,18 +127,29 @@ begin
 
   if ResultValue.IsType<string> then
   begin
+    var TextValue := ResultValue.AsString;
+    var HasError := TextValue.StartsWith('Error:') or TextValue.StartsWith('Error executing tool:');
+
     var ContentArray := TJSONArray.Create;
     Result.AddPair('content', ContentArray);
 
     var ContentItem := TJSONObject.Create;
     ContentArray.AddElement(ContentItem);
     ContentItem.AddPair('type', 'text');
-    ContentItem.AddPair('text', ResultValue.AsString);
+    ContentItem.AddPair('text', TextValue);
+
+    if HasError then
+      Result.AddPair('isError', TJSONBool.Create(True));
   end
   else if ResultValue.IsType<TJsonObject> then
   begin
     var JsonResult := ResultValue.AsType<TJsonObject>;
     Result.AddPair('structuredContent', TJSONObject(JsonResult.Clone));
+
+    var ErrorValue := JsonResult.GetValue('error');
+    var HasError := Assigned(ErrorValue) and (ErrorValue.Value <> '');
+    if HasError then
+      Result.AddPair('isError', TJSONBool.Create(True));
   end;
 
 end;
