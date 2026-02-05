@@ -14,7 +14,7 @@ if "%ERRORLEVEL%"=="0" (
 )
 
 REM Set Delphi installation path - adjust if needed
-set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\23.0
+set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\37.0
 
 REM Check if dcc32 exists
 if not exist "!DELPHI_PATH!\bin\dcc32.exe" (
@@ -47,19 +47,26 @@ if "%PLATFORM%"=="" set PLATFORM=Win32
 echo Building MCPServer - %CONFIG% %PLATFORM%
 echo.
 
-REM Add TaurusTLS path if it exists
-set TAURUS_PATH=%USERPROFILE%\Documents\Embarcadero\Studio\23.0\CatalogRepository\TaurusTLS-12\Source
-if exist "!TAURUS_PATH!" (
+REM Add TaurusTLS path if it exists - try multiple possible locations
+set TAURUS_PATH=
+if exist "%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS\1.0.2.39\Source" (
+    set TAURUS_PATH=%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS\1.0.2.39\Source
+) else if exist "%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS-12\Source" (
+    set TAURUS_PATH=%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS-12\Source
+)
+
+if not "!TAURUS_PATH!"=="" (
     set EXTRA_UNITS=;!TAURUS_PATH!
 ) else (
     set EXTRA_UNITS=
+    echo Warning: TaurusTLS not found. SSL/TLS support may be limited.
 )
 
 if "%PLATFORM%"=="Win32" (
-    !DCC32! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win32\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
+    !DCC32! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win32\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -I!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Win64" (
-    !DCC64! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win64\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
+    !DCC64! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win64\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -I!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Linux64" (
     REM Use MSBuild for Linux64
