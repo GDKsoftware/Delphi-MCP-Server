@@ -3,17 +3,19 @@
 ![Delphi](https://img.shields.io/badge/Delphi-12%2B-red)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![MCP](https://img.shields.io/badge/MCP-2025--03--26-green)
+![MCP](https://img.shields.io/badge/MCP-2025--06--18-green)
 
-A Model Context Protocol (MCP) server implementation in Delphi, designed to integrate with Claude Code and other MCP-compatible clients for AI-powered Delphi development workflows.
+A Model Context Protocol (MCP) server implementation in Delphi, designed to integrate with Claude Code, Codex, and other MCP-compatible clients for AI-powered Delphi development workflows.
 
 ## Table of Contents
 
 - [Features](#features)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Transport Modes](#transport-modes)
 - [Using as a Library](#using-as-a-library)
 - [Integration with Claude Code](#integration-with-claude-code)
+- [Integration with Codex](#integration-with-codex)
 - [Testing with MCP Inspector](#testing-with-mcp-inspector)
 - [Available Example Tools](#available-example-tools)
 - [Available Example Resources](#available-example-resources)
@@ -25,7 +27,8 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 
 ## Features
 
-- **Full MCP Protocol Support**: Implements MCP specification 2025-03-26 with Streamable HTTP and SSE
+- **Full MCP Protocol Support**: Implements MCP specification 2025-06-18 with Streamable HTTP and SSE
+- **Dual Transport Support**: HTTP (Streamable HTTP with SSE) and STDIO (stdin/stdout)
 - **Dual Response Mode**: Supports both JSON-RPC and Server-Sent Events in the same server
 - **Tool System**: Extensible tool system with RTTI-based discovery and execution
 - **Resource Management**: Modular resource system supporting various content types
@@ -80,6 +83,46 @@ Or from RAD Studio IDE:
 2. Select Linux64 platform
 3. Build
 
+## Transport Modes
+
+The server supports two transport modes:
+
+### HTTP Transport (Default)
+
+Start the server without arguments for HTTP transport with Server-Sent Events (SSE):
+
+```bash
+Win32\Debug\MCPServer.exe
+```
+
+The server will listen on `http://localhost:3000/mcp` by default (configurable via settings.ini).
+
+**Use HTTP transport for:**
+- Claude Code (SSE support)
+- MCP Inspector
+- Web-based clients
+- Remote connections
+
+### STDIO Transport
+
+Start the server with `--stdio` flag for stdin/stdout communication:
+
+```bash
+Win32\Debug\MCPServer.exe --stdio
+```
+
+The server will:
+- Read JSON-RPC requests from stdin (one per line)
+- Write JSON-RPC responses to stdout (one per line)
+- Log diagnostic messages to stderr
+
+**Use STDIO transport for:**
+- Codex (OpenAI)
+- Local MCP clients that use process spawning
+- Automated testing and scripting
+
+**Supported flag variants:** `--stdio`, `-stdio`, `/stdio`
+
 ## Using as a Library
 
 The Delphi MCP Server is designed to be used both as a standalone application and as a library for your own MCP server implementations. This section covers how to integrate it into your existing Delphi projects.
@@ -114,7 +157,9 @@ Copy the `src` folder from MCPServer into your project and add the units to your
    MCPServer.Settings,
    MCPServer.Registration,
    MCPServer.ManagerRegistry,
-   MCPServer.IdHTTPServer
+   MCPServer.IdHTTPServer,      // For HTTP transport
+   MCPServer.StdioTransport,    // For STDIO transport
+   MCPServer.JsonRpcProcessor   // Shared JSON-RPC processing
    ```
 
 ### Library Integration
@@ -303,6 +348,31 @@ claude mcp add --transport http delphi-mcp-server http://localhost:3000/mcp --he
 ```
 
 Make sure the server is running before connecting Claude Code.
+
+## Integration with Codex
+
+Configure Codex to use the STDIO transport. Edit your Codex configuration file (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.delphi-mcp-server]
+command = 'C:\path\to\MCPServer.exe'
+args = ["--stdio"]
+```
+
+Or on Linux/macOS:
+
+```toml
+[mcp_servers.delphi-mcp-server]
+command = '/path/to/MCPServer'
+args = ["--stdio"]
+```
+
+**Important**: The server must be compiled and the executable path must be absolute.
+
+After configuration:
+1. Restart Codex
+2. Use `/mcp` command to verify the server is connected
+3. Available tools will appear in the Codex interface
 
 ### HTTPS/SSL Configuration
 
