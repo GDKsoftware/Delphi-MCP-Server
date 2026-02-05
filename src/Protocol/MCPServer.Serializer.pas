@@ -282,8 +282,8 @@ end;
 class function TMCPSerializer.DeserializeDynamicArray(const DynArrayType: TRttiDynamicArrayType; const JsonArray: TJSONArray): TValue;
 begin
   var ElementType := DynArrayType.ElementType;
-  var ArrayLength := JsonArray.Count;
-  
+  var ArrayLength: NativeInt := JsonArray.Count;
+
   Result := TValue.Empty;
   TValue.Make(nil, DynArrayType.Handle, Result);
   DynArraySetLength(PPointer(Result.GetReferenceToRawData)^, Result.TypeInfo, 1, @ArrayLength);
