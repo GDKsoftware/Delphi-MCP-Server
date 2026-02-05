@@ -25,12 +25,12 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 
 ## Features
 
-- **Full MCP Protocol Support**: Implements the Model Context Protocol specification for seamless AI integration
+- **Full MCP Protocol Support**: Implements MCP specification 2025-03-26 with Streamable HTTP and SSE
+- **Dual Response Mode**: Supports both JSON-RPC and Server-Sent Events in the same server
 - **Tool System**: Extensible tool system with RTTI-based discovery and execution
 - **Resource Management**: Modular resource system supporting various content types
-- **JSON-RPC 2.0**: Standards-compliant JSON-RPC implementation
 - **Security**: Built-in security features including CORS configuration
-- **High Performance**: Native implementation using Indy HTTP Server
+- **High Performance**: Native implementation using Indy HTTP Server with keep-alive support
 - **Optional Parameters**: Support for optional tool parameters using custom attributes
 - **Cross-Platform**: Supports Windows (Win32/Win64) and Linux (x64)
 

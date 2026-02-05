@@ -41,6 +41,7 @@ type
     FPort: Word;
     FActive: Boolean;
     FSettings: TMCPSettings;
+    FEventIDCounter: Int64;
     procedure ConfigureSSL;
     procedure HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean);
     procedure HandleHTTPRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
@@ -48,6 +49,8 @@ type
     procedure HandleOptionsRequest(ResponseInfo: TIdHTTPResponseInfo);
     procedure HandleGetRequest(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     procedure HandlePostRequest(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
+    procedure HandlePostRequestSSE(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
+    procedure HandlePostRequestJSON(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
     function ProcessJSONRPCRequest(const RequestBody: string; const SessionID: string): string;
     function ParseJSONRequest(const RequestBody: string): TJSONObject;
     function ExtractRequestID(JSONRequest: TJSONObject): TValue;
@@ -55,6 +58,9 @@ type
     procedure AddRequestIDToResponse(Response: TJSONObject; const RequestID: TValue);
     function ExecuteMethodCall(const MethodName: string; Params: TJSONObject): TValue;
     function CreateErrorResponse(const RequestID: TValue; ErrorCode: Integer; const ErrorMessage: string): string;
+    function GetNextEventID: string;
+    function AcceptsSSE(const AcceptHeader: string): Boolean;
+    function IsRequestOnlyNotificationsOrResponses(JSONRequest: TJSONValue): Boolean;
   public
     constructor Create(Owner: TComponent); override;
     destructor Destroy; override;
@@ -77,24 +83,31 @@ uses
 const
   KEEP_ALIVE_TIMEOUT = 300;
   DEFAULT_MCP_PORT = 3000;
-  
+
   // HTTP Status Codes
   HTTP_OK = 200;
+  HTTP_ACCEPTED = 202;
   HTTP_NO_CONTENT = 204;
   HTTP_NOT_FOUND = 404;
   HTTP_METHOD_NOT_ALLOWED = 405;
   HTTP_NOT_ACCEPTABLE = 406;
   HTTP_FORBIDDEN = 403;
-  
+
   // CORS Max Age (24 hours in seconds)
   CORS_MAX_AGE = 86400;
-  
+
   // JSON-RPC 2.0 Error Codes
   JSONRPC_PARSE_ERROR = -32700;
   JSONRPC_INVALID_REQUEST = -32600;
   JSONRPC_METHOD_NOT_FOUND = -32601;
   JSONRPC_INVALID_PARAMS = -32602;
   JSONRPC_INTERNAL_ERROR = -32603;
+
+  // SSE Message Format
+  SSE_EVENT_PREFIX = 'event: ';
+  SSE_DATA_PREFIX = 'data: ';
+  SSE_ID_PREFIX = 'id: ';
+  SSE_MESSAGE_TERMINATOR = #10#10;
 
 { TMCPIdHTTPServer }
 
@@ -103,8 +116,10 @@ begin
   inherited Create(Owner);
   FPort := DEFAULT_MCP_PORT;
   FActive := False;
-  
+  FEventIDCounter := 0;
+
   FHTTPServer := TIdHTTPServer.Create(Self);
+  FHTTPServer.KeepAlive := True;
   FHTTPServer.OnCommandGet := HandleHTTPRequest;
   FHTTPServer.OnCommandOther := HandleHTTPRequest;
   FHTTPServer.OnQuerySSLPort := HandleQuerySSLPort;
@@ -242,74 +257,88 @@ begin
   ResponseInfo.ResponseText := 'OK';
 end;
 
-procedure TMCPIdHTTPServer.HandleGetRequest(RequestInfo: TIdHTTPRequestInfo; 
+procedure TMCPIdHTTPServer.HandleGetRequest(RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo);
 begin
-  TLogger.Info('Received GET request - returning endpoint info');
-  
-  ResponseInfo.ContentType := 'application/json';
-  ResponseInfo.CustomHeaders.Values['Cache-Control'] := 'no-cache';
-  ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
-  
-  ResponseInfo.ContentText := '{"url": "' + FSettings.Protocol + '://' + FSettings.Host + ':' + IntToStr(FPort) +
-                  FSettings.Endpoint + '", "transport": "' + FSettings.Protocol + '"}';
+  var AcceptHeader := RequestInfo.RawHeaders.Values['Accept'];
 
-  ResponseInfo.ResponseNo := HTTP_OK;
+  if AcceptsSSE(AcceptHeader) then
+  begin
+    TLogger.Info('Received GET request - opening SSE stream for server-initiated messages');
+
+    ResponseInfo.ContentType := 'text/event-stream';
+    ResponseInfo.CharSet := 'utf-8';
+    ResponseInfo.CustomHeaders.Values['Cache-Control'] := 'no-cache';
+    ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
+    ResponseInfo.CustomHeaders.Values['X-Accel-Buffering'] := 'no';
+
+    var SessionID := RequestInfo.RawHeaders.Values['Mcp-Session-Id'];
+    if SessionID <> '' then
+      ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
+
+    ResponseInfo.ResponseNo := HTTP_OK;
+
+    // Note: GET endpoint for SSE streams is optional per MCP spec 2025-03-26
+    // Server MAY keep connection open to send server-initiated notifications/requests
+    // Current implementation: basic support, closes stream immediately (no persistent connection)
+    TLogger.Info('SSE stream opened (no server-initiated messages to send)');
+  end
+  else
+  begin
+    TLogger.Info('Received GET request - returning endpoint info');
+
+    ResponseInfo.ContentType := 'application/json';
+    ResponseInfo.CustomHeaders.Values['Cache-Control'] := 'no-cache';
+    ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
+
+    ResponseInfo.ContentText := '{"url": "' + FSettings.Protocol + '://' + FSettings.Host + ':' + IntToStr(FPort) +
+                    FSettings.Endpoint + '", "transport": "' + FSettings.Protocol + '"}';
+
+    ResponseInfo.ResponseNo := HTTP_OK;
+  end;
 end;
 
-procedure TMCPIdHTTPServer.HandlePostRequest(RequestInfo: TIdHTTPRequestInfo; 
+procedure TMCPIdHTTPServer.HandlePostRequest(RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo);
 begin
-
-  var ReqBody: string;
+  var RequestBody := '';
   if Assigned(RequestInfo.PostStream) and (RequestInfo.PostStream.Size > 0) then
   begin
     RequestInfo.PostStream.Position := 0;
-    ReqBody := ReadStringFromStream(RequestInfo.PostStream, -1, IndyTextEncoding_UTF8);
-  end
-  else
-    ReqBody := '';
-  
-  TLogger.Info('Request: ' + ReqBody);
-  
-  var SessID := RequestInfo.RawHeaders.Values['Mcp-Session-Id'];
-  if SessID <> '' then
-    TLogger.Info('Session ID from header: ' + SessID);
-  
-  var ResponseBody := ProcessJSONRPCRequest(ReqBody, SessID);
-  
-  if ResponseBody = '' then
-  begin
-    ResponseInfo.ResponseNo := HTTP_NO_CONTENT;
-    Exit;
+    RequestBody := ReadStringFromStream(RequestInfo.PostStream, -1, IndyTextEncoding_UTF8);
   end;
-  
-  ResponseInfo.ContentType := 'application/json';
-  ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
-  
-  if (SessID = '') and (Pos('"sessionId"', ResponseBody) > 0) then
-  begin
-    var ResponseJSON := TJSONObject.ParseJSONValue(ResponseBody) as TJSONObject;
-    try
-      var ResultObj := ResponseJSON.GetValue('result') as TJSONObject;
-      if Assigned(ResultObj) then
-      begin
-        var SessionValue := ResultObj.GetValue('sessionId');
-        if Assigned(SessionValue) then
-          ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionValue.Value;
-      end;
-    finally
-      ResponseJSON.Free;
-    end;
-  end
-  else if SessID <> '' then
-    ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessID;
 
-  ResponseInfo.ContentStream := TStringStream.Create(ResponseBody, TEncoding.UTF8);
-  ResponseInfo.FreeContentStream := True;
-  ResponseInfo.ResponseNo := HTTP_OK;
-  
-  TLogger.Info('Response: ' + ResponseBody);
+  TLogger.Info('Request: ' + RequestBody);
+
+  var SessionID := RequestInfo.RawHeaders.Values['Mcp-Session-Id'];
+  if SessionID <> '' then
+    TLogger.Info('Session ID from header: ' + SessionID);
+
+  var AcceptHeader := RequestInfo.RawHeaders.Values['Accept'];
+
+  var JSONRequest: TJSONValue := nil;
+  try
+    JSONRequest := TJSONObject.ParseJSONValue(RequestBody);
+
+    if Assigned(JSONRequest) and IsRequestOnlyNotificationsOrResponses(JSONRequest) then
+    begin
+      TLogger.Info('Request contains only notifications/responses, returning 202 Accepted');
+      ResponseInfo.ResponseNo := HTTP_ACCEPTED;
+
+      if SessionID <> '' then
+        ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
+
+      Exit;
+    end;
+
+    if AcceptsSSE(AcceptHeader) then
+      HandlePostRequestSSE(RequestInfo, ResponseInfo, RequestBody, SessionID)
+    else
+      HandlePostRequestJSON(RequestInfo, ResponseInfo, RequestBody, SessionID);
+
+  finally
+    JSONRequest.Free;
+  end;
 end;
 
 function TMCPIdHTTPServer.ParseJSONRequest(const RequestBody: string): TJSONObject;
@@ -510,6 +539,131 @@ procedure TMCPIdHTTPServer.HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean)
 begin
   // Enable SSL for our configured port when SSL is enabled
   VUseSSL := FSettings.SSLEnabled and (APort = FPort);
+end;
+
+function TMCPIdHTTPServer.GetNextEventID: string;
+begin
+  Inc(FEventIDCounter);
+  Result := IntToStr(FEventIDCounter);
+end;
+
+function TMCPIdHTTPServer.AcceptsSSE(const AcceptHeader: string): Boolean;
+begin
+  Result := Pos('text/event-stream', AcceptHeader) > 0;
+end;
+
+function TMCPIdHTTPServer.IsRequestOnlyNotificationsOrResponses(JSONRequest: TJSONValue): Boolean;
+begin
+  if JSONRequest is TJSONObject then
+  begin
+    var Obj := JSONRequest as TJSONObject;
+    var MethodValue := Obj.GetValue('method');
+    var IdValue := Obj.GetValue('id');
+    var ResultValue := Obj.GetValue('result');
+    var ErrorValue := Obj.GetValue('error');
+
+    if Assigned(MethodValue) and not Assigned(IdValue) then
+      Exit(True);
+
+    if Assigned(ResultValue) or Assigned(ErrorValue) then
+      Exit(True);
+
+    Result := False;
+  end
+  else if JSONRequest is TJSONArray then
+  begin
+    var Arr := JSONRequest as TJSONArray;
+    Result := True;
+    for var I := 0 to Arr.Count - 1 do
+    begin
+      if not IsRequestOnlyNotificationsOrResponses(Arr.Items[I]) then
+      begin
+        Result := False;
+        Break;
+      end;
+    end;
+  end
+  else
+    Result := False;
+end;
+
+procedure TMCPIdHTTPServer.HandlePostRequestSSE(RequestInfo: TIdHTTPRequestInfo;
+  ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
+begin
+  TLogger.Info('Handling POST request with SSE stream');
+
+  ResponseInfo.ContentType := 'text/event-stream';
+  ResponseInfo.CharSet := 'utf-8';
+  ResponseInfo.CustomHeaders.Values['Cache-Control'] := 'no-cache';
+  ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
+  ResponseInfo.CustomHeaders.Values['X-Accel-Buffering'] := 'no';
+
+  if SessionID <> '' then
+    ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
+
+  var JSONResponse := ProcessJSONRPCRequest(RequestBody, SessionID);
+
+  if JSONResponse <> '' then
+  begin
+    var EventID := GetNextEventID;
+    var SSEMessage := '';
+
+    if EventID <> '' then
+      SSEMessage := SSEMessage + SSE_ID_PREFIX + EventID + #10;
+
+    SSEMessage := SSEMessage + SSE_EVENT_PREFIX + 'message' + #10;
+    SSEMessage := SSEMessage + SSE_DATA_PREFIX + JSONResponse + SSE_MESSAGE_TERMINATOR;
+
+    ResponseInfo.ContentText := SSEMessage;
+    TLogger.Info('SSE response prepared with event ID: ' + EventID);
+  end
+  else
+  begin
+    ResponseInfo.ContentText := '';
+  end;
+
+  ResponseInfo.ResponseNo := HTTP_OK;
+end;
+
+procedure TMCPIdHTTPServer.HandlePostRequestJSON(RequestInfo: TIdHTTPRequestInfo;
+  ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
+begin
+  TLogger.Info('Handling POST request with JSON response');
+
+  var ResponseBody := ProcessJSONRPCRequest(RequestBody, SessionID);
+
+  if ResponseBody = '' then
+  begin
+    ResponseInfo.ResponseNo := HTTP_NO_CONTENT;
+    Exit;
+  end;
+
+  ResponseInfo.ContentType := 'application/json';
+  ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
+
+  if (SessionID = '') and (Pos('"sessionId"', ResponseBody) > 0) then
+  begin
+    var ResponseJSON := TJSONObject.ParseJSONValue(ResponseBody) as TJSONObject;
+    try
+      var ResultObj := ResponseJSON.GetValue('result') as TJSONObject;
+      if Assigned(ResultObj) then
+      begin
+        var SessionValue := ResultObj.GetValue('sessionId');
+        if Assigned(SessionValue) then
+          ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionValue.Value;
+      end;
+    finally
+      ResponseJSON.Free;
+    end;
+  end
+  else if SessionID <> '' then
+    ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
+
+  ResponseInfo.ContentStream := TStringStream.Create(ResponseBody, TEncoding.UTF8);
+  ResponseInfo.FreeContentStream := True;
+  ResponseInfo.ResponseNo := HTTP_OK;
+
+  TLogger.Info('Response: ' + ResponseBody);
 end;
 
 end.
