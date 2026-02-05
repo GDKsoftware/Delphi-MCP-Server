@@ -25,18 +25,21 @@ type
     FLogFileName: string;
     FMinLogLevel: TLogLevel;
     FOnLogMessage: TLogMessageProc;
+    FUseStdErr: Boolean;
     
     class procedure SetLogToConsole(const Value: Boolean); static;
     class procedure SetLogToFile(const Value: Boolean); static;
     class procedure SetLogFileName(const Value: string); static;
     class procedure SetMinLogLevel(const Value: TLogLevel); static;
     class procedure SetOnLogMessage(const Value: TLogMessageProc); static;
-    
+    class procedure SetUseStdErr(const Value: Boolean); static;
+
     class function GetLogToConsole: Boolean; static;
     class function GetLogToFile: Boolean; static;
     class function GetLogFileName: string; static;
     class function GetMinLogLevel: TLogLevel; static;
     class function GetOnLogMessage: TLogMessageProc; static;
+    class function GetUseStdErr: Boolean; static;
     
     constructor CreateInstance;
     procedure DoWriteLog(const Level: TLogLevel; const Message: string);
@@ -67,6 +70,7 @@ type
     class property LogFileName: string read GetLogFileName write SetLogFileName;
     class property MinLogLevel: TLogLevel read GetMinLogLevel write SetMinLogLevel;
     class property OnLogMessage: TLogMessageProc read GetOnLogMessage write SetOnLogMessage;
+    class property UseStdErr: Boolean read GetUseStdErr write SetUseStdErr;
   end;
 
 implementation
@@ -163,12 +167,18 @@ begin
     if FLogToConsole then
     begin
       {$IFDEF MSWINDOWS}
-      ConsoleHandle := GetStdHandle(STD_OUTPUT_HANDLE);
+      if FUseStdErr then
+        ConsoleHandle := GetStdHandle(STD_ERROR_HANDLE)
+      else
+        ConsoleHandle := GetStdHandle(STD_OUTPUT_HANDLE);
       SetConsoleTextAttribute(ConsoleHandle, LOG_LEVEL_COLORS[Level]);
       {$ENDIF}
-      
-      WriteLn(LogLine);
-      
+
+      if FUseStdErr then
+        WriteLn(ErrOutput, LogLine)
+      else
+        WriteLn(LogLine);
+
       {$IFDEF MSWINDOWS}
       SetConsoleTextAttribute(ConsoleHandle, 7);
       {$ENDIF}
@@ -289,6 +299,16 @@ end;
 class procedure TLogger.SetOnLogMessage(const Value: TLogMessageProc);
 begin
   Instance.FOnLogMessage := Value;
+end;
+
+class function TLogger.GetUseStdErr: Boolean;
+begin
+  Result := Instance.FUseStdErr;
+end;
+
+class procedure TLogger.SetUseStdErr(const Value: Boolean);
+begin
+  Instance.FUseStdErr := Value;
 end;
 
 end.
