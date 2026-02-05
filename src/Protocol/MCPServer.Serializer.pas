@@ -147,7 +147,13 @@ begin
     Exit;
     
   case RttiType.TypeKind of
-    tkInteger, tkInt64:
+    tkInteger:
+      if JsonValue is TJSONNumber then
+        Result := (JsonValue as TJSONNumber).AsInt
+      else
+        Result := StrToIntDef(JsonValue.Value, 0);
+
+    tkInt64:
       if JsonValue is TJSONNumber then
         Result := (JsonValue as TJSONNumber).AsInt64
       else
@@ -225,7 +231,10 @@ begin
     Exit;
     
   case RttiType.TypeKind of
-    tkInteger, tkInt64:
+    tkInteger:
+      Result := TJSONNumber.Create(Value.AsInteger);
+
+    tkInt64:
       Result := TJSONNumber.Create(Value.AsInt64);
       
     tkFloat:
