@@ -21,6 +21,8 @@ uses
   MCPServer.Tool.Base in 'Tools\MCPServer.Tool.Base.pas',
   MCPServer.Resource.Base in 'Resources\MCPServer.Resource.Base.pas',
   MCPServer.IdHTTPServer in 'Server\MCPServer.IdHTTPServer.pas',
+  MCPServer.StdioTransport in 'Server\MCPServer.StdioTransport.pas',
+  MCPServer.JsonRpcProcessor in 'Protocol\MCPServer.JsonRpcProcessor.pas',
   MCPServer.CoreManager in 'Managers\MCPServer.CoreManager.pas',
   MCPServer.ToolsManager in 'Managers\MCPServer.ToolsManager.pas',
   MCPServer.ResourcesManager in 'Managers\MCPServer.ResourcesManager.pas',
@@ -69,44 +71,37 @@ begin
 end;
 {$ENDIF}
   
-procedure RunServer;
+procedure RunHTTPServer;
 begin
-  // Load settings
   Settings := TMCPSettings.Create;
-  
+
   TLogger.Info('Delphi MCP Server v' + Settings.ServerVersion);
   TLogger.Info('================================');
   TLogger.Info('Model Context Protocol Server');
-  
+  TLogger.Info('Transport: HTTP');
   TLogger.Info('Listening on port ' + Settings.Port.ToString);
-  
-  // Create managers
+
   ManagerRegistry := TMCPManagerRegistry.Create;
   CoreManager := TMCPCoreManager.Create(Settings);
   ToolsManager := TMCPToolsManager.Create;
   ResourcesManager := TMCPResourcesManager.Create;
-  
-  // Register managers
+
   ManagerRegistry.RegisterManager(CoreManager);
   ManagerRegistry.RegisterManager(ToolsManager);
   ManagerRegistry.RegisterManager(ResourcesManager);
-  
-  // Create and configure server
+
   Server := TMCPIdHTTPServer.Create(nil);
   try
     Server.Settings := Settings;
     Server.ManagerRegistry := ManagerRegistry;
     Server.CoreManager := CoreManager;
-    
-    // Start server
+
     Server.Start;
-    
+
     TLogger.Info('Server started. Press CTRL+C to stop...');
-    
-    // Wait for shutdown signal
+
     ShutdownEvent.WaitFor(INFINITE);
-    
-    // Graceful shutdown
+
     TLogger.Info('Shutting down server...');
     Server.Stop;
     TLogger.Info('Server stopped successfully');
@@ -116,11 +111,61 @@ begin
   end;
 end;
 
+procedure RunStdioServer;
+var
+  StdioTransport: TMCPStdioTransport;
 begin
+  Settings := TMCPSettings.Create;
+
+  TLogger.Info('Delphi MCP Server v' + Settings.ServerVersion);
+  TLogger.Info('================================');
+  TLogger.Info('Model Context Protocol Server');
+  TLogger.Info('Transport: STDIO');
+
+  ManagerRegistry := TMCPManagerRegistry.Create;
+  CoreManager := TMCPCoreManager.Create(Settings);
+  ToolsManager := TMCPToolsManager.Create;
+  ResourcesManager := TMCPResourcesManager.Create;
+
+  ManagerRegistry.RegisterManager(CoreManager);
+  ManagerRegistry.RegisterManager(ToolsManager);
+  ManagerRegistry.RegisterManager(ResourcesManager);
+
+  StdioTransport := TMCPStdioTransport.Create(ManagerRegistry, CoreManager);
+  try
+    StdioTransport.Run;
+  finally
+    StdioTransport.Free;
+    Settings.Free;
+  end;
+end;
+
+function HasStdioFlag: Boolean;
+var
+  I: Integer;
+  Param: string;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+  begin
+    Param := ParamStr(I).ToLower;
+    if (Param = '--stdio') or (Param = '-stdio') or (Param = '/stdio') then
+    begin
+      Result := True;
+      Break;
+    end;
+  end;
+end;
+
+begin
+  // Check if running in STDIO mode before any logging
+  if HasStdioFlag then
+    TLogger.UseStdErr := True;
+
   // Configure logger
   TLogger.LogToConsole := True;
   TLogger.MinLogLevel := TLogLevel.Info;
-  
+
   ReportMemoryLeaksOnShutdown := True;
   IsMultiThread := True;
   
@@ -139,7 +184,12 @@ begin
     
     try
       TServerStatusResource.Initialize;
-      RunServer;
+
+      if HasStdioFlag then
+        RunStdioServer
+      else
+        RunHTTPServer;
+
     except
       on E: Exception do
         TLogger.Error(E);
