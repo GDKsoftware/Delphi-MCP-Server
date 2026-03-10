@@ -493,21 +493,21 @@ Edit `src\Server\MCPServer.IdHTTPServer.pas`:
   - Win32: `libcrypto-3.dll`, `libssl-3.dll`
   - Win64: `libcrypto-3-x64.dll`, `libssl-3-x64.dll`
 - Pre-compiled binaries:
-  - https://github.com/JPeterMugaas/OpenSSL-Distribution/tree/main/binaries/Windows
-  - https://github.com/TurboPack/OpenSSL-Distribution/tree/main/binaries/Windows
+  - https://github.com/TaurusTLS-Developers/OpenSSL-Distribution/releases
+  - https://github.com/TurboPack/OpenSSL-Distribution/releases
 - Current versions: 3.0.17, 3.2.5, 3.3.4, 3.4.2, 3.5.1, 3.5.2
 - Place DLLs in the same directory as your executable
 
 *Linux:*
 - OpenSSL is usually installed by default
 - Update if needed: `sudo apt-get install libssl-dev` (Debian/Ubuntu) or `sudo yum install openssl-devel` (RHEL/CentOS)
-- Build scripts available: https://github.com/TurboPack/OpenSSL-Distribution/tree/main/build-scripts
+- Pre-compiled binaries: https://github.com/TurboPack/OpenSSL-Distribution/releases
 
 *macOS:*
 - Use static libraries (.a files) for OpenSSL 3.x
 - Install via Homebrew: `brew install openssl@3`
 - Or use pre-compiled libraries from TaurusTLS distributions
-- Build scripts available: https://github.com/TurboPack/OpenSSL-Distribution/tree/main/build-scripts
+- Pre-compiled binaries: https://github.com/TurboPack/OpenSSL-Distribution/releases
 
 **For Standard Indy:**
 - Requires OpenSSL 1.0.2 DLLs (`libeay32.dll`, `ssleay32.dll`)
