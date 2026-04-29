@@ -71,10 +71,14 @@ begin
   if Assigned(Result) then
     Exit;
 
-  var LowerPropName := LowerCase(PropName);
+  const LowerPropName = LowerCase(PropName);
+  const LowerPropNameNoUnderscore = LowerPropName.Replace('_', '', [rfReplaceAll]);
   for var Pair in Json do
   begin
-    if SameText(Pair.JsonString.Value, PropName) or (LowerCase(Pair.JsonString.Value) = LowerPropName) then
+    const KeyName = Pair.JsonString.Value;
+    const LowerKey = LowerCase(KeyName);
+    const LowerKeyNoUnderscore = LowerKey.Replace('_', '', [rfReplaceAll]);
+    if SameText(KeyName, PropName) or (LowerKey = LowerPropName) or (LowerKeyNoUnderscore = LowerPropNameNoUnderscore) then
     begin
       Result := Pair.JsonValue;
       Exit;
