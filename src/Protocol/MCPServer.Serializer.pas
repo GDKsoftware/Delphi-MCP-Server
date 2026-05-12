@@ -30,6 +30,9 @@ type
 
     // Case-insensitive JSON value lookup
     class function GetJsonValueCaseInsensitive(const Json: TJSONObject; const PropName: string): TJSONValue;
+
+    // Single normalization rule shared by lookup and validation
+    class function NormalizeKey(const Name: string): string; inline;
   public
     class constructor Create;
     class destructor Destroy;
@@ -65,30 +68,44 @@ begin
   end;
 end;
 
+class function TMCPSerializer.NormalizeKey(const Name: string): string;
+begin
+  Result := LowerCase(Name).Replace('_', '', [rfReplaceAll]);
+end;
+
 class function TMCPSerializer.GetJsonValueCaseInsensitive(const Json: TJSONObject; const PropName: string): TJSONValue;
 begin
   Result := Json.GetValue(PropName);
   if Assigned(Result) then
     Exit;
 
-  const LowerPropName = LowerCase(PropName);
-  const LowerPropNameNoUnderscore = LowerPropName.Replace('_', '', [rfReplaceAll]);
+  const PropNorm = NormalizeKey(PropName);
   for var Pair in Json do
-  begin
-    const KeyName = Pair.JsonString.Value;
-    const LowerKey = LowerCase(KeyName);
-    const LowerKeyNoUnderscore = LowerKey.Replace('_', '', [rfReplaceAll]);
-    if SameText(KeyName, PropName) or (LowerKey = LowerPropName) or (LowerKeyNoUnderscore = LowerPropNameNoUnderscore) then
-    begin
-      Result := Pair.JsonValue;
-      Exit;
-    end;
-  end;
+    if NormalizeKey(Pair.JsonString.Value) = PropNorm then
+      Exit(Pair.JsonValue);
 end;
 
 class procedure TMCPSerializer.DeserializeObject(Instance: TObject; const Json: TJSONObject);
 begin
   var RttiType := FContext.GetType(Instance.ClassType);
+
+  var KnownNorms := TStringList.Create;
+  try
+    for var RttiProp in RttiType.GetProperties do
+      if RttiProp.IsWritable then
+        KnownNorms.Add(NormalizeKey(RttiProp.Name));
+
+    for var Pair in Json do
+    begin
+      const KeyName = Pair.JsonString.Value;
+      if KnownNorms.IndexOf(NormalizeKey(KeyName)) < 0 then
+        raise EArgumentException.CreateFmt(
+          'Unknown parameter "%s". Valid parameters: %s.',
+          [KeyName, String.Join(', ', KnownNorms.ToStringArray)]);
+    end;
+  finally
+    KnownNorms.Free;
+  end;
 
   for var RttiProp in RttiType.GetProperties do
   begin
