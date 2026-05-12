@@ -28,15 +28,15 @@ type
   TLogEntries = class
   private
     FEntries: TObjectList<TLogEntry>;
-    FTotalCount: Integer;
-    FFilteredCount: Integer;
+    FTotalCount: NativeInt;
+    FFilteredCount: NativeInt;
   public
     constructor Create;
     destructor Destroy; override;
     
     property Entries: TObjectList<TLogEntry> read FEntries write FEntries;
-    property TotalCount: Integer read FTotalCount write FTotalCount;
-    property FilteredCount: Integer read FFilteredCount write FFilteredCount;
+    property TotalCount: NativeInt read FTotalCount write FTotalCount;
+    property FilteredCount: NativeInt read FFilteredCount write FFilteredCount;
   end;
 
   TLogBuffer = class
@@ -53,7 +53,7 @@ type
     class procedure Finalize;
     
     procedure AddLog(const ALevel, AMessage, ACategory: string);
-    function GetLogs(AMaxCount: Integer = 100; const ALevel: string = ''): TObjectList<TLogEntry>;
+    function GetLogs(AMaxCount: NativeInt = 100; const ALevel: string = ''): TObjectList<TLogEntry>;
   end;
 
   TLogsRecentResource = class(TMCPResourceBase<TLogEntries>)
@@ -157,11 +157,11 @@ begin
   end;
 end;
 
-function TLogBuffer.GetLogs(AMaxCount: Integer; const ALevel: string): TObjectList<TLogEntry>;
+function TLogBuffer.GetLogs(AMaxCount: NativeInt; const ALevel: string): TObjectList<TLogEntry>;
 var
-  i: Integer;
+  i: NativeInt;
   Entry, NewEntry: TLogEntry;
-  StartIndex: Integer;
+  StartIndex: NativeInt;
 begin
   Result := TObjectList<TLogEntry>.Create(True);
   

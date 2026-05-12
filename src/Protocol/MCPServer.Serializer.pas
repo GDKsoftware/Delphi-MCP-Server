@@ -311,7 +311,7 @@ begin
   
   for var I := 0 to ArrayLength - 1 do
   begin
-    var JsonElement := JsonArray.Items[I];
+    var JsonElement := JsonArray.Items[Integer(I)];
     var ElementValue := ConvertJsonToValue(JsonElement, ElementType);
     
     if not ElementValue.IsEmpty then
