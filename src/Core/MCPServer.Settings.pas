@@ -27,7 +27,7 @@ type
     procedure LoadDefaults;
     procedure CreateDefaultSettingsFile;
   public
-    constructor Create(const ASettingsFile: string = '');
+    constructor Create(const ASettingsFile: string = ''; const ACreateFile: Boolean = True);
     destructor Destroy; override;
     
     procedure LoadFromFile;
@@ -55,7 +55,7 @@ uses
 
 { TMCPSettings }
 
-constructor TMCPSettings.Create(const ASettingsFile: string);
+constructor TMCPSettings.Create(const ASettingsFile: string; const ACreateFile: Boolean);
 begin
   inherited Create;
   
@@ -66,7 +66,7 @@ begin
     
   LoadDefaults;
   
-  if not TFile.Exists(FSettingsFile) then
+  if ACreateFile and (not TFile.Exists(FSettingsFile)) then
   begin
     TLogger.Info('Settings file not found. Creating default settings: ' + FSettingsFile);
     CreateDefaultSettingsFile;
