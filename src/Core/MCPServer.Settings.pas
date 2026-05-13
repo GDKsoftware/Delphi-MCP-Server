@@ -104,8 +104,10 @@ begin
 end;
 
 procedure TMCPSettings.CreateDefaultSettingsFile;
+var
+  IniFile: TIniFile;
 begin
-  var IniFile := TIniFile.Create(FSettingsFile);
+  IniFile := TIniFile.Create(FSettingsFile);
   try
     IniFile.WriteString('Server', '; Server configuration', '');
     IniFile.WriteInteger('Server', 'Port', FPort);
@@ -130,11 +132,13 @@ begin
 end;
 
 procedure TMCPSettings.LoadFromFile;
+var
+  IniFile: TIniFile;
 begin
   if not TFile.Exists(FSettingsFile) then
     Exit;
     
-  var IniFile := TIniFile.Create(FSettingsFile);
+  IniFile := TIniFile.Create(FSettingsFile);
   try
     FPort := IniFile.ReadInteger('Server', 'Port', FPort);
     FHost := IniFile.ReadString('Server', 'Host', FHost);
@@ -167,8 +171,10 @@ begin
 end;
 
 procedure TMCPSettings.SaveToFile;
+var
+  IniFile: TIniFile;
 begin
-  var IniFile := TIniFile.Create(FSettingsFile);
+  IniFile := TIniFile.Create(FSettingsFile);
   try
     IniFile.WriteInteger('Server', 'Port', FPort);
     IniFile.WriteString('Server', 'Host', FHost);

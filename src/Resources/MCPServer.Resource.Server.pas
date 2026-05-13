@@ -76,8 +76,9 @@ begin
 end;
 
 class procedure TServerStatusResource.RegisterServerStatusResource;
+var
+  URI: string;
 begin
-  var URI: string;
   if FNamePrefix <> '' then
     URI := 'server://' + FNamePrefix + 'status'
   else

@@ -123,10 +123,12 @@ end;
 { SchemaEnumAttribute }
 
 constructor SchemaEnumAttribute.Create(const AValues: array of string);
+var
+  I: NativeInt;
 begin
   inherited Create;
   SetLength(FValues, Length(AValues));
-  for var I := 0 to High(AValues) do
+  for I := 0 to High(AValues) do
     FValues[I] := AValues[I];
 end;
 

@@ -81,25 +81,32 @@ begin
 end;
 
 procedure TMCPResourcesManager.RegisterBuiltInResources;
+var
+  ResourceURI: string;
 begin
-  for var ResourceURI in TMCPRegistry.GetResourceURIs do
+  for ResourceURI in TMCPRegistry.GetResourceURIs do
   begin
     RegisterResource(TMCPRegistry.CreateResource(ResourceURI));
   end;
 end;
 
 function TMCPResourcesManager.ListResources: TValue;
+var
+  Resource: IMCPResource;
+  ResourcesArray: TJSONArray;
+  ResourceObj: TJSONObject;
+  ResultJSON: TJSONObject;
 begin
   TLogger.Info('MCP ListResources called');
-  
-  var ResultJSON := TJSONObject.Create;
+
+  ResultJSON := TJSONObject.Create;
   try
-    var ResourcesArray := TJSONArray.Create;
+    ResourcesArray := TJSONArray.Create;
     ResultJSON.AddPair('resources', ResourcesArray);
     
-    for var Resource in FResources.Values do
+    for Resource in FResources.Values do
     begin
-      var ResourceObj := TJSONObject.Create;
+      ResourceObj := TJSONObject.Create;
       ResourceObj.AddPair('uri', Resource.URI);
       ResourceObj.AddPair('name', Resource.Name);
       ResourceObj.AddPair('description', Resource.Description);
@@ -115,32 +122,38 @@ begin
 end;
 
 function TMCPResourcesManager.ReadResource(const Params: System.JSON.TJSONObject): TValue;
+var
+  ContentItem: TJSONObject;
+  ContentsArray: TJSONArray;
+  Resource: IMCPResource;
+  ResourceText: string;
+  ResultJSON: TJSONObject;
+  URI: string;
+  URIValue: TJSONValue;
 begin
-  var URIValue := Params.GetValue('uri');
-  var URI: string;
+  URIValue := Params.GetValue('uri');
   if Assigned(URIValue) then
     URI := URIValue.Value
   else
     URI := '';
-  
+
   TLogger.Info('MCP ReadResource called for URI: ' + URI);
-  
-  var ResultJSON := TJSONObject.Create;
+
+  ResultJSON := TJSONObject.Create;
   try
-    var ContentsArray := TJSONArray.Create;
+    ContentsArray := TJSONArray.Create;
     ResultJSON.AddPair('contents', ContentsArray);
-    
-    var ContentItem := TJSONObject.Create;
+
+    ContentItem := TJSONObject.Create;
     ContentsArray.AddElement(ContentItem);
-    
-    var Resource: IMCPResource;
+
     if FResources.TryGetValue(URI, Resource) then
     begin
       ContentItem.AddPair('uri', Resource.URI);
       ContentItem.AddPair('mimeType', Resource.MimeType);
       
       try
-        var ResourceText := Resource.Read;
+        ResourceText := Resource.Read;
         ContentItem.AddPair('text', ResourceText);
       except
         on E: Exception do
@@ -164,12 +177,15 @@ begin
 end;
 
 function TMCPResourcesManager.ListResourceTemplates: TValue;
+var
+  ResourceTemplatesArray: TJSONArray;
+  ResultJSON: TJSONObject;
 begin
   TLogger.Info('MCP ListResourceTemplates called');
   
-  var ResultJSON := TJSONObject.Create;
+  ResultJSON := TJSONObject.Create;
   try
-    var ResourceTemplatesArray := TJSONArray.Create;
+    ResourceTemplatesArray := TJSONArray.Create;
     ResultJSON.AddPair('resourceTemplates', ResourceTemplatesArray);
     
     // Return empty array since this server doesn't support resource templates

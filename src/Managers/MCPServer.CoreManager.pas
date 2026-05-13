@@ -68,17 +68,26 @@ begin
 end;
 
 function TMCPCoreManager.Initialize(const Params: TJSONObject): TValue;
+var
+  Capabilities: TJSONObject;
+  ClientInfo: TJSONObject;
+  ClientName: TJSONValue;
+  ClientVersion: TJSONValue;
+  ResourcesCap: TJSONObject;
+  ResultJSON: TJSONObject;
+  ServerInfo: TJSONObject;
+  ToolsCap: TJSONObject;
 begin
   TLogger.Info('MCP Initialize called');
   
   if Assigned(Params) then
   begin
-    var ClientInfo := Params.GetValue('clientInfo') as TJSONObject;
+    ClientInfo := Params.GetValue('clientInfo') as TJSONObject;
 
     if Assigned(ClientInfo) then
     begin
-      var ClientName := ClientInfo.GetValue('name');
-      var ClientVersion := ClientInfo.GetValue('version');
+      ClientName := ClientInfo.GetValue('name');
+      ClientVersion := ClientInfo.GetValue('version');
 
       if Assigned(ClientName) and Assigned(ClientVersion) then
         TLogger.Info(Format('Client: %s v%s', [ClientName.Value, ClientVersion.Value]));
@@ -87,26 +96,36 @@ begin
   
   FSessionID := TGuid.NewGuid.ToString;
   
-  var ResultJSON := TJSONObject.Create;
+  ResultJSON := TJSONObject.Create;
   try
     ResultJSON.AddPair('protocolVersion', MCP_PROTOCOL_VERSION);
     
-    var Capabilities := TJSONObject.Create;
+    Capabilities := TJSONObject.Create;
     ResultJSON.AddPair('capabilities', Capabilities);
     
-    var ToolsCap := TJSONObject.Create;
+    ToolsCap := TJSONObject.Create;
     Capabilities.AddPair('tools', ToolsCap);
+{$IF COMPILERVERSION <= 29}
+    ToolsCap.AddPair('supportsProgress', TJSONFalse.Create);
+    ToolsCap.AddPair('supportsCancellation', TJSONFalse.Create);
+{$ELSE}
     ToolsCap.AddPair('supportsProgress', TJSONBool.Create(False));
     ToolsCap.AddPair('supportsCancellation', TJSONBool.Create(False));
+{$ENDIF}
     
-    var ResourcesCap := TJSONObject.Create;
+    ResourcesCap := TJSONObject.Create;
     Capabilities.AddPair('resources', ResourcesCap);
+{$IF COMPILERVERSION <= 29}
+    ResourcesCap.AddPair('subscribe', TJSONFalse.Create);
+    ResourcesCap.AddPair('listChanged', TJSONFalse.Create);
+{$ELSE}
     ResourcesCap.AddPair('subscribe', TJSONBool.Create(False));
     ResourcesCap.AddPair('listChanged', TJSONBool.Create(False));
+{$ENDIF}
     
     ResultJSON.AddPair('sessionId', FSessionID);
     
-    var ServerInfo := TJSONObject.Create;
+    ServerInfo := TJSONObject.Create;
     ResultJSON.AddPair('serverInfo', ServerInfo);
     ServerInfo.AddPair('name', FSettings.ServerName);
     ServerInfo.AddPair('version', FSettings.ServerVersion);
@@ -121,10 +140,12 @@ begin
 end;
 
 function TMCPCoreManager.Ping: TValue;
+var
+  ResultJSON: TJSONObject;
 begin
   TLogger.Info('MCP Ping called');
   
-  var ResultJSON := TJSONObject.Create;
+  ResultJSON := TJSONObject.Create;
   try
     Result := TValue.From<TJSONObject>(ResultJSON);
   except
