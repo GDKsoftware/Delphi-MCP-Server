@@ -90,8 +90,11 @@ end;
 
 function TMCPResourceBase<T>.Read: string;
 var
-  ResourceData: T;
+  Ctx: TRttiContext;
   JSONObj: TJSONObject;
+  Prop: TRttiProperty;
+  ResourceData: T;
+  Typ: TRttiType;
 begin
   ResourceData := GetResourceData;
   try
@@ -109,10 +112,10 @@ begin
     end
     else
     begin
-      var Ctx := TRttiContext.Create;
+      Ctx := TRttiContext.Create;
       try
-        var Typ := Ctx.GetType(ResourceData.ClassType);
-        var Prop := Typ.GetProperty('Content');
+        Typ := Ctx.GetType(ResourceData.ClassType);
+        Prop := Typ.GetProperty('Content');
         if Assigned(Prop) then
         begin
           {$WARN UNSAFE_CAST OFF}

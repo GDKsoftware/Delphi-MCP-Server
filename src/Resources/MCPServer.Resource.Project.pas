@@ -123,32 +123,32 @@ function TProjectReadmeResource.GetResourceData: TTextContent;
 begin
   Result := TTextContent.Create;
 
-  Result.Content := '''
-# Delphi MCP Server
-
-A Model Context Protocol (MCP) server implementation in Delphi using Indy HTTP Server.
-
-## Features
-- Tools capability with automatic schema generation
-- Resources capability for read-only data access
-- JSON-RPC 2.0 protocol support
-- CORS support for cross-origin requests
-
-## Building
-```bash
-build.bat
-```
-
-## Running
-```bash
-Win32\Debug\MCPServer.exe
-```
-
-## Testing
-```bash
-npx @wong2/mcp-cli --url http://localhost:8080/mcp
-```
-''';
+  Result.Content := '' + sLineBreak +
+'# Delphi MCP Server' +  sLineBreak +
+'' + sLineBreak +
+'A Model Context Protocol (MCP) server implementation in Delphi using Indy HTTP Server.' + sLineBreak +
+'' + sLineBreak +
+'## Features' + sLineBreak +
+'- Tools capability with automatic schema generation' + sLineBreak +
+'- Resources capability for read-only data access' + sLineBreak +
+'- JSON-RPC 2.0 protocol support' + sLineBreak +
+'- CORS support for cross-origin requests' + sLineBreak +
+'' + sLineBreak +
+'## Building' + sLineBreak +
+'```bash' + sLineBreak +
+'build.bat' + sLineBreak +
+'```' + sLineBreak +
+'' + sLineBreak +
+'## Running' + sLineBreak +
+'```bash' + sLineBreak +
+'Win32\Debug\MCPServer.exe' + sLineBreak +
+'```' + sLineBreak +
+'' + sLineBreak +
+'## Testing' + sLineBreak +
+'```bash' + sLineBreak +
+'npx @wong2/mcp-cli --url http://localhost:8080/mcp' + sLineBreak +
+'```' + sLineBreak +
+'''';
 end;
 
 

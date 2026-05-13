@@ -46,19 +46,22 @@ begin
   FDescription := 'List files in a directory';
 end;
 
+{$WARN SYMBOL_PLATFORM OFF}
 function TListFilesTool.ExecuteWithParams(const Params: TListFilesParams): string;
 var
+  Attrs: TFileAttributes;
   Files: TStringList;
   FileArray: TStringDynArray;
   FileName: string;
   NormalizedPath: string;
   AllowedBasePath: string;
+{$WARN SYMBOL_PLATFORM DEFAULT}
 begin
   Files := TStringList.Create;
   try
     NormalizedPath := TPath.GetFullPath(Params.Path);
     AllowedBasePath := TPath.GetFullPath(GetCurrentDir);
-    
+
     if not NormalizedPath.StartsWith(AllowedBasePath, True) then
     begin
       Result := 'Error: Access denied - path outside allowed directory';
@@ -73,7 +76,7 @@ begin
         {$IFDEF MSWINDOWS}
         if (not Params.IncludeHidden) then
         begin
-          var Attrs := TFile.GetAttributes(FileName);
+          Attrs := TFile.GetAttributes(FileName);
           {$WARN SYMBOL_PLATFORM OFF}
           if (TFileAttribute.faHidden in Attrs) then
             Continue;

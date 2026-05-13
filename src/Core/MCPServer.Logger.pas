@@ -269,36 +269,58 @@ begin
 end;
 
 class procedure TLogger.SetLogToConsole(const Value: Boolean);
+var
+  lInstance: TLogger;
 begin
-  Instance.FLogToConsole := Value;
+  lInstance := Instance;
+  if Assigned(lInstance) then
+    lInstance.FLogToConsole := Value;
 end;
 
 class procedure TLogger.SetLogToFile(const Value: Boolean);
+var
+  lInstance: TLogger;
 begin
-  Instance.FLogToFile := Value;
+  lInstance := Instance;
+  if Assigned(lInstance) then
+    lInstance.FLogToFile := Value;
 end;
 
 class procedure TLogger.SetLogFileName(const Value: string);
+var
+  lInstance: TLogger;
 begin
   FLock.Enter;
   try
-    Instance.FLogFileName := Value;
+    lInstance := Instance;
+    if lInstance = nil then
+      Exit;
 
-    if Assigned(Instance.FLogFile) then
-      FreeAndNil(Instance.FLogFile);
+    lInstance.FLogFileName := Value;
+
+    if Assigned(lInstance.FLogFile) then
+      FreeAndNil(lInstance.FLogFile);
   finally
     FLock.Leave;
   end;
 end;
 
 class procedure TLogger.SetMinLogLevel(const Value: TLogLevel);
+var
+  lInstance: TLogger;
 begin
-  Instance.FMinLogLevel := Value;
+  lInstance := Instance;
+  if Assigned(lInstance) then
+    lInstance.FMinLogLevel := Value;
 end;
 
 class procedure TLogger.SetOnLogMessage(const Value: TLogMessageProc);
+var
+  lInstance: TLogger;
 begin
-  Instance.FOnLogMessage := Value;
+  lInstance := Instance;
+  if Assigned(lInstance) then
+    lInstance.FOnLogMessage := Value;
 end;
 
 class function TLogger.GetUseStdErr: Boolean;
@@ -307,8 +329,12 @@ begin
 end;
 
 class procedure TLogger.SetUseStdErr(const Value: Boolean);
+var
+  lInstance: TLogger;
 begin
-  Instance.FUseStdErr := Value;
+  lInstance := Instance;
+  if Assigned(lInstance) then
+    lInstance.FUseStdErr := Value;
 end;
 
 end.

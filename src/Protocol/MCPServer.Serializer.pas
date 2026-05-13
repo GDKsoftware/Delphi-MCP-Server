@@ -74,30 +74,41 @@ begin
 end;
 
 class function TMCPSerializer.GetJsonValueCaseInsensitive(const Json: TJSONObject; const PropName: string): TJSONValue;
+var
+  Pair: TJSONPair;
+  PropNorm: string;
 begin
   Result := Json.GetValue(PropName);
   if Assigned(Result) then
     Exit;
 
-  const PropNorm = NormalizeKey(PropName);
-  for var Pair in Json do
+  PropNorm := NormalizeKey(PropName);
+  for Pair in Json do
     if NormalizeKey(Pair.JsonString.Value) = PropNorm then
       Exit(Pair.JsonValue);
 end;
 
 class procedure TMCPSerializer.DeserializeObject(Instance: TObject; const Json: TJSONObject);
+var
+  JsonValue: TJSONValue;
+  KeyName: string;
+  KnownNorms: TStringList;
+  Pair: TJSONPair;
+  PropValue: TValue;
+  RttiProp: TRttiProperty;
+  RttiType: TRttiType;
 begin
-  var RttiType := FContext.GetType(Instance.ClassType);
+  RttiType := FContext.GetType(Instance.ClassType);
 
-  var KnownNorms := TStringList.Create;
+  KnownNorms := TStringList.Create;
   try
-    for var RttiProp in RttiType.GetProperties do
+    for RttiProp in RttiType.GetProperties do
       if RttiProp.IsWritable then
         KnownNorms.Add(NormalizeKey(RttiProp.Name));
 
-    for var Pair in Json do
+    for Pair in Json do
     begin
-      const KeyName = Pair.JsonString.Value;
+      KeyName := Pair.JsonString.Value;
       if KnownNorms.IndexOf(NormalizeKey(KeyName)) < 0 then
         raise EArgumentException.CreateFmt(
           'Unknown parameter "%s". Valid parameters: %s.',
@@ -107,17 +118,17 @@ begin
     KnownNorms.Free;
   end;
 
-  for var RttiProp in RttiType.GetProperties do
+  for RttiProp in RttiType.GetProperties do
   begin
     if not RttiProp.IsWritable then
       Continue;
 
-    var JsonValue := GetJsonValueCaseInsensitive(Json, RttiProp.Name);
+    JsonValue := GetJsonValueCaseInsensitive(Json, RttiProp.Name);
 
     if not Assigned(JsonValue) then
       Continue;
 
-    var PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
+    PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
 
     if not PropValue.IsEmpty then
     begin
@@ -129,20 +140,26 @@ begin
 end;
 
 class procedure TMCPSerializer.Serialize(Obj: TObject; Json: TJSONObject);
+var
+  JsonValue: TJSONValue;
+  PropName: string;
+  PropValue: TValue;
+  RttiProp: TRttiProperty;
+  RttiType: TRttiType;
 begin
-  var RttiType := FContext.GetType(Obj.ClassType);
-  
-  for var RttiProp in RttiType.GetProperties do
+  RttiType := FContext.GetType(Obj.ClassType);
+
+  for RttiProp in RttiType.GetProperties do
   begin
     if not RttiProp.IsReadable then
       Continue;
-      
-    var PropName := LowerCase(RttiProp.Name);
+
+    PropName := LowerCase(RttiProp.Name);
     {$WARN UNSAFE_CAST OFF}
-    var PropValue := RttiProp.GetValue(Obj);
+    PropValue := RttiProp.GetValue(Obj);
     {$WARN UNSAFE_CAST ON}
     
-    var JsonValue := ConvertValueToJson(PropValue, RttiProp.PropertyType);
+    JsonValue := ConvertValueToJson(PropValue, RttiProp.PropertyType);
     
     if Assigned(JsonValue) then
       Json.AddPair(PropName, JsonValue);
@@ -150,8 +167,10 @@ begin
 end;
 
 class function TMCPSerializer.SerializeToString(Obj: TObject): string;
+var
+  Json: TJSONObject;
 begin
-  var Json := TJSONObject.Create;
+  Json := TJSONObject.Create;
   try
     Serialize(Obj, Json);
     Result := Json.ToJSON;
@@ -161,6 +180,9 @@ begin
 end;
 
 class function TMCPSerializer.ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+var
+  EnumValue: Integer;
+  NestedInstance: TObject;
 begin
   Result := TValue.Empty;
   
@@ -184,16 +206,25 @@ begin
       if JsonValue is TJSONNumber then
         Result := (JsonValue as TJSONNumber).AsDouble
       else
+{$IF COMPILERVERSION <= 28}
+        Result := StrToFloatDef(JsonValue.Value, 0, TFormatSettings.Create('en-US'));
+{$ELSE}
         Result := StrToFloatDef(JsonValue.Value, 0, FormatSettings.Invariant);
-        
+{$ENDIF}
+
     tkString, tkLString, tkWString, tkUString:
       Result := JsonValue.Value;
       
     tkEnumeration:
       if RttiType.Handle = TypeInfo(Boolean) then
       begin
+{$IF COMPILERVERSION <= 29}
+        if (JsonValue is TJSONTrue) or (JsonValue is TJSONFalse) then
+          Result := JsonValue is TJSONTrue
+{$ELSE}
         if JsonValue is TJSONBool then
           Result := (JsonValue as TJSONBool).AsBoolean
+{$ENDIF}
         else
           Result := LowerCase(JsonValue.Value) = 'true';
       end
@@ -203,7 +234,7 @@ begin
           Result := TValue.FromOrdinal(RttiType.Handle, (JsonValue as TJSONNumber).AsInt)
         else
         begin
-          var EnumValue := GetEnumValue(RttiType.Handle, JsonValue.Value);
+          EnumValue := GetEnumValue(RttiType.Handle, JsonValue.Value);
           if EnumValue >= 0 then
             Result := TValue.FromOrdinal(RttiType.Handle, EnumValue)
           else
@@ -214,7 +245,7 @@ begin
     tkClass:
       if JsonValue is TJSONObject then
       begin
-        var NestedInstance := CreateInstanceFromType(RttiType);
+        NestedInstance := CreateInstanceFromType(RttiType);
         if Assigned(NestedInstance) then
         begin
           DeserializeObject(NestedInstance, JsonValue as TJSONObject);
@@ -231,13 +262,16 @@ begin
 end;
 
 class function TMCPSerializer.CreateInstanceFromType(const RttiType: TRttiType): TObject;
+var
+  InstanceType: TRttiInstanceType;
+  MetaClass: TClass;
 begin
   Result := nil;
   
   if RttiType is TRttiInstanceType then
   begin
-    var InstanceType := TRttiInstanceType(RttiType);
-    var MetaClass := InstanceType.MetaclassType;
+    InstanceType := TRttiInstanceType(RttiType);
+    MetaClass := InstanceType.MetaclassType;
     
     if Assigned(MetaClass) then
       Result := MetaClass.Create;
@@ -245,6 +279,9 @@ begin
 end;
 
 class function TMCPSerializer.ConvertValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
+var
+  ChildJson: TJSONObject;
+  Obj: TObject;
 begin
   Result := nil;
   
@@ -265,15 +302,21 @@ begin
       Result := TJSONString.Create(Value.AsString);
       
     tkEnumeration:
-      if RttiType.Handle = TypeInfo(Boolean) then
-        Result := TJSONBool.Create(Value.AsBoolean)
-      else
-        Result := TJSONNumber.Create(Value.AsOrdinal);
-        
+      begin
+{$IF COMPILERVERSION <= 29}
+        if Value.AsBoolean then
+          Result := TJSONTrue.Create
+        else
+          Result := TJSONFalse.Create;
+{$ELSE}
+        Result := TJSONBool.Create(Value.AsBoolean);
+{$ENDIF}
+      end;
+
     tkClass:
       if Value.IsObject and (Value.AsObject <> nil) then
       begin
-        var Obj := Value.AsObject;
+        Obj := Value.AsObject;
 
         if Obj is TJSONValue then
         begin
@@ -281,7 +324,7 @@ begin
         end
         else
         begin
-          var ChildJson := TJSONObject.Create;
+          ChildJson := TJSONObject.Create;
           Serialize(Obj, ChildJson);
           Result := ChildJson;
         end;
@@ -301,18 +344,24 @@ begin
 end;
 
 class function TMCPSerializer.DeserializeDynamicArray(const DynArrayType: TRttiDynamicArrayType; const JsonArray: TJSONArray): TValue;
+var
+  ArrayLength: NativeInt;
+  ElementType: TRttiType;
+  ElementValue: TValue;
+  I: NativeInt;
+  JsonElement: TJSONValue;
 begin
-  var ElementType := DynArrayType.ElementType;
-  var ArrayLength: NativeInt := JsonArray.Count;
+  ElementType := DynArrayType.ElementType;
+  ArrayLength := JsonArray.Count;
 
   Result := TValue.Empty;
   TValue.Make(nil, DynArrayType.Handle, Result);
   DynArraySetLength(PPointer(Result.GetReferenceToRawData)^, Result.TypeInfo, 1, @ArrayLength);
   
-  for var I := 0 to ArrayLength - 1 do
+  for I := 0 to ArrayLength - 1 do
   begin
-    var JsonElement := JsonArray.Items[I];
-    var ElementValue := ConvertJsonToValue(JsonElement, ElementType);
+    JsonElement := JsonArray.Items[Integer(I)];
+    ElementValue := ConvertJsonToValue(JsonElement, ElementType);
     
     if not ElementValue.IsEmpty then
       Result.SetArrayElement(I, ElementValue);
@@ -320,22 +369,29 @@ begin
 end;
 
 class function TMCPSerializer.DeserializeGenericList(const ListType: TRttiInstanceType; const JsonArray: TJSONArray): TValue;
+var
+  AddMethod: TRttiMethod;
+  ElementValue: TValue;
+  I: Integer;
+  JsonElement: TJSONValue;
+  ListInstance: TObject;
+  ParamType: TRttiType;
 begin
-  var ListInstance := ListType.MetaclassType.Create;
+  ListInstance := ListType.MetaclassType.Create;
   
-  var AddMethod := FindAddMethod(ListType);
+  AddMethod := FindAddMethod(ListType);
   if not Assigned(AddMethod) then
   begin
     ListInstance.Free;
     Exit(TValue.Empty);
   end;
   
-  var ParamType := AddMethod.GetParameters[0].ParamType;
+  ParamType := AddMethod.GetParameters[0].ParamType;
   
-  for var I := 0 to JsonArray.Count - 1 do
+  for I := 0 to JsonArray.Count - 1 do
   begin
-    var JsonElement := JsonArray.Items[I];
-    var ElementValue := ConvertJsonToValue(JsonElement, ParamType);
+    JsonElement := JsonArray.Items[I];
+    ElementValue := ConvertJsonToValue(JsonElement, ParamType);
     
     if not ElementValue.IsEmpty then
       AddMethod.Invoke(ListInstance, [ElementValue]);
@@ -345,10 +401,12 @@ begin
 end;
 
 class function TMCPSerializer.FindAddMethod(const ListType: TRttiInstanceType): TRttiMethod;
+var
+  Method: TRttiMethod;
 begin
   Result := nil;
   
-  for var Method in ListType.GetMethods do
+  for Method in ListType.GetMethods do
   begin
     if SameText(Method.Name, 'Add') and (Length(Method.GetParameters) = 1) then
     begin

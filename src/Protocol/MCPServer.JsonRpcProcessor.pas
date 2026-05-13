@@ -42,8 +42,10 @@ begin
 end;
 
 class function TMCPJsonRpcProcessor.ParseJSONRequest(const RequestBody: string): TJSONObject;
+var
+  ParsedValue: TJSONValue;
 begin
-  var ParsedValue := TJSONObject.ParseJSONValue(RequestBody);
+  ParsedValue := TJSONObject.ParseJSONValue(RequestBody);
   if not Assigned(ParsedValue) then
     raise Exception.Create('Invalid JSON');
 
@@ -57,8 +59,10 @@ begin
 end;
 
 class function TMCPJsonRpcProcessor.ExtractRequestID(JSONRequest: TJSONObject): TValue;
+var
+  IdValue: TJSONValue;
 begin
-  var IdValue := JSONRequest.GetValue('id');
+  IdValue := JSONRequest.GetValue('id');
   if not Assigned(IdValue) then
   begin
     Result := TValue.Empty;
@@ -98,11 +102,13 @@ end;
 
 class function TMCPJsonRpcProcessor.ExecuteMethodCall(ManagerRegistry: IMCPManagerRegistry;
   const MethodName: string; Params: TJSONObject): TValue;
+var
+  Manager: IMCPCapabilityManager;
 begin
   if not Assigned(ManagerRegistry) then
     raise Exception.Create('Manager registry not initialized');
 
-  var Manager := ManagerRegistry.GetManagerForMethod(MethodName);
+  Manager := ManagerRegistry.GetManagerForMethod(MethodName);
   if not Assigned(Manager) then
     raise Exception.CreateFmt('Method [%s] not found. The method does not exist or is not available.', [MethodName]);
 
@@ -111,10 +117,13 @@ end;
 
 class function TMCPJsonRpcProcessor.CreateErrorResponse(const RequestID: TValue;
   ErrorCode: Integer; const ErrorMessage: string): string;
+var
+  ErrorObj: TJSONObject;
+  JSONResponse: TJSONObject;
 begin
-  var JSONResponse := CreateJSONResponse(RequestID);
+  JSONResponse := CreateJSONResponse(RequestID);
   try
-    var ErrorObj := TJSONObject.Create;
+    ErrorObj := TJSONObject.Create;
     JSONResponse.AddPair('error', ErrorObj);
     ErrorObj.AddPair('code', TJSONNumber.Create(ErrorCode));
     ErrorObj.AddPair('message', ErrorMessage);
@@ -125,26 +134,36 @@ begin
 end;
 
 function TMCPJsonRpcProcessor.ProcessRequest(const RequestBody: string; const SessionID: string): string;
+var
+  ErrorCode: Integer;
+  ExecuteResult: TValue;
+  JSONRequest: TJSONObject;
+  JSONResponse: TJSONObject;
+  MethodName: string;
+  MethodValue: TJSONValue;
+  Params: TJSONObject;
+  ParamsValue: TJSONValue;
+  RequestID: TValue;
 begin
   Result := '';
-  var JSONRequest: TJSONObject := nil;
-  var JSONResponse: TJSONObject := nil;
+  JSONRequest := nil;
+  JSONResponse := nil;
 
   try
     try
       JSONRequest := ParseJSONRequest(RequestBody);
 
-      var RequestID := ExtractRequestID(JSONRequest);
+      RequestID := ExtractRequestID(JSONRequest);
 
-      var MethodValue := JSONRequest.GetValue('method');
-      var MethodName := '';
+      MethodValue := JSONRequest.GetValue('method');
+      MethodName := '';
       if Assigned(MethodValue) then
         MethodName := MethodValue.Value;
 
       // Notifications (requests without id) should not have a response
       if RequestID.IsEmpty then
       begin
-        if MethodName = 'initialized' then
+        if MethodName = 'notifications/initialized' then
           TLogger.Info('MCP Initialized notification received')
         else
           TLogger.Info('Notification received: ' + MethodName);
@@ -153,12 +172,12 @@ begin
 
       JSONResponse := CreateJSONResponse(RequestID);
 
-      var ParamsValue := JSONRequest.GetValue('params');
-      var Params: TJSONObject := nil;
+      ParamsValue := JSONRequest.GetValue('params');
+      Params := nil;
       if Assigned(ParamsValue) and (ParamsValue is TJSONObject) then
         Params := ParamsValue as TJSONObject;
 
-      var ExecuteResult := ExecuteMethodCall(FManagerRegistry, MethodName, Params);
+      ExecuteResult := ExecuteMethodCall(FManagerRegistry, MethodName, Params);
 
       if not ExecuteResult.IsEmpty then
       begin
@@ -177,7 +196,7 @@ begin
       begin
         TLogger.Error('Error processing request: ' + E.Message);
 
-        var ErrorCode := JSONRPC_INTERNAL_ERROR;
+        ErrorCode := JSONRPC_INTERNAL_ERROR;
         if Pos('not found', E.Message) > 0 then
           ErrorCode := JSONRPC_METHOD_NOT_FOUND;
 

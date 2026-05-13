@@ -15,7 +15,7 @@ type
     FUptime: Int64;
     FStartTime: TDateTime;
     FCurrentTime: TDateTime;
-    FMemoryUsed: Int64;
+    FMemoryUsed: UInt64;
     FRequestCount: Int64;
     FActiveConnections: Integer;
   public
@@ -23,7 +23,7 @@ type
     property Uptime: Int64 read FUptime write FUptime;
     property StartTime: TDateTime read FStartTime write FStartTime;
     property CurrentTime: TDateTime read FCurrentTime write FCurrentTime;
-    property MemoryUsed: Int64 read FMemoryUsed write FMemoryUsed;
+    property MemoryUsed: UInt64 read FMemoryUsed write FMemoryUsed;
     property RequestCount: Int64 read FRequestCount write FRequestCount;
     property ActiveConnections: Integer read FActiveConnections write FActiveConnections;
   end;
@@ -76,8 +76,9 @@ begin
 end;
 
 class procedure TServerStatusResource.RegisterServerStatusResource;
+var
+  URI: string;
 begin
-  var URI: string;
   if FNamePrefix <> '' then
     URI := 'server://' + FNamePrefix + 'status'
   else

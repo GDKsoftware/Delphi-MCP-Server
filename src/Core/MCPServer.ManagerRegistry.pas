@@ -43,9 +43,11 @@ begin
 end;
 
 function TMCPManagerRegistry.GetManagerForMethod(const Method: string): IMCPCapabilityManager;
+var
+  Manager: IMCPCapabilityManager;
 begin
   Result := nil;
-  for var Manager in FManagers do
+  for Manager in FManagers do
   begin
     if Manager.HandlesMethod(Method) then
     begin
