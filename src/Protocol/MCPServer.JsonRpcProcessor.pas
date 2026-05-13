@@ -163,7 +163,7 @@ begin
       // Notifications (requests without id) should not have a response
       if RequestID.IsEmpty then
       begin
-        if MethodName = 'initialized' then
+        if MethodName = 'notifications/initialized' then
           TLogger.Info('MCP Initialized notification received')
         else
           TLogger.Info('Notification received: ' + MethodName);
