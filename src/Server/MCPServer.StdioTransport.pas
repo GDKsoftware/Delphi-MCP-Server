@@ -40,11 +40,15 @@ begin
 end;
 
 procedure TMCPStdioTransport.Run;
+var
+  ErrorResponse: string;
+  InputLine: string;
+  Response: string;
 begin
   TLogger.Info('STDIO transport started - reading from stdin, writing to stdout');
   TLogger.Info('Logging to stderr');
 
-  var InputLine := '';
+  InputLine := '';
   while not Eof(Input) do
   begin
     try
@@ -55,7 +59,7 @@ begin
 
       TLogger.Info('Received: ' + InputLine);
 
-      var Response := FJsonRpcProcessor.ProcessRequest(InputLine, '');
+      Response := FJsonRpcProcessor.ProcessRequest(InputLine, '');
 
       if Response <> '' then
       begin
@@ -69,7 +73,7 @@ begin
       begin
         TLogger.Error('Error processing STDIO request: ' + E.Message);
 
-        var ErrorResponse := '{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"' +
+        ErrorResponse := '{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"' +
                              E.Message.Replace('"', '\"') + '"}}';
         Writeln(Output, ErrorResponse);
         Flush(Output);

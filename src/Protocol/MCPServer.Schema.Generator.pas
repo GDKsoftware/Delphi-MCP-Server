@@ -28,34 +28,46 @@ uses
 { TMCPSchemaGenerator }
 
 class function TMCPSchemaGenerator.GenerateSchema(Cls: TClass): TJSONObject;
+var
+  Attr: TCustomAttribute;
+  EnumArray: TJSONArray;
+  JsonName: string;
+  JsonType: string;
+  Properties: TJSONObject;
+  PropSchema: TJSONObject;
+  RequiredArray: TJSONArray;
+  RttiContext: TRttiContext;
+  RttiProp: TRttiProperty;
+  RttiType: TRttiType;
+  Value: string;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('type', 'object');
 
-  var Properties := TJSONObject.Create;
+  Properties := TJSONObject.Create;
   Result.AddPair('properties', Properties);
-  var RequiredArray := TJSONArray.Create;
+  RequiredArray := TJSONArray.Create;
 
-  var RttiContext := TRttiContext.Create;
+  RttiContext := TRttiContext.Create;
   try
-    var RttiType := RttiContext.GetType(Cls);
+    RttiType := RttiContext.GetType(Cls);
 
-    for var RttiProp in RttiType.GetProperties do
+    for RttiProp in RttiType.GetProperties do
     begin
       if RttiProp.IsReadable and RttiProp.IsWritable then
       begin
-        var JsonName := GetPropertyJsonName(RttiProp, RttiType);
+        JsonName := GetPropertyJsonName(RttiProp, RttiType);
 
-        var PropSchema := TJSONObject.Create;
+        PropSchema := TJSONObject.Create;
         Properties.AddPair(JsonName, PropSchema);
 
-        var JsonType := GetJsonTypeFromRttiType(RttiProp.PropertyType);
+        JsonType := GetJsonTypeFromRttiType(RttiProp.PropertyType);
         PropSchema.AddPair('type', JsonType);
 
         if JsonType = 'array' then
           PropSchema.AddPair('items', TJSONObject.Create);
 
-        for var Attr in RttiProp.GetAttributes do
+        for Attr in RttiProp.GetAttributes do
         begin
           if Attr is SchemaDescriptionAttribute then
           begin
@@ -63,8 +75,8 @@ begin
           end
           else if Attr is SchemaEnumAttribute then
           begin
-            var EnumArray := TJSONArray.Create;
-            for var Value in SchemaEnumAttribute(Attr).Values do
+            EnumArray := TJSONArray.Create;
+            for Value in SchemaEnumAttribute(Attr).Values do
               EnumArray.Add(Value);
             PropSchema.AddPair('enum', EnumArray);
           end;
@@ -118,8 +130,10 @@ begin
 end;
 
 class function TMCPSchemaGenerator.IsRequiredProperty(Prop: TRttiProperty): Boolean;
+var
+  Attr: TCustomAttribute;
 begin
-  for var Attr in Prop.GetAttributes do
+  for Attr in Prop.GetAttributes do
   begin
     if Attr is OptionalAttribute then
       Exit(False);

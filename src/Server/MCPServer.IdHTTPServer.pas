@@ -171,6 +171,8 @@ end;
 
 procedure TMCPIdHTTPServer.HandleHTTPRequest(Context: TIdContext; 
   RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
+var
+  RequestPath: string;
 begin
   TServerStatusResource.ConnectionOpened;
   try
@@ -179,7 +181,7 @@ begin
     if not VerifyAndSetCORSHeaders(RequestInfo, ResponseInfo) then
       Exit; // CORS blocked the request
 
-    var RequestPath := RequestInfo.Document;
+    RequestPath := RequestInfo.Document;
 
     // Only handle requests to the configured MCP endpoint
     if (RequestPath <> FSettings.Endpoint) then
@@ -207,23 +209,29 @@ end;
 
 function TMCPIdHTTPServer.VerifyAndSetCORSHeaders(RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo): Boolean;
+var
+  AllowedOrigin: string;
+  CurrentOrigin: string;
+  Found: Boolean;
+  Origin: string;
+  OriginsList: TStringList;
 begin
   Result := True;
 
   if not Assigned(FSettings) or not FSettings.CorsEnabled then
     Exit;
 
-  var Origin := RequestInfo.RawHeaders.Values['Origin'];
-  var AllowedOrigin: string := '*';
+  Origin := RequestInfo.RawHeaders.Values['Origin'];
+  AllowedOrigin := '*';
 
   if (FSettings.CorsAllowedOrigins <> '*') and (Origin <> '') then
   begin
-    var OriginsList := TStringList.Create;
+    OriginsList := TStringList.Create;
     try
       OriginsList.CommaText := FSettings.CorsAllowedOrigins;
-      var Found := False;
+      Found := False;
 
-      for var CurrentOrigin in OriginsList do
+      for CurrentOrigin in OriginsList do
       begin
         if SameText(Trim(CurrentOrigin), Origin) then
         begin
@@ -261,8 +269,11 @@ end;
 
 procedure TMCPIdHTTPServer.HandleGetRequest(RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo);
+var
+  AcceptHeader: string;
+  SessionID: string;
 begin
-  var AcceptHeader := RequestInfo.RawHeaders.Values['Accept'];
+  AcceptHeader := RequestInfo.RawHeaders.Values['Accept'];
 
   if AcceptsSSE(AcceptHeader) then
   begin
@@ -274,7 +285,7 @@ begin
     ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
     ResponseInfo.CustomHeaders.Values['X-Accel-Buffering'] := 'no';
 
-    var SessionID := RequestInfo.RawHeaders.Values['Mcp-Session-Id'];
+    SessionID := RequestInfo.RawHeaders.Values['Mcp-Session-Id'];
     if SessionID <> '' then
       ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
 
@@ -303,8 +314,13 @@ end;
 
 procedure TMCPIdHTTPServer.HandlePostRequest(RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo);
+var
+  AcceptHeader: string;
+  JSONRequest: TJSONValue;
+  RequestBody: string;
+  SessionID: string;
 begin
-  var RequestBody := '';
+  RequestBody := '';
   if Assigned(RequestInfo.PostStream) and (RequestInfo.PostStream.Size > 0) then
   begin
     RequestInfo.PostStream.Position := 0;
@@ -313,13 +329,13 @@ begin
 
   TLogger.Info('Request: ' + RequestBody);
 
-  var SessionID := RequestInfo.RawHeaders.Values['Mcp-Session-Id'];
+  SessionID := RequestInfo.RawHeaders.Values['Mcp-Session-Id'];
   if SessionID <> '' then
     TLogger.Info('Session ID from header: ' + SessionID);
 
-  var AcceptHeader := RequestInfo.RawHeaders.Values['Accept'];
+  AcceptHeader := RequestInfo.RawHeaders.Values['Accept'];
 
-  var JSONRequest: TJSONValue := nil;
+  JSONRequest := nil;
   try
     JSONRequest := TJSONObject.ParseJSONValue(RequestBody);
 
@@ -408,14 +424,22 @@ begin
 end;
 
 function TMCPIdHTTPServer.IsRequestOnlyNotificationsOrResponses(JSONRequest: TJSONValue): Boolean;
+var
+  Arr: TJSONArray;
+  ErrorValue: TJSONValue;
+  I: Integer;
+  IdValue: TJSONValue;
+  MethodValue: TJSONValue;
+  Obj: TJSONObject;
+  ResultValue: TJSONValue;
 begin
   if JSONRequest is TJSONObject then
   begin
-    var Obj := JSONRequest as TJSONObject;
-    var MethodValue := Obj.GetValue('method');
-    var IdValue := Obj.GetValue('id');
-    var ResultValue := Obj.GetValue('result');
-    var ErrorValue := Obj.GetValue('error');
+    Obj := JSONRequest as TJSONObject;
+    MethodValue := Obj.GetValue('method');
+    IdValue := Obj.GetValue('id');
+    ResultValue := Obj.GetValue('result');
+    ErrorValue := Obj.GetValue('error');
 
     if Assigned(MethodValue) and not Assigned(IdValue) then
       Exit(True);
@@ -427,9 +451,9 @@ begin
   end
   else if JSONRequest is TJSONArray then
   begin
-    var Arr := JSONRequest as TJSONArray;
+    Arr := JSONRequest as TJSONArray;
     Result := True;
-    for var I := 0 to Arr.Count - 1 do
+    for I := 0 to Arr.Count - 1 do
     begin
       if not IsRequestOnlyNotificationsOrResponses(Arr.Items[I]) then
       begin
@@ -444,6 +468,10 @@ end;
 
 procedure TMCPIdHTTPServer.HandlePostRequestSSE(RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
+var
+  EventID: string;
+  JSONResponse: string;
+  SSEMessage: string;
 begin
   TLogger.Info('Handling POST request with SSE stream');
 
@@ -456,12 +484,12 @@ begin
   if SessionID <> '' then
     ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
 
-  var JSONResponse := FJsonRpcProcessor.ProcessRequest(RequestBody, SessionID);
+  JSONResponse := FJsonRpcProcessor.ProcessRequest(RequestBody, SessionID);
 
   if JSONResponse <> '' then
   begin
-    var EventID := GetNextEventID;
-    var SSEMessage := '';
+    EventID := GetNextEventID;
+    SSEMessage := '';
 
     if EventID <> '' then
       SSEMessage := SSEMessage + SSE_ID_PREFIX + EventID + #10;
@@ -482,10 +510,15 @@ end;
 
 procedure TMCPIdHTTPServer.HandlePostRequestJSON(RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
+var
+  ResponseBody: string;
+  ResponseJSON: TJSONObject;
+  ResultObj: TJSONObject;
+  SessionValue: TJSONValue;
 begin
   TLogger.Info('Handling POST request with JSON response');
 
-  var ResponseBody := FJsonRpcProcessor.ProcessRequest(RequestBody, SessionID);
+  ResponseBody := FJsonRpcProcessor.ProcessRequest(RequestBody, SessionID);
 
   if ResponseBody = '' then
   begin
@@ -498,12 +531,12 @@ begin
 
   if (SessionID = '') and (Pos('"sessionId"', ResponseBody) > 0) then
   begin
-    var ResponseJSON := TJSONObject.ParseJSONValue(ResponseBody) as TJSONObject;
+    ResponseJSON := TJSONObject.ParseJSONValue(ResponseBody) as TJSONObject;
     try
-      var ResultObj := ResponseJSON.GetValue('result') as TJSONObject;
+      ResultObj := ResponseJSON.GetValue('result') as TJSONObject;
       if Assigned(ResultObj) then
       begin
-        var SessionValue := ResultObj.GetValue('sessionId');
+        SessionValue := ResultObj.GetValue('sessionId');
         if Assigned(SessionValue) then
           ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionValue.Value;
       end;
