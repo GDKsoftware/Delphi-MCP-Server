@@ -141,8 +141,9 @@ begin
   if ResultValue.IsType<TJSONArray> then
   begin
     // The tool already produced a content array (e.g. text plus an image item);
-    // pass it through verbatim so callers can return non-text content.
-    Result.AddPair('content', TJSONArray(ResultValue.AsType<TJSONArray>.Clone));
+    // take ownership so it is passed through verbatim and freed with the
+    // response (no clone, no leak of the original array).
+    Result.AddPair('content', ResultValue.AsType<TJSONArray>);
   end
   else if ResultValue.IsType<string> then
   begin
