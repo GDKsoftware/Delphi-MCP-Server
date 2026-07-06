@@ -138,7 +138,13 @@ var
 begin
   Result := TJSONObject.Create;
 
-  if ResultValue.IsType<string> then
+  if ResultValue.IsType<TJSONArray> then
+  begin
+    // The tool already produced a content array (e.g. text plus an image item);
+    // pass it through verbatim so callers can return non-text content.
+    Result.AddPair('content', TJSONArray(ResultValue.AsType<TJSONArray>.Clone));
+  end
+  else if ResultValue.IsType<string> then
   begin
     TextValue := ResultValue.AsString;
     HasError := TextValue.StartsWith('Error:') or TextValue.StartsWith('Error executing tool:');
