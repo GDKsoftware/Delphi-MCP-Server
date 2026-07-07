@@ -256,8 +256,9 @@ begin
 
   ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Origin'] := AllowedOrigin;
   ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Methods'] := 'POST, GET, OPTIONS';
-  ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Headers'] := 
-    'Content-Type, Mcp-Session-Id';
+  ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Headers'] :=
+    'Accept, Content-Type, Last-Event-ID, Mcp-Protocol-Version, Mcp-Session-Id';
+  ResponseInfo.CustomHeaders.Values['Access-Control-Expose-Headers'] := 'Mcp-Session-Id';
   ResponseInfo.CustomHeaders.Values['Access-Control-Max-Age'] := CORS_MAX_AGE.ToString;
 end;
 
