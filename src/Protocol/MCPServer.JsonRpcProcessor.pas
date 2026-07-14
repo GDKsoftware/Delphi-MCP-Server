@@ -62,6 +62,16 @@ class function TMCPJsonRpcProcessor.ExtractRequestID(JSONRequest: TJSONObject): 
 var
   IdValue: TJSONValue;
 begin
+  // JSONRequest is nil when the request body failed to parse; there is no id
+  // to extract. Without this guard the nil dereference surfaces as
+  // "Access violation ... Read of address 0000000000000010" for any
+  // syntactically invalid request.
+  if not Assigned(JSONRequest) then
+  begin
+    Result := TValue.Empty;
+    Exit;
+  end;
+
   IdValue := JSONRequest.GetValue('id');
   if not Assigned(IdValue) then
   begin
@@ -196,8 +206,12 @@ begin
       begin
         TLogger.Error('Error processing request: ' + E.Message);
 
+        // If parsing failed, JSONRequest is still nil: report a JSON-RPC parse
+        // error (-32700). ExtractRequestID is nil-safe and yields a null id.
         ErrorCode := JSONRPC_INTERNAL_ERROR;
-        if Pos('not found', E.Message) > 0 then
+        if not Assigned(JSONRequest) then
+          ErrorCode := JSONRPC_PARSE_ERROR
+        else if Pos('not found', E.Message) > 0 then
           ErrorCode := JSONRPC_METHOD_NOT_FOUND;
 
         Result := CreateErrorResponse(ExtractRequestID(JSONRequest), ErrorCode, E.Message);
