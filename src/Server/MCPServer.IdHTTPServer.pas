@@ -44,6 +44,7 @@ type
     FActive: Boolean;
     FSettings: TMCPSettings;
     FEventIDCounter: Int64;
+    FOnlyHost: Boolean;
     procedure ConfigureSSL;
     procedure HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean);
     procedure HandleHTTPRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
@@ -56,6 +57,8 @@ type
     function GetNextEventID: string;
     function AcceptsSSE(const AcceptHeader: string): Boolean;
     function IsRequestOnlyNotificationsOrResponses(JSONRequest: TJSONValue): Boolean;
+  strict protected
+    function InternalVerify(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean; virtual;
   public
     constructor Create(Owner: TComponent); override;
     destructor Destroy; override;
@@ -66,11 +69,14 @@ type
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry write FManagerRegistry;
     property CoreManager: IMCPCapabilityManager read FCoreManager write FCoreManager;
     property Settings: TMCPSettings read FSettings write FSettings;
+    property OnlyHost: Boolean read FOnlyHost write FOnlyHost;
   end;
 
 implementation
 
 uses
+  IdSocketHandle,
+  IdStack,
   MCPServer.Resource.Server,
   MCPServer.CoreManager,
   MCPServer.Logger;
@@ -134,6 +140,8 @@ begin
 end;
 
 procedure TMCPIdHTTPServer.Start;
+var
+  lBinding: TIdSocketHandle;
 begin
   if FActive then
     Exit;
@@ -153,6 +161,13 @@ begin
   end;
 
   FHTTPServer.DefaultPort := FPort;
+  if FOnlyHost then
+  begin
+    FHTTPServer.Bindings.Clear;
+    lBinding := FHTTPServer.Bindings.Add;
+    lBinding.IP := GStack.ResolveHost(FSettings.Host, Id_IPv4);
+    lBinding.Port := FPort;
+  end;
   FHTTPServer.Active := True;
   FActive := True;
 
@@ -180,6 +195,9 @@ begin
 
     if not VerifyAndSetCORSHeaders(RequestInfo, ResponseInfo) then
       Exit; // CORS blocked the request
+
+    if not InternalVerify(RequestInfo, ResponseInfo) then
+      Exit;
 
     RequestPath := RequestInfo.Document;
 
@@ -553,6 +571,11 @@ begin
   ResponseInfo.ResponseNo := HTTP_OK;
 
   TLogger.Info('Response: ' + ResponseBody);
+end;
+
+function TMCPIdHTTPServer.InternalVerify(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
+begin
+  Result := True;
 end;
 
 end.

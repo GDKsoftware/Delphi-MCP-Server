@@ -24,6 +24,8 @@ type
     FTools: TDictionary<string, IMCPTool>;
     procedure RegisterTool(const Tool: IMCPTool);
     procedure RegisterBuiltInTools;
+  strict protected
+    function InternalAllowTool(const ToolName: string): Boolean; virtual;
   public
     constructor Create;
     destructor Destroy; override;
@@ -86,10 +88,14 @@ var
   Tool: IMCPTool;
   ToolName: string;
 begin
+  FTools.Clear;
   for ToolName in TMCPRegistry.GetToolNames do
   begin
-    Tool := TMCPRegistry.CreateTool(ToolName);
-    RegisterTool(Tool);
+    if InternalAllowTool(ToolName) then
+    begin
+      Tool := TMCPRegistry.CreateTool(ToolName);
+      RegisterTool(Tool);
+    end;
   end;
 end;
 
@@ -250,9 +256,15 @@ begin
   Result := TValue.From<TJSONObject>(BuildToolCallResponse(ResultValue));
 end;
 
+function TMCPToolsManager.InternalAllowTool(const ToolName: string): Boolean;
+begin
+  Result := True;
+end;
+
 function TMCPToolsManager.ListTools: TValue;
 begin
   TLogger.Info('MCP ListTools called');
+  RegisterBuiltInTools;
   Result := TValue.From<TJSONObject>(BuildToolListResponse);
 end;
 
