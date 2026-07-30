@@ -20,6 +20,8 @@ type
 
     // Extracted type conversion methods
     class function ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToEnum(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function GetEnumValueNames(const EnumType: TRttiEnumerationType): string;
     class function ConvertValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
     class function CreateInstanceFromType(const RttiType: TRttiType): TObject;
 
@@ -128,7 +130,12 @@ begin
     if not Assigned(JsonValue) then
       Continue;
 
-    PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
+    try
+      PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
+    except
+      on E: EArgumentException do
+        raise EArgumentException.CreateFmt('Parameter "%s": %s', [LowerCase(RttiProp.Name), E.Message]);
+    end;
 
     if not PropValue.IsEmpty then
     begin
@@ -181,7 +188,6 @@ end;
 
 class function TMCPSerializer.ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
 var
-  EnumValue: Integer;
   NestedInstance: TObject;
 begin
   Result := TValue.Empty;
@@ -230,18 +236,9 @@ begin
       end
       else
       begin
-        if JsonValue is TJSONNumber then
-          Result := TValue.FromOrdinal(RttiType.Handle, (JsonValue as TJSONNumber).AsInt)
-        else
-        begin
-          EnumValue := GetEnumValue(RttiType.Handle, JsonValue.Value);
-          if EnumValue >= 0 then
-            Result := TValue.FromOrdinal(RttiType.Handle, EnumValue)
-          else
-            Result := TValue.FromOrdinal(RttiType.Handle, StrToIntDef(JsonValue.Value, 0));
-        end;
+        Result := ConvertJsonToEnum(JsonValue, RttiType);
       end;
-      
+
     tkClass:
       if JsonValue is TJSONObject then
       begin
@@ -259,6 +256,51 @@ begin
       if JsonValue is TJSONArray then
         Result := DeserializeArray(RttiType, JsonValue as TJSONArray);
   end;
+end;
+
+class function TMCPSerializer.ConvertJsonToEnum(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+var
+  EnumType: TRttiEnumerationType;
+  Ordinal: Integer;
+begin
+  Result := TValue.Empty;
+
+  if not (RttiType is TRttiEnumerationType) then
+    Exit;
+
+  EnumType := TRttiEnumerationType(RttiType);
+
+  if JsonValue is TJSONNumber then
+    Ordinal := (JsonValue as TJSONNumber).AsInt
+  else
+  begin
+    if JsonValue.Value = '' then
+      Exit;
+
+    Ordinal := GetEnumValue(RttiType.Handle, JsonValue.Value);
+    if Ordinal < 0 then
+      Ordinal := StrToIntDef(JsonValue.Value, -1);
+  end;
+
+  if (Ordinal < EnumType.MinValue) or (Ordinal > EnumType.MaxValue) then
+    raise EArgumentException.CreateFmt(
+      'Invalid value "%s". Valid values: %s.',
+      [JsonValue.Value, GetEnumValueNames(EnumType)]);
+
+  Result := TValue.FromOrdinal(RttiType.Handle, Ordinal);
+end;
+
+class function TMCPSerializer.GetEnumValueNames(const EnumType: TRttiEnumerationType): string;
+var
+  Names: TArray<string>;
+  Ordinal: Integer;
+begin
+  SetLength(Names, EnumType.MaxValue - EnumType.MinValue + 1);
+
+  for Ordinal := EnumType.MinValue to EnumType.MaxValue do
+    Names[Ordinal - EnumType.MinValue] := GetEnumName(EnumType.Handle, Ordinal);
+
+  Result := String.Join(', ', Names);
 end;
 
 class function TMCPSerializer.CreateInstanceFromType(const RttiType: TRttiType): TObject;
