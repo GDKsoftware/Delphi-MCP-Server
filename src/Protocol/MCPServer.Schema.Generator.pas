@@ -14,6 +14,7 @@ type
     class function GetJsonTypeFromRttiType(RttiType: TRttiType): string;
     class function GetPropertyJsonName(Prop: TRttiProperty; RType: TRttiType): string;
     class function IsRequiredProperty(Prop: TRttiProperty): Boolean;
+    class function CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
   public
     class function GenerateSchema(Cls: TClass): TJSONObject;
     class function GenerateSchemaFromInstance(Instance: TObject): TJSONObject;
@@ -67,6 +68,8 @@ begin
         if JsonType = 'array' then
           PropSchema.AddPair('items', TJSONObject.Create);
 
+        EnumArray := nil;
+
         for Attr in RttiProp.GetAttributes do
         begin
           if Attr is SchemaDescriptionAttribute then
@@ -78,9 +81,14 @@ begin
             EnumArray := TJSONArray.Create;
             for Value in SchemaEnumAttribute(Attr).Values do
               EnumArray.Add(Value);
-            PropSchema.AddPair('enum', EnumArray);
           end;
         end;
+
+        if not Assigned(EnumArray) then
+          EnumArray := CreateEnumValuesArray(RttiProp.PropertyType);
+
+        if Assigned(EnumArray) then
+          PropSchema.AddPair('enum', EnumArray);
 
         if IsRequiredProperty(RttiProp) then
           RequiredArray.Add(JsonName);
@@ -139,6 +147,26 @@ begin
       Exit(False);
   end;
   Result := True;
+end;
+
+class function TMCPSchemaGenerator.CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
+var
+  EnumType: TRttiEnumerationType;
+  Ordinal: Integer;
+begin
+  Result := nil;
+
+  if not (RttiType is TRttiEnumerationType) then
+    Exit;
+
+  if RttiType.Handle = TypeInfo(Boolean) then
+    Exit;
+
+  EnumType := TRttiEnumerationType(RttiType);
+
+  Result := TJSONArray.Create;
+  for Ordinal := EnumType.MinValue to EnumType.MaxValue do
+    Result.Add(GetEnumName(RttiType.Handle, Ordinal));
 end;
 
 end.
