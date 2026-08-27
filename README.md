@@ -545,7 +545,7 @@ We welcome contributions! Here's how to help:
 
 ## About GDK Software
 
-[GDK Software](https://www.gdksoftware.com) is a Delphi specialist: we build, upgrade and maintain Delphi applications worldwide, and offer Delphi (AI) consultancy, training, and low-code development with Codolex.
+[GDK Software](https://www.gdksoftware.com) is a Delphi specialist: we build, upgrade and maintain Delphi applications worldwide, and offer Delphi and AI consultancy and AI training.
 
 ## Support
 
