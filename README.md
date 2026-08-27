@@ -551,4 +551,7 @@ We welcome contributions! Here's how to help:
 
 - Create an issue on [GitHub](https://github.com/GDKsoftware/delphi-mcp-server/issues)
 - Visit our website at [www.gdksoftware.com](https://www.gdksoftware.com)
-- Contact us for commercial support
+
+## Commercial Support
+
+This library is MIT licensed and free to use. For companies that depend on it commercially we offer support and maintenance agreements with guaranteed response times, and sponsored development of features you need, such as upcoming MCP specification revisions. Contact us at [gdksoftware.com/contact-us](https://gdksoftware.com/contact-us) or open an issue to get in touch.
