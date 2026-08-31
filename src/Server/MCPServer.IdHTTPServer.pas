@@ -2,8 +2,8 @@ unit MCPServer.IdHTTPServer;
 
 interface
 
-// TaurusTLS provides OpenSSL 3.x support with modern ECDHE cipher suites
-// Install via GetIt Package Manager: Search for "TaurusTLS" or get from https://github.com/JPeterMugaas/TaurusTLS
+// TaurusTLS provides OpenSSL 3.x/4.x support with modern ECDHE cipher suites
+// Install via GetIt Package Manager: Search for "TaurusTLS" or get from https://github.com/TaurusTLS-Developers/TaurusTLS
 {$DEFINE USE_TAURUS_TLS}  // Comment this line to use standard Indy SSL (OpenSSL 1.0.2)
 
 uses
@@ -378,7 +378,7 @@ begin
   
   // Create and configure SSL handler
   {$IFDEF USE_TAURUS_TLS}
-  // TaurusTLS with OpenSSL 3.x support
+  // TaurusTLS with OpenSSL 3.x/4.x support
   FSSLHandler := TTaurusTLSServerIOHandler.Create(Self);
   FSSLHandler.DefaultCert.PublicKey := FSettings.SSLCertFile;
   FSSLHandler.DefaultCert.PrivateKey := FSettings.SSLKeyFile;
