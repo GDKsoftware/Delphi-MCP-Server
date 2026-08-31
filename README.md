@@ -491,6 +491,8 @@ Edit `src\Server\MCPServer.IdHTTPServer.pas`:
 
 TaurusTLS runs on OpenSSL 3.x and 4.x. Pre-compiled binaries for every supported platform, including Windows on ARM64, are published at https://github.com/TaurusTLS-Developers/OpenSSL-Distribution/releases. Full deployment instructions: https://taurustls.org/deployapps.xhtml
 
+> **OpenSSL 4.x requires TaurusTLS 1.0.5.42 or newer.** Earlier releases only look for the 3.x, 1.1 and 1.0 library names, so a build linked against them fails at startup with `ETaurusTLSCouldNotLoadSSLLibrary: Could not load SSL library` when only 4.x libraries are present. Check `DefaultLibVersions` in `TaurusTLSConsts.pas` if you are unsure which version you have.
+
 *Windows (dynamic linking):*
 
 Ship the OpenSSL DLLs and `LICENSE.txt` alongside your executable:
@@ -527,6 +529,8 @@ Instead of copying DLLs by hand, the OpenSSL-Distribution releases also ship aut
 - **Cloudflare Tunnel**: Standard Indy SSL lacks ECDHE cipher support. Use TaurusTLS or run Cloudflare Tunnel with HTTP: `cloudflared tunnel --url http://localhost:8080`
 - **Self-Signed Certificates**: Claude Desktop doesn't accept self-signed certificates. Use Cloudflare Tunnel or a valid certificate from a trusted CA
 - **"No shared cipher" error**: Install and enable TaurusTLS for modern cipher support
+- **`Could not load SSL library`**: no matching OpenSSL library was found. Either the DLLs are missing next to the executable, or your TaurusTLS version predates 4.x support (see above)
+- **The wrong OpenSSL gets loaded**: TaurusTLS tries the library names in order (4.x first, then 3.x, 1.1, 1.0). If the version you deployed is not the one it settles on, it silently falls back to any other OpenSSL on the Windows search path, and PHP, Git and similar tools all ship one. Set the `OPENSSL_LIBRARY_PATH` environment variable to the directory you want to pin it to
 
 ## License
 
