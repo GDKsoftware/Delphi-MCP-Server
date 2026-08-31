@@ -66,6 +66,12 @@ build.bat Debug Win32
 build.bat Release Win64
 ```
 
+The script picks up the highest TaurusTLS version installed in the CatalogRepository of the Studio release that `DELPHI_PATH` points at. To build against a copy somewhere else, set `TAURUS_PATH` to its `Source` directory first:
+```bash
+set TAURUS_PATH=C:\path\to\TaurusTLS\Source
+build.bat Release Win64
+```
+
 #### Linux Build
 
 **Prerequisites:**
@@ -529,8 +535,8 @@ Instead of copying DLLs by hand, the OpenSSL-Distribution releases also ship aut
 - **Cloudflare Tunnel**: Standard Indy SSL lacks ECDHE cipher support. Use TaurusTLS or run Cloudflare Tunnel with HTTP: `cloudflared tunnel --url http://localhost:8080`
 - **Self-Signed Certificates**: Claude Desktop doesn't accept self-signed certificates. Use Cloudflare Tunnel or a valid certificate from a trusted CA
 - **"No shared cipher" error**: Install and enable TaurusTLS for modern cipher support
-- **`Could not load SSL library`**: no matching OpenSSL library was found. Either the DLLs are missing next to the executable, or your TaurusTLS version predates 4.x support (see above)
-- **The wrong OpenSSL gets loaded**: TaurusTLS tries the library names in order (4.x first, then 3.x, 1.1, 1.0). If the version you deployed is not the one it settles on, it silently falls back to any other OpenSSL on the Windows search path, and PHP, Git and similar tools all ship one. Set the `OPENSSL_LIBRARY_PATH` environment variable to the directory you want to pin it to
+- **`Could not load SSL library`**: no OpenSSL library TaurusTLS recognises was found. Either the libraries are not where the platform looks for them, or your TaurusTLS version predates 4.x support (see above)
+- **The wrong OpenSSL gets loaded**: TaurusTLS asks the OS for the libraries by name, trying the version suffixes newest first, and takes the first hit anywhere on the platform's library search path. Another OpenSSL installation can therefore win over the one you shipped, and your application runs on a version you never tested. Set the `OPENSSL_LIBRARY_PATH` environment variable to an absolute directory to pin the choice; it applies on every platform
 
 ## License
 

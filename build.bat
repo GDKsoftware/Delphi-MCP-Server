@@ -47,15 +47,22 @@ if "%PLATFORM%"=="" set PLATFORM=Win32
 echo Building MCPServer - %CONFIG% %PLATFORM%
 echo.
 
-REM Add TaurusTLS path if it exists - try multiple possible locations
-set TAURUS_PATH=
-if exist "%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS\1.0.2.39\Source" (
-    set TAURUS_PATH=%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS\1.0.2.39\Source
-) else if exist "%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS-12\Source" (
-    set TAURUS_PATH=%USERPROFILE%\Documents\Embarcadero\Studio\37.0\CatalogRepository\TaurusTLS-12\Source
-)
+REM Locate TaurusTLS. Set TAURUS_PATH yourself to override; otherwise the
+REM highest version installed in the CatalogRepository of this Studio release
+REM is used, so a GetIt update is picked up without editing this script.
+REM Note: OpenSSL 4.x needs TaurusTLS 1.0.5.42 or newer.
+for %%i in ("!DELPHI_PATH!") do set STUDIO_VER=%%~nxi
+set CATALOG_DIR=%USERPROFILE%\Documents\Embarcadero\Studio\!STUDIO_VER!\CatalogRepository
 
+if not "%TAURUS_PATH%"=="" goto :TaurusResolved
+
+for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "$root = '!CATALOG_DIR!\TaurusTLS'; if (Test-Path $root) { Get-ChildItem $root -Directory ^| Where-Object { Test-Path (Join-Path $_.FullName 'Source') } ^| Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } ^| Select-Object -Last 1 -ExpandProperty FullName }"`) do set "TAURUS_PATH=%%d\Source"
+
+if "!TAURUS_PATH!"=="" if exist "!CATALOG_DIR!\TaurusTLS-12\Source" set "TAURUS_PATH=!CATALOG_DIR!\TaurusTLS-12\Source"
+
+:TaurusResolved
 if not "!TAURUS_PATH!"=="" (
+    echo Using TaurusTLS: !TAURUS_PATH!
     set EXTRA_UNITS=;!TAURUS_PATH!
 ) else (
     set EXTRA_UNITS=
