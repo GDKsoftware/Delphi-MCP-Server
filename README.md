@@ -66,6 +66,12 @@ build.bat Debug Win32
 build.bat Release Win64
 ```
 
+The script picks up the highest TaurusTLS version installed in the CatalogRepository of the Studio release that `DELPHI_PATH` points at. To build against a copy somewhere else, set `TAURUS_PATH` to its `Source` directory first:
+```bash
+set TAURUS_PATH=C:\path\to\TaurusTLS\Source
+build.bat Release Win64
+```
+
 #### Linux Build
 
 **Prerequisites:**
@@ -454,60 +460,71 @@ The server supports configuration through `settings.ini` files. A default `setti
 The Delphi MCP Server supports two SSL/TLS implementations:
 
 1. **Standard Indy SSL** - Uses OpenSSL 1.0.2 (default if TaurusTLS not available)
-2. **TaurusTLS** - Uses OpenSSL 3.x with modern cipher support (recommended)
+2. **TaurusTLS** - Uses OpenSSL 3.x or 4.x with modern cipher support (recommended)
 
 #### Installing TaurusTLS
 
-TaurusTLS provides OpenSSL 3.x support with modern ECDHE cipher suites required by services like Cloudflare.
+TaurusTLS provides OpenSSL 3.x and 4.x support with modern ECDHE cipher suites required by services like Cloudflare.
 
-**Via GetIt Package Manager (Easiest):**
-1. Open Delphi IDE
-2. Go to Tools > GetIt Package Manager
-3. Search for "TaurusTLS"
-4. Click Install
+**Via a package manager (easiest):**
+- **GetIt** (RAD Studio): Tools > GetIt Package Manager, search for "TaurusTLS", click Install
+- **DPM**: `dpm install TaurusTLS_Developers.TaurusTLS`
+- **TMS Smart Setup**: `tms install taurustls_developers.taurustls`
 
 **Manual Installation:**
-1. Clone from https://github.com/JPeterMugaas/TaurusTLS
+1. Clone from https://github.com/TaurusTLS-Developers/TaurusTLS
 2. Open `TaurusTLS\Packages\d12\TaurusAll.groupproj`
 3. Compile `TaurusTLS_RT`
 4. Compile and install `TaurusTLS_DT`
+
+All installation options are documented at https://taurustls.org/download.xhtml
 
 #### Switching Between SSL Implementations
 
 Edit `src\Server\MCPServer.IdHTTPServer.pas`:
 
 ```pascal
-// To use TaurusTLS (OpenSSL 3.x):
+// To use TaurusTLS (OpenSSL 3.x/4.x):
 {$DEFINE USE_TAURUS_TLS}  // Keep this line uncommented
 
 // To use Standard Indy SSL (OpenSSL 1.0.2):
 // {$DEFINE USE_TAURUS_TLS}  // Comment out this line
 ```
 
-#### OpenSSL DLL Requirements
+#### OpenSSL Requirements
 
 **For TaurusTLS:**
 
-*Windows:*
-- Requires OpenSSL 3.x DLLs:
-  - Win32: `libcrypto-3.dll`, `libssl-3.dll`
-  - Win64: `libcrypto-3-x64.dll`, `libssl-3-x64.dll`
-- Pre-compiled binaries:
-  - https://github.com/TaurusTLS-Developers/OpenSSL-Distribution/releases
-  - https://github.com/TurboPack/OpenSSL-Distribution/releases
-- Current versions: 3.0.17, 3.2.5, 3.3.4, 3.4.2, 3.5.1, 3.5.2
-- Place DLLs in the same directory as your executable
+TaurusTLS runs on OpenSSL 3.x and 4.x. Pre-compiled binaries for every supported platform, including Windows on ARM64, are published at https://github.com/TaurusTLS-Developers/OpenSSL-Distribution/releases. Full deployment instructions: https://taurustls.org/deployapps.xhtml
 
-*Linux:*
-- OpenSSL is usually installed by default
+> **OpenSSL 4.x requires TaurusTLS 1.0.5.42 or newer.** Earlier releases only look for the 3.x, 1.1 and 1.0 library names, so a build linked against them fails at startup with `ETaurusTLSCouldNotLoadSSLLibrary: Could not load SSL library` when only 4.x libraries are present. Check `DefaultLibVersions` in `TaurusTLSConsts.pas` if you are unsure which version you have.
+
+*Windows (dynamic linking):*
+
+Ship the OpenSSL DLLs and `LICENSE.txt` alongside your executable:
+
+| Target | OpenSSL 3.x | OpenSSL 4.x |
+|--------|-------------|-------------|
+| Win32 | `libcrypto-3.dll`, `libssl-3.dll` | `libcrypto-4.dll`, `libssl-4.dll` |
+| Win64 | `libcrypto-3-x64.dll`, `libssl-3-x64.dll` | `libcrypto-4-x64.dll`, `libssl-4-x64.dll` |
+| Windows ARM64EC | `libcrypto-3-arm64.dll`, `libssl-3-arm64.dll` | `libcrypto-4-arm64.dll`, `libssl-4-arm64.dll` |
+
+Instead of copying DLLs by hand, the OpenSSL-Distribution releases also ship automated installers you can run yourself or chain from your own installer:
+
+- **InnoSetup installer** (`openssl-<version>-Windows-installer.exe`) - one setup covering x86, x64 and ARM64EC, picking the matching runtime by CPU detection. Silent install:
+  ```
+  openssl-<version>-Windows-installer.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+  ```
+- **MSIX framework packages** (`openssl-<version>-Windows-x64.msix`, `-x86.msix`, `-arm64ec.msix`) - reference them from your own `AppxManifest.xml` as a `PackageDependency` on `TaurusTLS.OpenSSL`.
+
+*Linux (dynamic linking):*
+- OpenSSL is usually installed by default; document the dependency for your end users
 - Update if needed: `sudo apt-get install libssl-dev` (Debian/Ubuntu) or `sudo yum install openssl-devel` (RHEL/CentOS)
-- Pre-compiled binaries: https://github.com/TurboPack/OpenSSL-Distribution/releases
+- To pin a specific version, redistribute the Linux package from the OpenSSL-Distribution releases
 
-*macOS:*
-- Use static libraries (.a files) for OpenSSL 3.x
-- Install via Homebrew: `brew install openssl@3`
-- Or use pre-compiled libraries from TaurusTLS distributions
-- Pre-compiled binaries: https://github.com/TurboPack/OpenSSL-Distribution/releases
+*macOS, iOS and Android (static linking):*
+- OpenSSL is compiled into the application binary; build against the `.a` files in the `lib\static` folder of the platform archive (for example `openssl-<version>-macOS-arm64.zip`)
+- Nothing to redistribute besides your application package and `LICENSE.txt`
 
 **For Standard Indy:**
 - Requires OpenSSL 1.0.2 DLLs (`libeay32.dll`, `ssleay32.dll`)
@@ -518,6 +535,8 @@ Edit `src\Server\MCPServer.IdHTTPServer.pas`:
 - **Cloudflare Tunnel**: Standard Indy SSL lacks ECDHE cipher support. Use TaurusTLS or run Cloudflare Tunnel with HTTP: `cloudflared tunnel --url http://localhost:8080`
 - **Self-Signed Certificates**: Claude Desktop doesn't accept self-signed certificates. Use Cloudflare Tunnel or a valid certificate from a trusted CA
 - **"No shared cipher" error**: Install and enable TaurusTLS for modern cipher support
+- **`Could not load SSL library`**: no OpenSSL library TaurusTLS recognises was found. Either the libraries are not where the platform looks for them, or your TaurusTLS version predates 4.x support (see above)
+- **The wrong OpenSSL gets loaded**: TaurusTLS asks the OS for the libraries by name, trying the version suffixes newest first, and takes the first hit anywhere on the platform's library search path. Another OpenSSL installation can therefore win over the one you shipped, and your application runs on a version you never tested. Set the `OPENSSL_LIBRARY_PATH` environment variable to an absolute directory to pin the choice; it applies on every platform
 
 ## License
 
