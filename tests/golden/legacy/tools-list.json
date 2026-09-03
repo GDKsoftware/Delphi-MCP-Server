@@ -141,6 +141,23 @@
           }
         },
         {
+          "name": "test_tool_with_progress",
+          "description": "Runs a few steps and reports progress for each; honours cancellation",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "steps": {
+                "type": "integer",
+                "description": "Number of steps to report (default 5)"
+              },
+              "stepms": {
+                "type": "integer",
+                "description": "Pause per step in milliseconds (default 100)"
+              }
+            }
+          }
+        },
+        {
           "name": "test_error_handling",
           "description": "Always fails with a tool execution error",
           "inputSchema": {
