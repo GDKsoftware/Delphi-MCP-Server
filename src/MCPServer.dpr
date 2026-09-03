@@ -15,6 +15,7 @@ uses
   MCPServer.Errors in 'Protocol\MCPServer.Errors.pas',
   MCPServer.RequestContext in 'Protocol\MCPServer.RequestContext.pas',
   MCPServer.Capabilities in 'Protocol\MCPServer.Capabilities.pas',
+  MCPServer.HttpHeaders in 'Server\MCPServer.HttpHeaders.pas',
   MCPServer.Serializer in 'Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in 'Protocol\MCPServer.Schema.Generator.pas',
   MCPServer.Logger in 'Core\MCPServer.Logger.pas',
