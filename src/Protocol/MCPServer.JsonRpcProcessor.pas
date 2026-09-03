@@ -22,6 +22,8 @@ type
     HttpStatus: Integer;
     Era: TMCPProtocolEra;
     IsNotification: Boolean;
+    /// True when the request was cancelled by the client; Body is empty.
+    Cancelled: Boolean;
   end;
 
   /// Transport-independent JSON-RPC pipeline: parse, validate the message
@@ -47,6 +49,8 @@ type
       const Hints: TMCPTransportHints);
     function ProcessNotification(const Method: string; const Params: TJSONObject;
       const Hints: TMCPTransportHints): TMCPProcessResult;
+    procedure HandleCancelled(const Params: TJSONObject; const Hints: TMCPTransportHints);
+    function CancelledResult(Era: TMCPProtocolEra): TMCPProcessResult;
     function DispatchRequest(const Context: IMCPRequestContext; const Params: TJSONObject): TValue;
     function ResultToJson(const Value: TValue; const Context: IMCPRequestContext): TJSONValue;
     procedure ApplyModernEnvelope(const ResultObject: TJSONObject; const Method: string);
@@ -69,6 +73,10 @@ type
     /// Raises EMCPError with the HTTP status a modern transport must use.
     function BuildRequestContext(const Method: string; const Params: TJSONObject;
       const RequestId: TMCPRequestId; const Hints: TMCPTransportHints): IMCPRequestContext;
+    /// The JSON-RPC error response body for an error a transport detected
+    /// itself (a duplicate id, an overlong line). The error's data is
+    /// detached into the body.
+    function BuildErrorResponse(const RequestId: TMCPRequestId; const Error: EMCPError): string;
 
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry;
     /// Server identity and protocol options. A processor created without
@@ -327,7 +335,7 @@ begin
     end;
 
     Exit(TMCPRequestContext.Create(TMCPProtocolEra.Modern, Version, Method, RequestId, Meta,
-      Hints.LegacySession, FManagerRegistry));
+      Hints.LegacySession, FManagerRegistry, Hints.Sink));
   end;
 
   // 2. initialize without modern _meta selects the legacy era and negotiates
@@ -342,7 +350,7 @@ begin
         Requested := TJSONString(RequestedValue).Value;
     end;
     Exit(TMCPRequestContext.Create(TMCPProtocolEra.Legacy, NegotiateLegacyProtocolVersion(Requested),
-      Method, RequestId, Meta, Hints.LegacySession, FManagerRegistry));
+      Method, RequestId, Meta, Hints.LegacySession, FManagerRegistry, Hints.Sink));
   end;
 
   // 3. A modern-only method without _meta is a malformed modern request.
@@ -363,7 +371,7 @@ begin
         'Unsupported MCP-Protocol-Version header: ' + Header, nil, HTTP_STATUS_BAD_REQUEST);
 
     Exit(TMCPRequestContext.Create(TMCPProtocolEra.Legacy, Header, Method, RequestId, Meta,
-      Hints.LegacySession, FManagerRegistry));
+      Hints.LegacySession, FManagerRegistry, Hints.Sink));
   end;
 
   // 5. Legacy, with the version negotiated on this process when known.
@@ -374,7 +382,7 @@ begin
     Version := MCP_LATEST_LEGACY_PROTOCOL_VERSION;
 
   Result := TMCPRequestContext.Create(TMCPProtocolEra.Legacy, Version, Method, RequestId, Meta,
-    Hints.LegacySession, FManagerRegistry);
+    Hints.LegacySession, FManagerRegistry, Hints.Sink);
 end;
 
 function TMCPJsonRpcProcessor.ProcessNotification(const Method: string; const Params: TJSONObject;
@@ -386,6 +394,12 @@ begin
   Result.IsNotification := True;
 
   TLogger.Info('Notification received: ' + Method);
+
+  if Method = MCP_METHOD_NOTIFICATIONS_CANCELLED then
+  begin
+    HandleCancelled(Params, Hints);
+    Exit;
+  end;
 
   var Manager: IMCPCapabilityManager := nil;
   if Assigned(FManagerRegistry) then
@@ -399,6 +413,41 @@ begin
     on E: Exception do
       TLogger.Error('Notification ' + Method + ' failed: ' + E.Message);
   end;
+end;
+
+procedure TMCPJsonRpcProcessor.HandleCancelled(const Params: TJSONObject; const Hints: TMCPTransportHints);
+begin
+  // Only a transport that tracks its requests can act on the notification.
+  if not Assigned(Hints.Tracker) or not Assigned(Params) then
+    Exit;
+
+  var RequestId := TMCPRequestId.FromJson(Params.GetValue('requestId'));
+  if not RequestId.IsPresent then
+  begin
+    TLogger.Warning('notifications/cancelled without a usable requestId');
+    Exit;
+  end;
+
+  var Reason := '';
+  var ReasonValue := Params.GetValue('reason');
+  if ReasonValue is TJSONString then
+    Reason := TJSONString(ReasonValue).Value;
+
+  if not Hints.Tracker.TryCancel(RequestId, Reason) then
+    TLogger.Debug('notifications/cancelled for unknown or finished request ' + RequestId.AsText);
+end;
+
+function TMCPJsonRpcProcessor.CancelledResult(Era: TMCPProtocolEra): TMCPProcessResult;
+begin
+  Result := Default(TMCPProcessResult);
+  Result.HttpStatus := HTTP_STATUS_OK;
+  Result.Era := Era;
+  Result.Cancelled := True;
+end;
+
+function TMCPJsonRpcProcessor.BuildErrorResponse(const RequestId: TMCPRequestId; const Error: EMCPError): string;
+begin
+  Result := ErrorResult(TMCPProtocolEra.Legacy, RequestId, Error).Body;
 end;
 
 function TMCPJsonRpcProcessor.DispatchRequest(const Context: IMCPRequestContext; const Params: TJSONObject): TValue;
@@ -631,7 +680,24 @@ begin
       Context := BuildRequestContext(Method, Params, RequestId, Hints);
       Era := Context.Era;
 
-      var ExecuteResult := DispatchRequest(Context, Params);
+      var ExecuteResult: TValue;
+      if Assigned(Hints.Tracker) then
+        Hints.Tracker.Track(Context);
+      try
+        ExecuteResult := DispatchRequest(Context, Params);
+      finally
+        if Assigned(Hints.Tracker) then
+          Hints.Tracker.Untrack(Context);
+      end;
+
+      // A cancelled request gets no response, whether or not the handler
+      // noticed the cancellation.
+      if Context.IsCancelled then
+      begin
+        if ExecuteResult.IsObject then
+          ExecuteResult.AsObject.Free;
+        Exit(CancelledResult(Era));
+      end;
 
       var Response := TJSONObject.Create;
       try
@@ -648,6 +714,8 @@ begin
       Result.Era := Era;
       Result.IsNotification := False;
     except
+      on E: EMCPRequestCancelled do
+        Result := CancelledResult(Era);
       on E: EMCPError do
         Result := ErrorResult(Era, RequestId, E);
       on E: Exception do

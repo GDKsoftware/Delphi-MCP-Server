@@ -34,6 +34,7 @@ type
     FMaxRequestBodyBytes: Integer;
     FMaxJsonDepth: Integer;
     FMaxConnections: Integer;
+    FMaxConcurrentRequests: Integer;
     FSecurityAllowedOrigins: string;
     function GetProtocol: string;
     function GetAllowedOrigins: string;
@@ -90,6 +91,9 @@ type
     property MaxJsonDepth: Integer read FMaxJsonDepth write FMaxJsonDepth;
     /// [Server] MaxConnections: Indy connection limit; 0 = unlimited.
     property MaxConnections: Integer read FMaxConnections write FMaxConnections;
+    /// [Server] MaxConcurrentRequests: worker threads of the stdio transport.
+    /// 1 (default) answers requests in the order they arrive.
+    property MaxConcurrentRequests: Integer read FMaxConcurrentRequests write FMaxConcurrentRequests;
     /// [Security] AllowedOrigins: origins that pass the Origin check next to
     /// the loopback origins. Falls back to [CORS] AllowedOrigins when empty.
     property SecurityAllowedOrigins: string read FSecurityAllowedOrigins write FSecurityAllowedOrigins;
@@ -98,6 +102,7 @@ type
 
     const DEFAULT_MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
     const DEFAULT_MAX_JSON_DEPTH = 64;
+    const DEFAULT_MAX_CONCURRENT_REQUESTS = 1;
   end;
 
 implementation
@@ -156,6 +161,7 @@ begin
   FEndpointInfoPath := '';
   FMaxRequestBodyBytes := DEFAULT_MAX_REQUEST_BODY_BYTES;
   FMaxJsonDepth := DEFAULT_MAX_JSON_DEPTH;
+  FMaxConcurrentRequests := DEFAULT_MAX_CONCURRENT_REQUESTS;
   FMaxConnections := 0;
   FSecurityAllowedOrigins := '';
 end;
@@ -198,6 +204,7 @@ begin
     IniFile.WriteString('Server', 'EndpointInfoPath', FEndpointInfoPath);
     IniFile.WriteInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
     IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
+    IniFile.WriteInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
     IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
 
     IniFile.WriteString('Security', '; Origins allowed next to the loopback origins (empty = [CORS] AllowedOrigins)', '');
@@ -245,6 +252,7 @@ begin
     FEndpointInfoPath := IniFile.ReadString('Server', 'EndpointInfoPath', FEndpointInfoPath);
     FMaxRequestBodyBytes := IniFile.ReadInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
     FMaxJsonDepth := IniFile.ReadInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
+    FMaxConcurrentRequests := IniFile.ReadInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
     FMaxConnections := IniFile.ReadInteger('Server', 'MaxConnections', FMaxConnections);
 
     FSecurityAllowedOrigins := IniFile.ReadString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
@@ -296,6 +304,7 @@ begin
     IniFile.WriteString('Server', 'EndpointInfoPath', FEndpointInfoPath);
     IniFile.WriteInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
     IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
+    IniFile.WriteInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
     IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
 
     IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
