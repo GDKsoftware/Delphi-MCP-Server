@@ -21,6 +21,7 @@ uses
   MCPServer.CoreManager in '..\src\Managers\MCPServer.CoreManager.pas',
   MCPServer.ToolsManager in '..\src\Managers\MCPServer.ToolsManager.pas',
   MCPServer.ResourcesManager in '..\src\Managers\MCPServer.ResourcesManager.pas',
+  MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
   // The built-in tools and resources register themselves in their
   // initialization sections. Keep the order identical to MCPServer.dpr so the
   // registry (and therefore tools/list and resources/list) matches the server.
@@ -36,7 +37,8 @@ uses
   MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas',
   MCPServer.Tests.Constants in 'MCPServer.Tests.Constants.pas',
   MCPServer.Tests.ServerStatus in 'MCPServer.Tests.ServerStatus.pas',
-  MCPServer.Tests.Registration in 'MCPServer.Tests.Registration.pas';
+  MCPServer.Tests.Registration in 'MCPServer.Tests.Registration.pas',
+  MCPServer.Tests.Logger in 'MCPServer.Tests.Logger.pas';
 
 procedure RunTests;
 begin

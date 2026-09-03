@@ -85,6 +85,7 @@
         <DCCReference Include="..\src\Managers\MCPServer.CoreManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.ToolsManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.ResourcesManager.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.GetTime.pas"/>
@@ -98,6 +99,7 @@
         <DCCReference Include="MCPServer.Tests.Constants.pas"/>
         <DCCReference Include="MCPServer.Tests.ServerStatus.pas"/>
         <DCCReference Include="MCPServer.Tests.Registration.pas"/>
+        <DCCReference Include="MCPServer.Tests.Logger.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

@@ -26,13 +26,16 @@ type
     FMinLogLevel: TLogLevel;
     FOnLogMessage: TLogMessageProc;
     FUseStdErr: Boolean;
-    
+    FStdoutReserved: Boolean;
+    FStdoutWarningIssued: Boolean;
+
     class procedure SetLogToConsole(const Value: Boolean); static;
     class procedure SetLogToFile(const Value: Boolean); static;
     class procedure SetLogFileName(const Value: string); static;
     class procedure SetMinLogLevel(const Value: TLogLevel); static;
     class procedure SetOnLogMessage(const Value: TLogMessageProc); static;
     class procedure SetUseStdErr(const Value: Boolean); static;
+    class procedure SetStdoutReserved(const Value: Boolean); static;
 
     class function GetLogToConsole: Boolean; static;
     class function GetLogToFile: Boolean; static;
@@ -40,7 +43,8 @@ type
     class function GetMinLogLevel: TLogLevel; static;
     class function GetOnLogMessage: TLogMessageProc; static;
     class function GetUseStdErr: Boolean; static;
-    
+    class function GetStdoutReserved: Boolean; static;
+
     constructor CreateInstance;
     procedure DoWriteLog(const Level: TLogLevel; const Message: string);
     procedure EnsureLogFile;
@@ -71,6 +75,11 @@ type
     class property MinLogLevel: TLogLevel read GetMinLogLevel write SetMinLogLevel;
     class property OnLogMessage: TLogMessageProc read GetOnLogMessage write SetOnLogMessage;
     class property UseStdErr: Boolean read GetUseStdErr write SetUseStdErr;
+    /// True while a stdio transport owns stdout. Console logging then always
+    /// goes to stderr, and setting UseStdErr to False is refused with a
+    /// one-time warning, because anything on stdout that is not an MCP
+    /// message corrupts the channel. Set by TMCPStdioTransport.Create.
+    class property StdoutReserved: Boolean read GetStdoutReserved write SetStdoutReserved;
   end;
 
 implementation
@@ -152,29 +161,33 @@ procedure TLogger.DoWriteLog(const Level: TLogLevel; const Message: string);
 var
   Timestamp: string;
   LogLine: string;
+  ToStdErr: Boolean;
   {$IFDEF MSWINDOWS}
   ConsoleHandle: THandle;
   {$ENDIF}
 begin
   if Level < FMinLogLevel then
     Exit;
-    
+
   Timestamp := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now);
   LogLine := Format('[%s] [%-5s] %s', [Timestamp, LOG_LEVEL_NAMES[Level], Message]);
-  
+
   FLock.Enter;
   try
     if FLogToConsole then
     begin
+      // Never touch stdout while a stdio transport owns it.
+      ToStdErr := FUseStdErr or FStdoutReserved;
+
       {$IFDEF MSWINDOWS}
-      if FUseStdErr then
+      if ToStdErr then
         ConsoleHandle := GetStdHandle(STD_ERROR_HANDLE)
       else
         ConsoleHandle := GetStdHandle(STD_OUTPUT_HANDLE);
       SetConsoleTextAttribute(ConsoleHandle, LOG_LEVEL_COLORS[Level]);
       {$ENDIF}
 
-      if FUseStdErr then
+      if ToStdErr then
         WriteLn(ErrOutput, LogLine)
       else
         WriteLn(LogLine);
@@ -331,10 +344,50 @@ end;
 class procedure TLogger.SetUseStdErr(const Value: Boolean);
 var
   lInstance: TLogger;
+  WarnOnce: Boolean;
 begin
   lInstance := Instance;
-  if Assigned(lInstance) then
+  if not Assigned(lInstance) then
+    Exit;
+
+  if Value or not lInstance.FStdoutReserved then
+  begin
     lInstance.FUseStdErr := Value;
+    Exit;
+  end;
+
+  // Refused: stdout belongs to the stdio transport. Warn once, on stderr.
+  FLock.Enter;
+  try
+    WarnOnce := not lInstance.FStdoutWarningIssued;
+    lInstance.FStdoutWarningIssued := True;
+  finally
+    FLock.Leave;
+  end;
+
+  if WarnOnce then
+    lInstance.DoWriteLog(TLogLevel.Warning,
+      'TLogger.UseStdErr := False ignored: stdout is reserved for MCP messages while the stdio transport runs');
+end;
+
+class function TLogger.GetStdoutReserved: Boolean;
+begin
+  Result := Instance.FStdoutReserved;
+end;
+
+class procedure TLogger.SetStdoutReserved(const Value: Boolean);
+var
+  lInstance: TLogger;
+begin
+  lInstance := Instance;
+  if not Assigned(lInstance) then
+    Exit;
+
+  lInstance.FStdoutReserved := Value;
+  if Value then
+    lInstance.FUseStdErr := True
+  else
+    lInstance.FStdoutWarningIssued := False;
 end;
 
 end.
