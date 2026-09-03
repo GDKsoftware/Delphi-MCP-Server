@@ -7,6 +7,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Streamable HTTP for both eras in `MCPServer.IdHTTPServer`: the processor's
+  HTTP status is answered (400 for modern protocol errors, 404 for an unknown
+  method in the modern era, 200 for every legacy JSON-RPC error); `Mcp-Method`
+  and `Mcp-Name` are validated against the body for modern requests
+  (`MCPServer.HttpHeaders`: strict Base64 sentinel decoding, Accept parsing,
+  Origin policy, JSON depth scanner); every 4xx carries a JSON-RPC error body.
+- `settings.ini`: `[Server] BindAddress`, `EndpointInfoPath`,
+  `MaxRequestBodyBytes`, `MaxJsonDepth`, `MaxConnections`;
+  `[Security] AllowedOrigins`.
+- `TMCPIdHTTPServer.BoundAddresses`; a `Port` of 0 lets the system choose.
+- `TLogger.RedactJson`; request and response bodies are logged at Debug level
+  with `_meta`, `requestState`, `inputResponses` and token-like members
+  redacted.
+- `MIGRATION.md` with the behaviour changes and how to configure them.
+- In-process HTTP transport tests (`TIdHTTP` against an ephemeral port) and
+  header tests; HTTP golden cases for the modern requests.
+
 - MCP 2026-07-28 at the JSON-RPC layer, on both transports, next to the
   initialize-based revisions 2025-06-18 and 2025-11-25. The era is decided per
   request in `TMCPJsonRpcProcessor.BuildRequestContext`: `initialize` is always
@@ -35,7 +52,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `settings.ini`: `[Server] Title`, `Description`, `WebsiteUrl`,
   `Instructions`; `[Protocol] LenientModernPing`,
   `DiscoverListsLegacyVersions`, `DiscoverTtlMs`.
-- DUnitX test project `tests\MCPServer.Tests.dpr` (Win32 and Win64) with an
+- DUnitX test project `tests\MCPServerTests.dpr` (Win32 and Win64) with an
   in-process harness that builds the same registry as `MCPServer.dpr` and
   drives the JSON-RPC processor; era-detection, processor, capability-builder
   and concurrency tests.
@@ -66,6 +83,30 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The server binds to loopback (`127.0.0.1` and `::1`) when `Host` is
+  `localhost`; it listened on every interface. A non-loopback `Host` or an
+  explicit `BindAddress` binds elsewhere.
+- The `Origin` header is validated on every request, also with CORS disabled
+  (it was only checked when CORS was on): loopback origins on any port pass,
+  other origins must be in `[Security] AllowedOrigins` or `[CORS]
+  AllowedOrigins`, `null` is refused; a rejected origin gets `403` with a
+  JSON-RPC error body and `Vary: Origin`.
+- GET and DELETE on the MCP endpoint answer `405` with `Allow: POST, OPTIONS`
+  (GET answered an endpoint document or an immediately closed stream);
+  OPTIONS answers `204`; an unknown path `404` without a body.
+- Notifications and client responses get `202` with an empty body instead of
+  Indy's HTML body; SSE responses lose the `id:` line and the duplicate
+  `Connection` header; the CORS headers list `POST, OPTIONS`, the modern
+  request headers and `WWW-Authenticate`, and reflect a preflight's
+  `Access-Control-Request-Headers`.
+- A legacy request whose `MCP-Protocol-Version` header names an unknown
+  revision gets `400` (it got `200`).
+- TLS 1.0 and 1.1 are no longer offered on the OpenSSL 1.0.2 handler.
+- `USE_TAURUS_TLS` is defined in `src\MCPServer.inc`; the build scripts pass
+  `-Isrc`. The test program is `tests\MCPServerTests.dpr`.
+- An `initialize` request that carries modern `_meta` is a modern request and
+  therefore an unknown method (`-32601`, HTTP 404), as a modern client probing
+  the server expects; only an `initialize` without modern `_meta` is legacy.
 - `initialize` answers the requested revision when it is `2025-06-18` or
   `2025-11-25`, otherwise `2025-11-25` (it always answered `2025-06-18`). The
   result no longer contains the non-standard `sessionId` and the

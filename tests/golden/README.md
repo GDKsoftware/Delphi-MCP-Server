@@ -46,7 +46,8 @@ formatted `expected` value, so key order and array order matter.
 
 ## Recording procedure
 
-1. `build.bat Debug Win64` and `build-tests.bat Debug Win64`.
+1. `build.bat Debug Win64` and `build-tests.bat Debug Win64` (the test
+   program is `tests\MCPServerTests.dpr`).
 2. `.\scripts\run-tests.ps1 -Record -NoBuild` rewrites the `expected` sections
    in `legacy/`. Use `-Filter` with the fully qualified test names to
    re-record single cases.

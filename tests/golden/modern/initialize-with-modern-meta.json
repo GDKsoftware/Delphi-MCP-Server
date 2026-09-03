@@ -25,21 +25,9 @@
   "expected": {
     "jsonrpc": "2.0",
     "id": 12,
-    "result": {
-      "protocolVersion": "2025-11-25",
-      "capabilities": {
-        "tools": {
-          "listChanged": false
-        },
-        "resources": {
-          "subscribe": false,
-          "listChanged": false
-        }
-      },
-      "serverInfo": {
-        "name": "delphi-mcp-server",
-        "version": "1.0.0"
-      }
+    "error": {
+      "code": -32601,
+      "message": "Method [initialize] not found. The method does not exist or is not available."
     }
   }
 }

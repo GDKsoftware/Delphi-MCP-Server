@@ -29,17 +29,35 @@ if "%PLATFORM%"=="" set PLATFORM=Win32
 set OUTPUT_DIR=.\tests\%PLATFORM%\%CONFIG%
 if not exist %OUTPUT_DIR% mkdir %OUTPUT_DIR%
 
-set UNIT_PATHS=src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;tests
+REM Locate TaurusTLS the same way build.bat does; MCPServer.IdHTTPServer needs it.
+for %%i in ("!DELPHI_PATH!") do set STUDIO_VER=%%~nxi
+set CATALOG_DIR=%USERPROFILE%\Documents\Embarcadero\Studio\!STUDIO_VER!\CatalogRepository
+
+if not "%TAURUS_PATH%"=="" goto :TaurusResolved
+
+for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "$root = '!CATALOG_DIR!\TaurusTLS'; if (Test-Path $root) { Get-ChildItem $root -Directory ^| Where-Object { Test-Path (Join-Path $_.FullName 'Source') } ^| Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } ^| Select-Object -Last 1 -ExpandProperty FullName }"`) do set "TAURUS_PATH=%%d\Source"
+
+if "!TAURUS_PATH!"=="" if exist "!CATALOG_DIR!\TaurusTLS-12\Source" set "TAURUS_PATH=!CATALOG_DIR!\TaurusTLS-12\Source"
+
+:TaurusResolved
+if not "!TAURUS_PATH!"=="" (
+    set EXTRA_UNITS=;!TAURUS_PATH!
+) else (
+    set EXTRA_UNITS=
+    echo Warning: TaurusTLS not found. The HTTP server unit needs it.
+)
+
+set UNIT_PATHS=src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;tests!EXTRA_UNITS!
 set NAMESPACES=Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap
 
 echo Building MCPServer.Tests - %CONFIG% %PLATFORM%
 echo.
 
 if "%PLATFORM%"=="Win32" (
-    !DCC32! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win32\debug";%UNIT_PATHS% -I"!DUNITX_PATH!" -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServer.Tests.dpr
+    !DCC32! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win32\debug";%UNIT_PATHS% -Isrc;!TAURUS_PATH!;"!DUNITX_PATH!" -R!TAURUS_PATH! -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServerTests.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Win64" (
-    !DCC64! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win64\debug";%UNIT_PATHS% -I"!DUNITX_PATH!" -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServer.Tests.dpr
+    !DCC64! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win64\debug";%UNIT_PATHS% -Isrc;!TAURUS_PATH!;"!DUNITX_PATH!" -R!TAURUS_PATH! -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServerTests.dpr
     goto :CheckBuildResult
 ) else (
     echo ERROR: Invalid platform. Use Win32 or Win64
@@ -59,6 +77,6 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo Test build completed successfully!
-echo Output: %OUTPUT_DIR%\MCPServer.Tests.exe
+echo Output: %OUTPUT_DIR%\MCPServerTests.exe
 
 endlocal

@@ -35,7 +35,7 @@ type
     [Test] procedure UnknownProtocolVersion;
     [Test] procedure MissingClientCapabilities;
     [Test] procedure InvalidLogLevel;
-    [Test] procedure Initialize_WithModernMeta_IsLegacy;
+    [Test] procedure Initialize_WithModernMeta_IsNotFound;
     [Test] procedure Id_Null;
     [Test] procedure MissingJsonRpcField;
   end;
@@ -142,7 +142,7 @@ begin
   CheckGolden('invalid-log-level');
 end;
 
-procedure TModernGoldenTests.Initialize_WithModernMeta_IsLegacy;
+procedure TModernGoldenTests.Initialize_WithModernMeta_IsNotFound;
 begin
   CheckGolden('initialize-with-modern-meta');
 end;

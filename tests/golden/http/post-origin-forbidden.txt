@@ -1,6 +1,7 @@
-HTTP/1.1 403 Forbidden - Origin not allowed
+HTTP/1.1 403 Forbidden
 Connection: keep-alive
-Content-Type: text/html; charset=utf-8
-Content-Length: 67
+Content-Type: application/json
+Content-Length: 72
+Vary: Origin
 
-<HTML><BODY><B>403 Forbidden - Origin not allowed</B></BODY></HTML>
+{"jsonrpc":"2.0","error":{"code":-32600,"message":"Origin not allowed"}}

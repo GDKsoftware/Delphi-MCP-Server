@@ -1,0 +1,472 @@
+unit MCPServer.Tests.Http;
+
+interface
+
+uses
+  DUnitX.TestFramework,
+  System.SysUtils,
+  System.Classes,
+  System.JSON,
+  IdHTTP,
+  MCPServer.Settings,
+  MCPServer.IdHTTPServer,
+  MCPServer.Tests.Harness;
+
+type
+  THttpReply = record
+    Status: Integer;
+    Body: string;
+    ContentLength: Int64;
+    RawHeaders: string;
+    function Header(const Name: string): string;
+    function Json: TJSONObject;
+  end;
+
+  /// The Streamable HTTP transport, in-process on an ephemeral port.
+  [TestFixture]
+  THttpTransportTests = class
+  private
+    FHarness: TMCPTestHarness;
+    FSettings: TMCPSettings;
+    FServer: TMCPIdHTTPServer;
+    procedure StartServer;
+    function Url(const Path: string): string;
+    function Send(const Method, Path, Body: string; const Headers: array of string): THttpReply;
+    function Post(const Body: string; const Headers: array of string): THttpReply;
+  public
+    [Setup]
+    procedure Setup;
+    [TearDown]
+    procedure TearDown;
+
+    [Test] procedure Notification_Is202WithEmptyBody;
+    [Test] procedure Get_IsMethodNotAllowedWithAllow;
+    [Test] procedure Delete_IsMethodNotAllowed;
+    [Test] procedure Options_Is204;
+    [Test] procedure WrongPath_Is404;
+    [Test] procedure Origin_NotAllowed_Is403WithJsonRpcBody_EvenWithCorsDisabled;
+    [Test] procedure Origin_LoopbackOnAnyPort_IsAllowed;
+    [Test] procedure Origin_Null_IsDenied;
+    [Test] procedure Origin_AllowListWithPortWildcard;
+    [Test] procedure Cors_HeadersOnlyWhenEnabled;
+    [Test] procedure Cors_PreflightReflectsRequestedHeaders;
+    [Test] procedure Legacy_UnknownMethod_Is200;
+    [Test] procedure Modern_UnknownMethod_Is404;
+    [Test] procedure Modern_MissingVersionHeader_Is400HeaderMismatch;
+    [Test] procedure Modern_UnsupportedVersion_Is400;
+    [Test] procedure Modern_MissingClientCapabilities_Is400;
+    [Test] procedure ModernHeader_WithoutMeta_Is400InvalidParams;
+    [Test] procedure Legacy_UnknownVersionHeader_Is400;
+    [Test] procedure Modern_McpMethodHeader_IsRequiredAndMustMatch;
+    [Test] procedure Modern_McpNameHeader_Base64IsDecoded;
+    [Test] procedure Modern_Discover_Is200;
+    [Test] procedure BodyTooLarge_Is413;
+    [Test] procedure NestingTooDeep_Is400;
+    [Test] procedure SessionId_IsEchoedForLegacyOnly;
+    [Test] procedure Sse_HasNoIdLine;
+    [Test] procedure Bind_DefaultIsLoopback;
+    [Test] procedure Bind_ExplicitAddress;
+    [Test] procedure EndpointInfoPath_AnswersJson;
+  end;
+
+implementation
+
+uses
+  MCPServer.Types;
+
+const
+  MODERN_VERSION_HEADER = 'MCP-Protocol-Version: 2026-07-28';
+  MODERN_META = '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}';
+  LEGACY_PING = '{"jsonrpc":"2.0","id":1,"method":"ping"}';
+
+{ THttpReply }
+
+function THttpReply.Header(const Name: string): string;
+begin
+  var Headers := TStringList.Create;
+  try
+    Headers.NameValueSeparator := ':';
+    Headers.Text := RawHeaders;
+    Result := Trim(Headers.Values[Name]);
+  finally
+    Headers.Free;
+  end;
+end;
+
+function THttpReply.Json: TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(Body) as TJSONObject;
+  Assert.IsNotNull(Result, 'body is not a JSON object: ' + Body);
+end;
+
+{ THttpTransportTests }
+
+procedure THttpTransportTests.Setup;
+begin
+  FHarness := TMCPTestHarness.Create;
+  FSettings := FHarness.Settings;
+  FSettings.Port := 0;
+  FSettings.CorsEnabled := False;
+  FServer := TMCPIdHTTPServer.Create(nil);
+  FServer.Settings := FSettings;
+  FServer.ManagerRegistry := FHarness.ManagerRegistry;
+  FServer.CoreManager := FHarness.CoreManager;
+end;
+
+procedure THttpTransportTests.TearDown;
+begin
+  FServer.Free;
+  FHarness.Free;
+end;
+
+procedure THttpTransportTests.StartServer;
+begin
+  FServer.Start;
+end;
+
+function THttpTransportTests.Url(const Path: string): string;
+begin
+  Result := Format('http://127.0.0.1:%d%s', [FServer.Port, Path]);
+end;
+
+function THttpTransportTests.Send(const Method, Path, Body: string; const Headers: array of string): THttpReply;
+begin
+  if not FServer.Active then
+    StartServer;
+
+  var Http := TIdHTTP.Create(nil);
+  var Request := TStringStream.Create(Body, TEncoding.UTF8);
+  var Response := TMemoryStream.Create;
+  try
+    Http.HTTPOptions := Http.HTTPOptions + [hoNoProtocolErrorException, hoWantProtocolErrorContent];
+    Http.Request.ContentType := 'application/json';
+    Http.Request.Accept := 'application/json';
+    for var Header in Headers do
+    begin
+      var Separator := Header.IndexOf(':');
+      var Name := Header.Substring(0, Separator).Trim;
+      var Value := Header.Substring(Separator + 1).Trim;
+      if SameText(Name, 'Accept') then
+        Http.Request.Accept := Value
+      else if SameText(Name, 'Content-Type') then
+        Http.Request.ContentType := Value
+      else
+        Http.Request.CustomHeaders.AddValue(Name, Value);
+    end;
+
+    if Method = 'POST' then
+      Http.Post(Url(Path), Request, Response)
+    else if Method = 'GET' then
+      Http.Get(Url(Path), Response)
+    else if Method = 'DELETE' then
+      Http.Delete(Url(Path), Response)
+    else if Method = 'PUT' then
+      Http.Put(Url(Path), Request, Response)
+    else if Method = 'OPTIONS' then
+      Http.Options(Url(Path), Response)
+    else
+      raise Exception.Create('unsupported method ' + Method);
+
+    Result.Status := Http.ResponseCode;
+    Result.ContentLength := Http.Response.ContentLength;
+    Result.RawHeaders := Http.Response.RawHeaders.Text;
+    var Bytes: TBytes;
+    SetLength(Bytes, Integer(Response.Size));
+    if Response.Size > 0 then
+      Move(Response.Memory^, Bytes[0], Integer(Response.Size));
+    Result.Body := TEncoding.UTF8.GetString(Bytes);
+  finally
+    Response.Free;
+    Request.Free;
+    Http.Free;
+  end;
+end;
+
+function THttpTransportTests.Post(const Body: string; const Headers: array of string): THttpReply;
+begin
+  Result := Send('POST', '/mcp', Body, Headers);
+end;
+
+procedure THttpTransportTests.Notification_Is202WithEmptyBody;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","method":"notifications/initialized"}', []);
+  Assert.AreEqual(202, Reply.Status);
+  Assert.AreEqual('', Reply.Body);
+  Assert.AreEqual(Int64(0), Reply.ContentLength);
+end;
+
+procedure THttpTransportTests.Get_IsMethodNotAllowedWithAllow;
+begin
+  var Reply := Send('GET', '/mcp', '', ['Accept: text/event-stream']);
+  Assert.AreEqual(405, Reply.Status);
+  Assert.AreEqual('POST, OPTIONS', Reply.Header('Allow'));
+  Assert.AreEqual('', Reply.Body);
+end;
+
+procedure THttpTransportTests.Delete_IsMethodNotAllowed;
+begin
+  Assert.AreEqual(405, Send('DELETE', '/mcp', '', []).Status);
+  Assert.AreEqual(405, Send('PUT', '/mcp', '{}', []).Status);
+end;
+
+procedure THttpTransportTests.Options_Is204;
+begin
+  var Reply := Send('OPTIONS', '/mcp', '', ['Origin: http://localhost']);
+  Assert.AreEqual(204, Reply.Status);
+  Assert.AreEqual('', Reply.Body);
+end;
+
+procedure THttpTransportTests.WrongPath_Is404;
+begin
+  Assert.AreEqual(404, Send('POST', '/other', LEGACY_PING, []).Status);
+  Assert.AreEqual(404, Send('GET', '/mcp/extra', '', []).Status);
+end;
+
+procedure THttpTransportTests.Origin_NotAllowed_Is403WithJsonRpcBody_EvenWithCorsDisabled;
+begin
+  var Reply := Post(LEGACY_PING, ['Origin: http://evil.example']);
+  Assert.AreEqual(403, Reply.Status);
+  Assert.AreEqual('Origin', Reply.Header('Vary'));
+  var Json := Reply.Json;
+  try
+    Assert.AreEqual(JSONRPC_INVALID_REQUEST, Json.GetValue<Integer>('error.code'));
+    Assert.IsNull(Json.GetValue('id'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure THttpTransportTests.Origin_LoopbackOnAnyPort_IsAllowed;
+begin
+  Assert.AreEqual(200, Post(LEGACY_PING, ['Origin: http://127.0.0.1:3000']).Status);
+  Assert.AreEqual(200, Post(LEGACY_PING, ['Origin: http://localhost:5173']).Status);
+  Assert.AreEqual(200, Post(LEGACY_PING, ['Origin: https://localhost']).Status);
+end;
+
+procedure THttpTransportTests.Origin_Null_IsDenied;
+begin
+  Assert.AreEqual(403, Post(LEGACY_PING, ['Origin: null']).Status);
+end;
+
+procedure THttpTransportTests.Origin_AllowListWithPortWildcard;
+begin
+  FSettings.SecurityAllowedOrigins := 'https://app.example:*';
+  Assert.AreEqual(200, Post(LEGACY_PING, ['Origin: https://app.example:8443']).Status);
+  Assert.AreEqual(403, Post(LEGACY_PING, ['Origin: https://other.example']).Status);
+end;
+
+procedure THttpTransportTests.Cors_HeadersOnlyWhenEnabled;
+begin
+  var Disabled := Post(LEGACY_PING, ['Origin: http://localhost']);
+  Assert.AreEqual('', Disabled.Header('Access-Control-Allow-Origin'));
+
+  FServer.Stop;
+  FSettings.CorsEnabled := True;
+  var Enabled := Post(LEGACY_PING, ['Origin: http://localhost']);
+  Assert.AreEqual(200, Enabled.Status);
+  Assert.AreEqual('http://localhost', Enabled.Header('Access-Control-Allow-Origin'));
+  Assert.AreEqual('POST, OPTIONS', Enabled.Header('Access-Control-Allow-Methods'));
+  Assert.IsTrue(Enabled.Header('Access-Control-Allow-Headers').Contains('Mcp-Method'));
+  Assert.IsTrue(Enabled.Header('Access-Control-Expose-Headers').Contains('WWW-Authenticate'));
+end;
+
+procedure THttpTransportTests.Cors_PreflightReflectsRequestedHeaders;
+begin
+  FSettings.CorsEnabled := True;
+  var Reply := Send('OPTIONS', '/mcp', '', ['Origin: http://localhost',
+    'Access-Control-Request-Method: POST', 'Access-Control-Request-Headers: Mcp-Param-Region, X-Trace']);
+  Assert.AreEqual(204, Reply.Status);
+  var AllowHeaders := Reply.Header('Access-Control-Allow-Headers');
+  Assert.IsTrue(AllowHeaders.Contains('Mcp-Param-Region'), AllowHeaders);
+  Assert.IsTrue(AllowHeaders.Contains('X-Trace'), AllowHeaders);
+end;
+
+procedure THttpTransportTests.Legacy_UnknownMethod_Is200;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"prompts/list"}', ['MCP-Protocol-Version: 2025-06-18']);
+  Assert.AreEqual(200, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32601'));
+end;
+
+procedure THttpTransportTests.Modern_UnknownMethod_Is404;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"prompts/list","params":{' + MODERN_META + '}}',
+    [MODERN_VERSION_HEADER, 'Mcp-Method: prompts/list']);
+  Assert.AreEqual(404, Reply.Status);
+  var Json := Reply.Json;
+  try
+    Assert.AreEqual(JSONRPC_METHOD_NOT_FOUND, Json.GetValue<Integer>('error.code'));
+    Assert.AreEqual(1, Json.GetValue<Integer>('id'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure THttpTransportTests.Modern_MissingVersionHeader_Is400HeaderMismatch;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{' + MODERN_META + '}}', ['Mcp-Method: tools/list']);
+  Assert.AreEqual(400, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32020'), Reply.Body);
+end;
+
+procedure THttpTransportTests.Modern_UnsupportedVersion_Is400;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1900-01-01","io.modelcontextprotocol/clientCapabilities":{}}}}',
+    ['MCP-Protocol-Version: 1900-01-01', 'Mcp-Method: tools/list']);
+  Assert.AreEqual(400, Reply.Status);
+  var Json := Reply.Json;
+  try
+    Assert.AreEqual(MCP_ERROR_UNSUPPORTED_PROTOCOL_VERSION, Json.GetValue<Integer>('error.code'));
+    Assert.AreEqual('2026-07-28', Json.GetValue<string>('error.data.supported[0]'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure THttpTransportTests.Modern_MissingClientCapabilities_Is400;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}',
+    [MODERN_VERSION_HEADER, 'Mcp-Method: tools/list']);
+  Assert.AreEqual(400, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32602'), Reply.Body);
+end;
+
+procedure THttpTransportTests.ModernHeader_WithoutMeta_Is400InvalidParams;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"tools/list"}', [MODERN_VERSION_HEADER, 'Mcp-Method: tools/list']);
+  Assert.AreEqual(400, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32602'), Reply.Body);
+end;
+
+procedure THttpTransportTests.Legacy_UnknownVersionHeader_Is400;
+begin
+  var Reply := Post(LEGACY_PING, ['MCP-Protocol-Version: 1900-01-01']);
+  Assert.AreEqual(400, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32600'), Reply.Body);
+end;
+
+procedure THttpTransportTests.Modern_McpMethodHeader_IsRequiredAndMustMatch;
+begin
+  var Body := '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{' + MODERN_META + '}}';
+
+  var Missing := Post(Body, [MODERN_VERSION_HEADER]);
+  Assert.AreEqual(400, Missing.Status);
+  Assert.IsTrue(Missing.Body.Contains('-32020'), Missing.Body);
+
+  var Mismatch := Post(Body, [MODERN_VERSION_HEADER, 'Mcp-Method: TOOLS/LIST']);
+  Assert.AreEqual(400, Mismatch.Status);
+  Assert.IsTrue(Mismatch.Body.Contains('-32020'), Mismatch.Body);
+
+  var Matching := Post(Body, [MODERN_VERSION_HEADER, 'mcp-method: tools/list']);
+  Assert.AreEqual(200, Matching.Status);
+end;
+
+procedure THttpTransportTests.Modern_McpNameHeader_Base64IsDecoded;
+begin
+  var Body := '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hi"},' + MODERN_META + '}}';
+
+  var Encoded := Post(Body, [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: =?base64?ZWNobw==?=']);
+  Assert.AreEqual(200, Encoded.Status);
+  Assert.IsTrue(Encoded.Body.Contains('Echo: hi'), Encoded.Body);
+
+  var Wrong := Post(Body, [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: calculate']);
+  Assert.AreEqual(400, Wrong.Status);
+  Assert.IsTrue(Wrong.Body.Contains('-32020'), Wrong.Body);
+
+  var Missing := Post(Body, [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call']);
+  Assert.AreEqual(400, Missing.Status);
+end;
+
+procedure THttpTransportTests.Modern_Discover_Is200;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":"d","method":"server/discover","params":{' + MODERN_META + '}}',
+    [MODERN_VERSION_HEADER, 'Mcp-Method: server/discover']);
+  Assert.AreEqual(200, Reply.Status);
+  var Json := Reply.Json;
+  try
+    Assert.AreEqual('complete', Json.GetValue<string>('result.resultType'));
+    Assert.AreEqual('2026-07-28', Json.GetValue<string>('result.supportedVersions[0]'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure THttpTransportTests.BodyTooLarge_Is413;
+begin
+  FSettings.MaxRequestBodyBytes := 64;
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"ping","params":{"padding":"' + StringOfChar('x', 100) + '"}}', []);
+  Assert.AreEqual(413, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32600'), Reply.Body);
+end;
+
+procedure THttpTransportTests.NestingTooDeep_Is400;
+begin
+  FSettings.MaxJsonDepth := 3;
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"ping","params":{"a":{"b":{"c":{}}}}}', []);
+  Assert.AreEqual(400, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32700'), Reply.Body);
+end;
+
+procedure THttpTransportTests.SessionId_IsEchoedForLegacyOnly;
+begin
+  var Legacy := Post(LEGACY_PING, ['Mcp-Session-Id: session-42']);
+  Assert.AreEqual('session-42', Legacy.Header('Mcp-Session-Id'));
+
+  var Modern := Post('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{' + MODERN_META + '}}',
+    [MODERN_VERSION_HEADER, 'Mcp-Method: tools/list', 'Mcp-Session-Id: session-42']);
+  Assert.AreEqual(200, Modern.Status);
+  Assert.AreEqual('', Modern.Header('Mcp-Session-Id'));
+
+  var Initialize := Post('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}', []);
+  Assert.AreEqual('', Initialize.Header('Mcp-Session-Id'), 'sessions are never minted');
+end;
+
+procedure THttpTransportTests.Sse_HasNoIdLine;
+begin
+  var Reply := Post(LEGACY_PING, ['Accept: application/json, text/event-stream']);
+  Assert.AreEqual(200, Reply.Status);
+  Assert.IsTrue(Reply.Header('Content-Type').StartsWith('text/event-stream'), Reply.Header('Content-Type'));
+  Assert.IsTrue(Reply.Body.StartsWith('event: message'#10'data: '), Reply.Body);
+  Assert.IsFalse(Reply.Body.Contains(#10'id:'), Reply.Body);
+end;
+
+procedure THttpTransportTests.Bind_DefaultIsLoopback;
+begin
+  StartServer;
+  var Addresses := FServer.BoundAddresses;
+  Assert.IsTrue(Length(Addresses) >= 1);
+  // Indy reports the IPv6 loopback in its expanded form.
+  for var Address in Addresses do
+    Assert.IsTrue(Address.StartsWith('127.0.0.1:') or Address.StartsWith('[::1]:')
+      or Address.StartsWith('[0:0:0:0:0:0:0:1]:'), Address);
+end;
+
+procedure THttpTransportTests.Bind_ExplicitAddress;
+begin
+  FSettings.BindAddress := '127.0.0.1';
+  StartServer;
+  var Addresses := FServer.BoundAddresses;
+  Assert.AreEqual(1, Integer(Length(Addresses)));
+  Assert.IsTrue(Addresses[0].StartsWith('127.0.0.1:'), Addresses[0]);
+  Assert.AreEqual(200, Post(LEGACY_PING, []).Status);
+end;
+
+procedure THttpTransportTests.EndpointInfoPath_AnswersJson;
+begin
+  FSettings.EndpointInfoPath := '/info';
+  var Reply := Send('GET', '/info', '', []);
+  Assert.AreEqual(200, Reply.Status);
+  var Json := Reply.Json;
+  try
+    Assert.IsTrue(Json.GetValue<string>('url').EndsWith('/mcp'));
+    Assert.AreEqual('2026-07-28', Json.GetValue<string>('protocolVersions[0]'));
+  finally
+    Json.Free;
+  end;
+  Assert.AreEqual(404, Send('GET', '/nothing', '', []).Status);
+end;
+
+initialization
+  TDUnitX.RegisterTestFixture(THttpTransportTests);
+
+end.

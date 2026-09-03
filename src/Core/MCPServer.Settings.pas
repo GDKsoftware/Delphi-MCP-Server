@@ -29,7 +29,14 @@ type
     FLenientModernPing: Boolean;
     FDiscoverListsLegacyVersions: Boolean;
     FDiscoverTtlMs: Integer;
+    FBindAddress: string;
+    FEndpointInfoPath: string;
+    FMaxRequestBodyBytes: Integer;
+    FMaxJsonDepth: Integer;
+    FMaxConnections: Integer;
+    FSecurityAllowedOrigins: string;
     function GetProtocol: string;
+    function GetAllowedOrigins: string;
 
     procedure LoadDefaults;
     procedure CreateDefaultSettingsFile;
@@ -69,6 +76,28 @@ type
     property DiscoverListsLegacyVersions: Boolean read FDiscoverListsLegacyVersions write FDiscoverListsLegacyVersions;
     /// [Protocol] DiscoverTtlMs: cache hint on server/discover. Default 0.
     property DiscoverTtlMs: Integer read FDiscoverTtlMs write FDiscoverTtlMs;
+
+    /// [Server] BindAddress: the interface to listen on. Empty (default)
+    /// derives it from Host: a loopback Host binds 127.0.0.1 and ::1, any
+    /// other Host binds every interface.
+    property BindAddress: string read FBindAddress write FBindAddress;
+    /// [Server] EndpointInfoPath: optional GET path that answers a small JSON
+    /// document with the endpoint URL and the protocol versions. Empty = off.
+    property EndpointInfoPath: string read FEndpointInfoPath write FEndpointInfoPath;
+    /// [Server] MaxRequestBodyBytes: larger POST bodies get 413. Default 4 MB.
+    property MaxRequestBodyBytes: Integer read FMaxRequestBodyBytes write FMaxRequestBodyBytes;
+    /// [Server] MaxJsonDepth: deeper nesting gets 400. Default 64.
+    property MaxJsonDepth: Integer read FMaxJsonDepth write FMaxJsonDepth;
+    /// [Server] MaxConnections: Indy connection limit; 0 = unlimited.
+    property MaxConnections: Integer read FMaxConnections write FMaxConnections;
+    /// [Security] AllowedOrigins: origins that pass the Origin check next to
+    /// the loopback origins. Falls back to [CORS] AllowedOrigins when empty.
+    property SecurityAllowedOrigins: string read FSecurityAllowedOrigins write FSecurityAllowedOrigins;
+    /// The effective allow-list for the Origin check.
+    property AllowedOrigins: string read GetAllowedOrigins;
+
+    const DEFAULT_MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
+    const DEFAULT_MAX_JSON_DEPTH = 64;
   end;
 
 implementation
@@ -123,6 +152,20 @@ begin
   FLenientModernPing := False;
   FDiscoverListsLegacyVersions := False;
   FDiscoverTtlMs := 0;
+  FBindAddress := '';
+  FEndpointInfoPath := '';
+  FMaxRequestBodyBytes := DEFAULT_MAX_REQUEST_BODY_BYTES;
+  FMaxJsonDepth := DEFAULT_MAX_JSON_DEPTH;
+  FMaxConnections := 0;
+  FSecurityAllowedOrigins := '';
+end;
+
+function TMCPSettings.GetAllowedOrigins: string;
+begin
+  if FSecurityAllowedOrigins.Trim <> '' then
+    Result := FSecurityAllowedOrigins
+  else
+    Result := FCorsAllowedOrigins;
 end;
 
 function TMCPSettings.GetProtocol: string;
@@ -150,6 +193,15 @@ begin
     IniFile.WriteString('Server', 'Description', FServerDescription);
     IniFile.WriteString('Server', 'WebsiteUrl', FServerWebsiteUrl);
     IniFile.WriteString('Server', 'Instructions', FInstructions);
+    IniFile.WriteString('Server', '; Network: BindAddress empty = derived from Host (loopback for localhost)', '');
+    IniFile.WriteString('Server', 'BindAddress', FBindAddress);
+    IniFile.WriteString('Server', 'EndpointInfoPath', FEndpointInfoPath);
+    IniFile.WriteInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
+    IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
+    IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
+
+    IniFile.WriteString('Security', '; Origins allowed next to the loopback origins (empty = [CORS] AllowedOrigins)', '');
+    IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
 
     IniFile.WriteString('Protocol', '; Protocol options (1 = on, 0 = off)', '');
     IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
@@ -189,6 +241,13 @@ begin
     FServerDescription := IniFile.ReadString('Server', 'Description', FServerDescription);
     FServerWebsiteUrl := IniFile.ReadString('Server', 'WebsiteUrl', FServerWebsiteUrl);
     FInstructions := IniFile.ReadString('Server', 'Instructions', FInstructions);
+    FBindAddress := IniFile.ReadString('Server', 'BindAddress', FBindAddress);
+    FEndpointInfoPath := IniFile.ReadString('Server', 'EndpointInfoPath', FEndpointInfoPath);
+    FMaxRequestBodyBytes := IniFile.ReadInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
+    FMaxJsonDepth := IniFile.ReadInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
+    FMaxConnections := IniFile.ReadInteger('Server', 'MaxConnections', FMaxConnections);
+
+    FSecurityAllowedOrigins := IniFile.ReadString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
 
     FLenientModernPing := IniFile.ReadBool('Protocol', 'LenientModernPing', FLenientModernPing);
     FDiscoverListsLegacyVersions := IniFile.ReadBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
@@ -233,6 +292,13 @@ begin
     IniFile.WriteString('Server', 'Description', FServerDescription);
     IniFile.WriteString('Server', 'WebsiteUrl', FServerWebsiteUrl);
     IniFile.WriteString('Server', 'Instructions', FInstructions);
+    IniFile.WriteString('Server', 'BindAddress', FBindAddress);
+    IniFile.WriteString('Server', 'EndpointInfoPath', FEndpointInfoPath);
+    IniFile.WriteInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
+    IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
+    IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
+
+    IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
 
     IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
     IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);

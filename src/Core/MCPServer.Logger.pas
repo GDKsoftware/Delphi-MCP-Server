@@ -5,6 +5,7 @@ interface
 uses
   System.SysUtils,
   System.Classes,
+  System.JSON,
   System.SyncObjs;
 
 type
@@ -68,7 +69,12 @@ type
     class procedure Error(const Message: string); overload;
     class procedure Error(const Format: string; const Args: array of const); overload;
     class procedure Error(const Exception: Exception); overload;
-    
+
+    /// Returns the JSON text with the values of _meta, requestState,
+    /// inputResponses and token-like members replaced, for logging. Text
+    /// that is not JSON is described by its length only.
+    class function RedactJson(const Json: string): string;
+
     class property LogToConsole: Boolean read GetLogToConsole write SetLogToConsole;
     class property LogToFile: Boolean read GetLogToFile write SetLogToFile;
     class property LogFileName: string read GetLogFileName write SetLogFileName;
@@ -254,6 +260,51 @@ end;
 class procedure TLogger.Error(const Exception: Exception);
 begin
   Instance.DoWriteLog(TLogLevel.Error, System.SysUtils.Format('%s: %s', [Exception.ClassName, Exception.Message]));
+end;
+
+function IsSensitiveKey(const Key: string): Boolean;
+const
+  EXACT_KEYS: array[0..2] of string = ('_meta', 'requestState', 'inputResponses');
+  PARTIAL_KEYS: array[0..5] of string = ('token', 'secret', 'password', 'authorization', 'apikey', 'api_key');
+begin
+  for var Exact in EXACT_KEYS do
+    if Key = Exact then
+      Exit(True);
+
+  var Lower := Key.ToLower;
+  for var Partial in PARTIAL_KEYS do
+    if Lower.Contains(Partial) then
+      Exit(True);
+  Result := False;
+end;
+
+procedure RedactValue(const Value: TJSONValue);
+begin
+  if Value is TJSONObject then
+  begin
+    for var Pair in TJSONObject(Value) do
+      if IsSensitiveKey(Pair.JsonString.Value) then
+        Pair.JsonValue := TJSONString.Create('<redacted>')
+      else
+        RedactValue(Pair.JsonValue);
+  end
+  else if Value is TJSONArray then
+    for var Item in TJSONArray(Value) do
+      RedactValue(Item);
+end;
+
+class function TLogger.RedactJson(const Json: string): string;
+begin
+  var Parsed := TJSONObject.ParseJSONValue(Json);
+  if not Assigned(Parsed) then
+    Exit(Format('<%d characters, not JSON>', [Length(Json)]));
+
+  try
+    RedactValue(Parsed);
+    Result := Parsed.ToJSON;
+  finally
+    Parsed.Free;
+  end;
 end;
 
 class function TLogger.GetLogToConsole: Boolean;

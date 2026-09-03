@@ -33,7 +33,7 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - **Dual Response Mode**: Supports both JSON-RPC and Server-Sent Events in the same server
 - **Tool System**: Extensible tool system with RTTI-based discovery and execution
 - **Resource Management**: Modular resource system supporting various content types
-- **Security**: Built-in security features including CORS configuration
+- **Security**: `Origin` validation against DNS rebinding on every request, loopback binding by default, CORS headers for browser clients, request size and nesting limits
 - **High Performance**: Native implementation using Indy HTTP Server with keep-alive support
 - **Optional Parameters**: Support for optional tool parameters using custom attributes
 - **Cross-Platform**: Supports Windows (Win32/Win64) and Linux (x64)
@@ -136,12 +136,14 @@ The server decides per request which protocol era it is speaking; nothing is neg
 
 | Request | Era | Served as |
 |---|---|---|
-| `initialize` | legacy | The requested revision when it is `2025-06-18` or `2025-11-25`, otherwise `2025-11-25`. The result carries `capabilities` and `serverInfo` only. |
-| `params._meta` with `io.modelcontextprotocol/protocolVersion` | modern | `2026-07-28`. `clientCapabilities` is required (`-32602`); an unknown revision gets `-32022` with the supported list; `ping`, `logging/setLevel` and `resources/subscribe` do not exist in this era (`-32601`). |
+| `params._meta` with `io.modelcontextprotocol/protocolVersion` | modern | `2026-07-28`. `clientCapabilities` is required (`-32602`); an unknown revision gets `-32022` with the supported list; `initialize`, `ping`, `logging/setLevel` and `resources/subscribe` do not exist in this era (`-32601`). |
+| `initialize` without modern `_meta` | legacy | The requested revision when it is `2025-06-18` or `2025-11-25`, otherwise `2025-11-25`. The result carries `capabilities` and `serverInfo` only. |
 | `server/discover` without `_meta` | modern, malformed | `-32602` |
 | Anything else | legacy | The revision negotiated by `initialize` on this stdio process, the `MCP-Protocol-Version` header on HTTP, or `2025-11-25` when nothing is known. |
 
 Modern results carry `resultType`, `_meta.io.modelcontextprotocol/serverInfo` and, on `server/discover`, `tools/list`, `resources/list`, `resources/templates/list` and `resources/read`, the cache hints `ttlMs` and `cacheScope`. Legacy results are unchanged. Client responses (`result` or `error` without `method`) are ignored.
+
+Over HTTP, modern requests must carry `MCP-Protocol-Version`, `Mcp-Method` and, for `tools/call`, `resources/read` and `prompts/get`, `Mcp-Name` (Base64 sentinel encoding accepted); a missing or different header is `400` with `-32020`. Modern protocol errors get `400`, an unknown method `404`; legacy requests get `200` for every JSON-RPC error, except `400` for an unknown `MCP-Protocol-Version` header. Notifications get `202` with an empty body. Every 4xx to a modern request carries a JSON-RPC error body, so dual-era clients can tell a modern server from a legacy one.
 
 Handlers can read the era, the negotiated revision and the client's declared capabilities through `TMCPRequestContext.Current` (`MCPServer.RequestContext`) or by implementing `IMCPCapabilityManagerEx`, and can raise `EMCPError` (`MCPServer.Errors`) to send a specific JSON-RPC error code.
 
@@ -482,6 +484,14 @@ The server provides four resources accessible via URIs:
 
 The server supports configuration through `settings.ini` files. A default `settings.ini.example` is provided in the repository.
 
+### Network and Security
+
+- `[Server] BindAddress`: the interface to listen on. Empty (default) derives it from `Host`: a loopback `Host` binds `127.0.0.1` and `::1`, any other `Host` binds every interface. Set `0.0.0.0` to listen everywhere explicitly.
+- `[Security] AllowedOrigins`: origins that pass the `Origin` check next to the loopback origins (`localhost`, `127.0.0.1`, `[::1]`, any port). Comma-separated `scheme://host[:port]`; `:*` allows any port; `*` allows everything. Falls back to `[CORS] AllowedOrigins`. A rejected origin gets `403` with a JSON-RPC error body, also when CORS is disabled.
+- `[CORS] Enabled`: adds the CORS response headers for browser clients; the `Origin` check runs regardless.
+- `[Server] EndpointInfoPath`: optional GET path (for example `/info`) that answers a JSON document with the endpoint URL and the protocol versions. The MCP endpoint itself only accepts POST; GET and DELETE get `405`.
+- `[Server] MaxRequestBodyBytes` (4 MB) and `MaxJsonDepth` (64): larger or deeper requests get `413` or `400`; `MaxConnections`: Indy connection limit, `0` = unlimited.
+
 ### SSL/TLS Configuration
 
 The Delphi MCP Server supports two SSL/TLS implementations:
@@ -594,7 +604,7 @@ We welcome contributions! Here's how to help:
 The `tests` folder holds a DUnitX project that drives the JSON-RPC layer in-process and pins the wire behaviour with golden files (`tests\golden`, see the README there). The scripts under `scripts` wrap the build and the external tooling; the Node tools are pinned in `package.json`.
 
 ```powershell
-.\scripts\run-tests.ps1                     # build tests\MCPServer.Tests.dpr (Win64 Debug) and run it
+.\scripts\run-tests.ps1                     # build tests\MCPServerTests.dpr (Win64 Debug) and run it
 .\scripts\run-tests.ps1 -Platform Win32
 .\scripts\capture-http-goldens.ps1          # replay the HTTP golden cases with curl against Win64\Debug\MCPServer.exe
 .\scripts\run-stdio-smoke.ps1               # drive --stdio and check the framing of stdout/stderr

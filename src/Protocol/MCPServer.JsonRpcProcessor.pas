@@ -10,6 +10,7 @@ uses
   MCPServer.Settings,
   MCPServer.RequestContext,
   MCPServer.Errors,
+  MCPServer.HttpHeaders,
   MCPServer.Logger;
 
 type
@@ -42,6 +43,8 @@ type
       const Hints: TMCPTransportHints): TMCPProtocolEra;
     function ExtractMeta(const Params: TJSONObject): TJSONObject;
     procedure ValidateModernMeta(const Meta: TJSONObject);
+    procedure ValidateMirroredHeaders(const Method: string; const Params: TJSONObject;
+      const Hints: TMCPTransportHints);
     function ProcessNotification(const Method: string; const Params: TJSONObject;
       const Hints: TMCPTransportHints): TMCPProcessResult;
     function DispatchRequest(const Context: IMCPRequestContext; const Params: TJSONObject): TValue;
@@ -198,7 +201,7 @@ begin
   // The era that decides the status of a rejected request: a body that
   // names a protocol version in _meta is modern even when it fails validation.
   Result := EraFromHeaders(Hints);
-  if (Result = TMCPProtocolEra.Modern) or (Method = 'initialize') or not Assigned(Params) then
+  if (Result = TMCPProtocolEra.Modern) or not Assigned(Params) then
     Exit;
 
   var MetaValue := Params.GetValue('_meta');
@@ -240,6 +243,46 @@ begin
       nil, HTTP_STATUS_BAD_REQUEST);
 end;
 
+procedure TMCPJsonRpcProcessor.ValidateMirroredHeaders(const Method: string; const Params: TJSONObject;
+  const Hints: TMCPTransportHints);
+var
+  Decoded: string;
+begin
+  // Mcp-Method mirrors the method on every modern POST.
+  if not Hints.HasMethodHeader then
+    raise EMCPError.HeaderMismatch('Mcp-Method header is missing');
+  if Hints.MethodHeader <> Method then
+    raise EMCPError.HeaderMismatch(Format(
+      'Header mismatch: Mcp-Method header value ''%s'' does not match body value ''%s''',
+      [Hints.MethodHeader, Method]));
+
+  // Mcp-Name mirrors params.name (tools/call, prompts/get) or params.uri (resources/read).
+  var SourceField := '';
+  if (Method = 'tools/call') or (Method = 'prompts/get') then
+    SourceField := 'name'
+  else if Method = 'resources/read' then
+    SourceField := 'uri';
+  if SourceField = '' then
+    Exit;
+
+  if not Hints.HasNameHeader then
+    raise EMCPError.HeaderMismatch('Mcp-Name header is missing');
+  if not TMCPHeaderValue.TryDecode(Hints.NameHeader, Decoded) then
+    raise EMCPError.HeaderMismatch('Mcp-Name header value is not a valid header value');
+
+  var BodyValue := '';
+  if Assigned(Params) then
+  begin
+    var Source := Params.GetValue(SourceField);
+    if Source is TJSONString then
+      BodyValue := TJSONString(Source).Value;
+  end;
+  if Decoded <> BodyValue then
+    raise EMCPError.HeaderMismatch(Format(
+      'Header mismatch: Mcp-Name header value ''%s'' does not match body value ''%s''',
+      [Decoded, BodyValue]));
+end;
+
 function TMCPJsonRpcProcessor.BuildRequestContext(const Method: string; const Params: TJSONObject;
   const RequestId: TMCPRequestId; const Hints: TMCPTransportHints): IMCPRequestContext;
 var
@@ -247,21 +290,9 @@ var
 begin
   var Meta := ExtractMeta(Params);
 
-  // 1. initialize always selects the legacy era, whatever _meta says.
-  if Method = 'initialize' then
-  begin
-    var Requested := '';
-    if Assigned(Params) then
-    begin
-      var RequestedValue := Params.GetValue('protocolVersion');
-      if RequestedValue is TJSONString then
-        Requested := TJSONString(RequestedValue).Value;
-    end;
-    Exit(TMCPRequestContext.Create(TMCPProtocolEra.Legacy, NegotiateLegacyProtocolVersion(Requested),
-      Method, RequestId, Meta, Hints.LegacySession, FManagerRegistry));
-  end;
-
-  // 2. A protocol version in _meta makes the request modern.
+  // 1. A protocol version in _meta makes the request modern, initialize
+  //    included: in that era it is an unknown method, which is what a
+  //    modern client probing the server expects.
   var VersionValue: TJSONValue := nil;
   if Assigned(Meta) then
     VersionValue := Meta.GetValue(MCP_META_PROTOCOL_VERSION);
@@ -283,6 +314,9 @@ begin
     if not IsModernProtocolVersion(Version) then
       raise EMCPError.UnsupportedProtocolVersion(Version, SupportedModernVersions);
 
+    if Hints.HasHeaderLayer then
+      ValidateMirroredHeaders(Method, Params, Hints);
+
     ValidateModernMeta(Meta);
 
     if IsLegacyOnlyMethod(Method) then
@@ -294,6 +328,21 @@ begin
 
     Exit(TMCPRequestContext.Create(TMCPProtocolEra.Modern, Version, Method, RequestId, Meta,
       Hints.LegacySession, FManagerRegistry));
+  end;
+
+  // 2. initialize without modern _meta selects the legacy era and negotiates
+  //    the revision.
+  if Method = 'initialize' then
+  begin
+    var Requested := '';
+    if Assigned(Params) then
+    begin
+      var RequestedValue := Params.GetValue('protocolVersion');
+      if RequestedValue is TJSONString then
+        Requested := TJSONString(RequestedValue).Value;
+    end;
+    Exit(TMCPRequestContext.Create(TMCPProtocolEra.Legacy, NegotiateLegacyProtocolVersion(Requested),
+      Method, RequestId, Meta, Hints.LegacySession, FManagerRegistry));
   end;
 
   // 3. A modern-only method without _meta is a malformed modern request.
@@ -435,9 +484,15 @@ end;
 
 function TMCPJsonRpcProcessor.StatusForError(Era: TMCPProtocolEra; const Error: EMCPError): Integer;
 begin
-  // Legacy clients read 404 as "session terminated"; they always get 200.
+  // Legacy clients read 404 as "session terminated". They get 200 for every
+  // JSON-RPC error; the one 4xx their revisions define is 400 for a bad
+  // MCP-Protocol-Version header, which arrives with the status set.
   if Era = TMCPProtocolEra.Legacy then
+  begin
+    if Error.HttpStatus = HTTP_STATUS_BAD_REQUEST then
+      Exit(HTTP_STATUS_BAD_REQUEST);
     Exit(HTTP_STATUS_OK);
+  end;
 
   if Error.HttpStatus <> 0 then
     Exit(Error.HttpStatus);

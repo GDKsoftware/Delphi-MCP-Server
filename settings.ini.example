@@ -14,6 +14,25 @@ Description=
 WebsiteUrl=
 ; Optional guidance for LLM clients on how to use this server
 Instructions=
+; Interface to listen on. Empty = derived from Host: a loopback Host binds
+; 127.0.0.1 and ::1, any other Host binds every interface. Set 0.0.0.0 to
+; listen on every interface explicitly.
+BindAddress=
+; Optional GET path that answers a JSON document with the endpoint URL and
+; the protocol versions (the MCP endpoint itself only accepts POST)
+EndpointInfoPath=
+; Larger POST bodies are refused with 413
+MaxRequestBodyBytes=4194304
+; Deeper JSON nesting is refused with 400
+MaxJsonDepth=64
+; Indy connection limit; 0 = unlimited
+MaxConnections=0
+
+[Security]
+; Origins allowed next to the loopback origins (localhost, 127.0.0.1, [::1] on
+; any port), for DNS-rebinding protection. Comma-separated scheme://host[:port];
+; ":*" allows any port. Empty = the [CORS] AllowedOrigins list below.
+AllowedOrigins=
 
 [Protocol]
 ; Boolean values: use 1 (true) or 0 (false)
@@ -26,13 +45,13 @@ DiscoverListsLegacyVersions=0
 DiscoverTtlMs=0
 
 [CORS]
-; Cross-Origin Resource Sharing configuration
+; Cross-Origin Resource Sharing response headers for browser clients
 ; Boolean values: use 1 (true) or 0 (false)
 Enabled=1
-; Comma-separated list of allowed origins
+; Comma-separated list of allowed origins; also the Origin allow-list when
+; [Security] AllowedOrigins is empty. Loopback origins are always allowed.
 ; Use * to allow all origins (not recommended for production)
-; Default: localhost and 127.0.0.1 with http and https
-AllowedOrigins=http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000
+AllowedOrigins=http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1
 
 [SSL]
 ; SSL/TLS configuration (optional)

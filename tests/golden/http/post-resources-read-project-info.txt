@@ -3,10 +3,9 @@ Connection: keep-alive
 Content-Type: application/json
 Content-Length: 590
 Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: POST, GET, OPTIONS
-Access-Control-Allow-Headers: Accept, Content-Type, Last-Event-ID, Mcp-Protocol-Version, Mcp-Session-Id
-Access-Control-Expose-Headers: Mcp-Session-Id
+Access-Control-Allow-Methods: POST, OPTIONS
+Access-Control-Allow-Headers: Accept, Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID
+Access-Control-Expose-Headers: Mcp-Session-Id, WWW-Authenticate
 Access-Control-Max-Age: 86400
-Connection: keep-alive
 
 {"jsonrpc":"2.0","id":5,"result":{"contents":[{"uri":"project://info","mimeType":"application/json","text":"{\"name\":\"delphi-mcp-server\",\"version\":\"1.0.0\",\"description\":\"A Model Context Protocol (MCP) server implementation in Delphi\",\"language\":\"Delphi\",\"framework\":\"Indy HTTP Server (TIdHTTPServer)\",\"protocol\":\"MCP 2025-06-18\",\"transport\":\"Streamable HTTP\",\"author\":\"GDK Software\",\"repository\":\"https://github.com/GDKsoftware/delphi-mcp-server\",\"features\":[\"Tools capability\",\"Resources capability\",\"JSON-RPC 2.0 support\",\"CORS support\"]}"}]}}

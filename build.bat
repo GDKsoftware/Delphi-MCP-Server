@@ -70,10 +70,10 @@ if not "!TAURUS_PATH!"=="" (
 )
 
 if "%PLATFORM%"=="Win32" (
-    !DCC32! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win32\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -I!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
+    !DCC32! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win32\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -Isrc;!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Win64" (
-    !DCC64! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win64\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -I!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
+    !DCC64! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win64\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources!EXTRA_UNITS! -Isrc;!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Linux64" (
     REM Use MSBuild for Linux64
