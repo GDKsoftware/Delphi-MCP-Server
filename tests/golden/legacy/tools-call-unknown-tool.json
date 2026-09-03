@@ -12,14 +12,12 @@
   "expected": {
     "jsonrpc": "2.0",
     "id": 9,
-    "result": {
-      "content": [
-        {
-          "type": "text",
-          "text": "Error: Tool not found: no_such_tool"
-        }
-      ],
-      "isError": true
+    "error": {
+      "code": -32602,
+      "message": "Unknown tool: no_such_tool",
+      "data": {
+        "name": "no_such_tool"
+      }
     }
   }
 }

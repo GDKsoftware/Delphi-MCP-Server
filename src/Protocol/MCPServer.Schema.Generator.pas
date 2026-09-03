@@ -9,12 +9,33 @@ uses
   System.JSON;
 
 type
+  /// JSON Schema (2020-12 subset) for a parameter or result class, derived
+  /// from its published/public properties:
+  ///
+  ///   Integer, Int64, Byte ...        integer
+  ///   Double, Single, Currency        number
+  ///   TDateTime / TDate / TTime       string with format date-time / date / time
+  ///   string                          string
+  ///   Boolean                         boolean
+  ///   other enumerations              string with the enum names
+  ///   sets                            array of enum names
+  ///   dynamic arrays, TList<T>        array with typed items
+  ///   TJSONArray / TJSONObject        array / object (free form)
+  ///   other classes                   nested object schema
+  ///
+  /// Attributes: [SchemaDescription], [SchemaTitle], [SchemaFormat],
+  /// [SchemaMinimum], [SchemaMaximum], [SchemaEnum] and [Optional].
   TMCPSchemaGenerator = class
   private
-    class function GetJsonTypeFromRttiType(RttiType: TRttiType): string;
-    class function GetPropertyJsonName(Prop: TRttiProperty; RType: TRttiType): string;
+    const MAX_NESTING_DEPTH = 8;
+    class function GetPropertyJsonName(Prop: TRttiProperty): string;
     class function IsRequiredProperty(Prop: TRttiProperty): Boolean;
     class function CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
+    class function ListItemType(RttiType: TRttiType): TRttiType;
+    class function TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+    class function ObjectSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+    class function NumberValue(const Value: Double): TJSONNumber;
+    class procedure ApplyAttributes(Prop: TRttiProperty; const PropSchema: TJSONObject);
   public
     class function GenerateSchema(Cls: TClass): TJSONObject;
     class function GenerateSchemaFromInstance(Instance: TObject): TJSONObject;
@@ -26,82 +47,14 @@ uses
   System.Generics.Collections,
   MCPServer.Types;
 
+var
+  RttiContext: TRttiContext;
+
 { TMCPSchemaGenerator }
 
 class function TMCPSchemaGenerator.GenerateSchema(Cls: TClass): TJSONObject;
-var
-  Attr: TCustomAttribute;
-  EnumArray: TJSONArray;
-  JsonName: string;
-  JsonType: string;
-  Properties: TJSONObject;
-  PropSchema: TJSONObject;
-  RequiredArray: TJSONArray;
-  RttiContext: TRttiContext;
-  RttiProp: TRttiProperty;
-  RttiType: TRttiType;
-  Value: string;
 begin
-  Result := TJSONObject.Create;
-  Result.AddPair('type', 'object');
-
-  Properties := TJSONObject.Create;
-  Result.AddPair('properties', Properties);
-  RequiredArray := TJSONArray.Create;
-
-  RttiContext := TRttiContext.Create;
-  try
-    RttiType := RttiContext.GetType(Cls);
-
-    for RttiProp in RttiType.GetProperties do
-    begin
-      if RttiProp.IsReadable and RttiProp.IsWritable then
-      begin
-        JsonName := GetPropertyJsonName(RttiProp, RttiType);
-
-        PropSchema := TJSONObject.Create;
-        Properties.AddPair(JsonName, PropSchema);
-
-        JsonType := GetJsonTypeFromRttiType(RttiProp.PropertyType);
-        PropSchema.AddPair('type', JsonType);
-
-        if JsonType = 'array' then
-          PropSchema.AddPair('items', TJSONObject.Create);
-
-        EnumArray := nil;
-
-        for Attr in RttiProp.GetAttributes do
-        begin
-          if Attr is SchemaDescriptionAttribute then
-          begin
-            PropSchema.AddPair('description', SchemaDescriptionAttribute(Attr).Description);
-          end
-          else if Attr is SchemaEnumAttribute then
-          begin
-            EnumArray := TJSONArray.Create;
-            for Value in SchemaEnumAttribute(Attr).Values do
-              EnumArray.Add(Value);
-          end;
-        end;
-
-        if not Assigned(EnumArray) then
-          EnumArray := CreateEnumValuesArray(RttiProp.PropertyType);
-
-        if Assigned(EnumArray) then
-          PropSchema.AddPair('enum', EnumArray);
-
-        if IsRequiredProperty(RttiProp) then
-          RequiredArray.Add(JsonName);
-      end;
-    end;
-
-    if RequiredArray.Count > 0 then
-      Result.AddPair('required', RequiredArray)
-    else
-      RequiredArray.Free;
-  finally
-    RttiContext.Free;
-  end;
+  Result := ObjectSchema(RttiContext.GetType(Cls), 0);
 end;
 
 class function TMCPSchemaGenerator.GenerateSchemaFromInstance(Instance: TObject): TJSONObject;
@@ -109,64 +62,217 @@ begin
   Result := GenerateSchema(Instance.ClassType);
 end;
 
-class function TMCPSchemaGenerator.GetJsonTypeFromRttiType(RttiType: TRttiType): string;
-begin
-  case RttiType.TypeKind of
-    tkInteger, tkInt64: Result := 'number';
-    tkFloat: Result := 'number';
-    tkString, tkLString, tkWString, tkUString: Result := 'string';
-    tkEnumeration:
-      if RttiType.Name = 'Boolean' then
-        Result := 'boolean'
-      else
-        Result := 'string';
-    tkSet: Result := 'array';
-    tkClass:
-      if RttiType.Name = 'TJSONArray' then
-        Result := 'array'
-      else
-        Result := 'object';
-    tkArray, tkDynArray: Result := 'array';
-  else
-    Result := 'string';
-  end;
-end;
-
-class function TMCPSchemaGenerator.GetPropertyJsonName(Prop: TRttiProperty; RType: TRttiType): string;
+class function TMCPSchemaGenerator.GetPropertyJsonName(Prop: TRttiProperty): string;
 begin
   Result := LowerCase(Prop.Name);
 end;
 
 class function TMCPSchemaGenerator.IsRequiredProperty(Prop: TRttiProperty): Boolean;
-var
-  Attr: TCustomAttribute;
 begin
-  for Attr in Prop.GetAttributes do
-  begin
+  for var Attr in Prop.GetAttributes do
     if Attr is OptionalAttribute then
       Exit(False);
-  end;
   Result := True;
 end;
 
 class function TMCPSchemaGenerator.CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
-var
-  EnumType: TRttiEnumerationType;
-  Ordinal: Integer;
 begin
   Result := nil;
-
-  if not (RttiType is TRttiEnumerationType) then
+  if not (RttiType is TRttiEnumerationType) or (RttiType.Handle = TypeInfo(Boolean)) then
     Exit;
 
-  if RttiType.Handle = TypeInfo(Boolean) then
-    Exit;
-
-  EnumType := TRttiEnumerationType(RttiType);
-
+  var EnumType := TRttiEnumerationType(RttiType);
   Result := TJSONArray.Create;
-  for Ordinal := EnumType.MinValue to EnumType.MaxValue do
+  for var Ordinal := EnumType.MinValue to EnumType.MaxValue do
     Result.Add(GetEnumName(RttiType.Handle, Ordinal));
 end;
+
+class function TMCPSchemaGenerator.ListItemType(RttiType: TRttiType): TRttiType;
+begin
+  // TList<T> and TObjectList<T> expose Items[Index: NativeInt]: T.
+  Result := nil;
+  var ItemsProp := RttiType.GetIndexedProperty('Items');
+  if not Assigned(ItemsProp) or not Assigned(ItemsProp.ReadMethod) then
+    Exit;
+  var Parameters := ItemsProp.ReadMethod.GetParameters;
+  if (Length(Parameters) = 1) and (Parameters[0].ParamType.TypeKind in [tkInteger, tkInt64]) then
+    Result := ItemsProp.PropertyType;
+end;
+
+class function TMCPSchemaGenerator.TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  try
+    case RttiType.TypeKind of
+      tkInteger, tkInt64:
+        Result.AddPair('type', 'integer');
+
+      tkFloat:
+        if RttiType.Handle = TypeInfo(TDateTime) then
+        begin
+          Result.AddPair('type', 'string');
+          Result.AddPair('format', 'date-time');
+        end
+        else if RttiType.Handle = TypeInfo(TDate) then
+        begin
+          Result.AddPair('type', 'string');
+          Result.AddPair('format', 'date');
+        end
+        else if RttiType.Handle = TypeInfo(TTime) then
+        begin
+          Result.AddPair('type', 'string');
+          Result.AddPair('format', 'time');
+        end
+        else
+          Result.AddPair('type', 'number');
+
+      tkString, tkLString, tkWString, tkUString, tkChar, tkWChar:
+        Result.AddPair('type', 'string');
+
+      tkEnumeration:
+        if RttiType.Handle = TypeInfo(Boolean) then
+          Result.AddPair('type', 'boolean')
+        else
+        begin
+          Result.AddPair('type', 'string');
+          Result.AddPair('enum', CreateEnumValuesArray(RttiType));
+        end;
+
+      tkSet:
+        begin
+          Result.AddPair('type', 'array');
+          var Items := TJSONObject.Create;
+          Result.AddPair('items', Items);
+          Items.AddPair('type', 'string');
+          var ElementType := TRttiSetType(RttiType).ElementType;
+          var Names := CreateEnumValuesArray(ElementType);
+          if Assigned(Names) then
+            Items.AddPair('enum', Names);
+        end;
+
+      tkDynArray:
+        begin
+          Result.AddPair('type', 'array');
+          Result.AddPair('items', TypeSchema(TRttiDynamicArrayType(RttiType).ElementType, Depth + 1));
+        end;
+
+      tkArray:
+        begin
+          Result.AddPair('type', 'array');
+          Result.AddPair('items', TypeSchema(TRttiArrayType(RttiType).ElementType, Depth + 1));
+        end;
+
+      tkClass:
+        begin
+          var Metaclass := TRttiInstanceType(RttiType).MetaclassType;
+          if Metaclass.InheritsFrom(TJSONArray) then
+            Result.AddPair('type', 'array')
+          else if Metaclass.InheritsFrom(TJSONValue) then
+            Result.AddPair('type', 'object')
+          else
+          begin
+            var ItemType := ListItemType(RttiType);
+            if Assigned(ItemType) then
+            begin
+              Result.AddPair('type', 'array');
+              Result.AddPair('items', TypeSchema(ItemType, Depth + 1));
+            end
+            else if Depth < MAX_NESTING_DEPTH then
+            begin
+              Result.Free;
+              Result := ObjectSchema(RttiType, Depth + 1);
+            end
+            else
+              Result.AddPair('type', 'object');
+          end;
+        end;
+    else
+      Result.AddPair('type', 'string');
+    end;
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+class function TMCPSchemaGenerator.NumberValue(const Value: Double): TJSONNumber;
+begin
+  // Whole bounds are written as integers, so "minimum": 1 rather than 1.0.
+  if Frac(Value) = 0 then
+    Result := TJSONNumber.Create(Trunc(Value))
+  else
+    Result := TJSONNumber.Create(Value);
+end;
+
+class procedure TMCPSchemaGenerator.ApplyAttributes(Prop: TRttiProperty; const PropSchema: TJSONObject);
+begin
+  for var Attr in Prop.GetAttributes do
+  begin
+    if Attr is SchemaDescriptionAttribute then
+      PropSchema.AddPair('description', SchemaDescriptionAttribute(Attr).Description)
+    else if Attr is SchemaTitleAttribute then
+      PropSchema.AddPair('title', SchemaTitleAttribute(Attr).Title)
+    else if Attr is SchemaFormatAttribute then
+    begin
+      PropSchema.RemovePair('format').Free;
+      PropSchema.AddPair('format', SchemaFormatAttribute(Attr).Format);
+    end
+    else if Attr is SchemaMinimumAttribute then
+      PropSchema.AddPair('minimum', NumberValue(SchemaMinimumAttribute(Attr).Minimum))
+    else if Attr is SchemaMaximumAttribute then
+      PropSchema.AddPair('maximum', NumberValue(SchemaMaximumAttribute(Attr).Maximum))
+    else if Attr is SchemaEnumAttribute then
+    begin
+      PropSchema.RemovePair('enum').Free;
+      var EnumArray := TJSONArray.Create;
+      for var Value in SchemaEnumAttribute(Attr).Values do
+        EnumArray.Add(Value);
+      PropSchema.AddPair('enum', EnumArray);
+    end;
+  end;
+end;
+
+class function TMCPSchemaGenerator.ObjectSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  try
+    Result.AddPair('type', 'object');
+    var Properties := TJSONObject.Create;
+    Result.AddPair('properties', Properties);
+    var RequiredArray := TJSONArray.Create;
+
+    for var RttiProp in RttiType.GetProperties do
+    begin
+      if not (RttiProp.IsReadable and RttiProp.IsWritable) then
+        Continue;
+
+      var JsonName := GetPropertyJsonName(RttiProp);
+      var PropSchema := TypeSchema(RttiProp.PropertyType, Depth);
+      Properties.AddPair(JsonName, PropSchema);
+      ApplyAttributes(RttiProp, PropSchema);
+
+      if IsRequiredProperty(RttiProp) then
+        RequiredArray.Add(JsonName);
+    end;
+
+    if RequiredArray.Count > 0 then
+      Result.AddPair('required', RequiredArray)
+    else
+      RequiredArray.Free;
+
+    // A tool without parameters accepts an empty object and nothing else.
+    if Properties.Count = 0 then
+      Result.AddPair('additionalProperties', TJSONBool.Create(False));
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+initialization
+  RttiContext := TRttiContext.Create;
+
+finalization
+  RttiContext.Free;
 
 end.

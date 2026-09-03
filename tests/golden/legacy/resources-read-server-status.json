@@ -21,8 +21,8 @@
           "text": {
             "status": "string",
             "uptime": "number",
-            "starttime": "number",
-            "currenttime": "number",
+            "starttime": "string",
+            "currenttime": "string",
             "memoryused": "number",
             "requestcount": "number",
             "activeconnections": "number"

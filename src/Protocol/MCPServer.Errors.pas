@@ -4,7 +4,8 @@ interface
 
 uses
   System.SysUtils,
-  System.JSON;
+  System.JSON,
+  MCPServer.Types;
 
 type
   /// A JSON-RPC error a handler or the processor wants to send back.
@@ -36,11 +37,20 @@ type
     class function MissingRequiredClientCapability(const RequiredCapabilities: TJSONObject): EMCPError;
     /// -32022 (HTTP 400): the requested revision is not served.
     class function UnsupportedProtocolVersion(const Requested: string; const Supported: TArray<string>): EMCPError;
+    /// -32602 with data.name: tools/call names a tool the server does not have.
+    class function UnknownTool(const Name: string): EMCPError;
+    /// Resource not found with data.uri: -32602 in the modern era, -32002 in
+    /// the initialize-based revisions.
+    class function ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
 
     property Code: Integer read FCode;
     property Data: TJSONValue read FData;
     property HttpStatus: Integer read FHttpStatus write FHttpStatus;
   end;
+
+  /// Raised by a tool to report a tool execution error: the message becomes
+  /// an isError result that the model can act on, not a protocol error.
+  EMCPToolError = class(Exception);
 
 const
   HTTP_STATUS_OK = 200;
@@ -49,9 +59,6 @@ const
   HTTP_STATUS_NOT_FOUND = 404;
 
 implementation
-
-uses
-  MCPServer.Types;
 
 { EMCPError }
 
@@ -126,6 +133,23 @@ begin
 
   Result := EMCPError.Create(MCP_ERROR_UNSUPPORTED_PROTOCOL_VERSION,
     'Unsupported protocol version', Data, HTTP_STATUS_BAD_REQUEST);
+end;
+
+class function EMCPError.UnknownTool(const Name: string): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair('name', Name);
+  Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown tool: ' + Name, Data);
+end;
+
+class function EMCPError.ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair('uri', Uri);
+  if Era = TMCPProtocolEra.Modern then
+    Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Resource not found', Data)
+  else
+    Result := EMCPError.Create(MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY, 'Resource not found', Data);
 end;
 
 end.

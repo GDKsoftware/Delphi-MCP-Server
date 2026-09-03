@@ -49,11 +49,61 @@ without `USE_TAURUS_TLS`).
 `requestState`, `inputResponses` and token-like members redacted. Lower
 `TLogger.MinLogLevel` to see them.
 
+## Tools and resources
+
+**An unknown tool is a JSON-RPC error.** `tools/call` with a name that is not
+registered answers `-32602` with `data.name`; it used to answer an `isError`
+result with the text "Tool not found". A missing or empty `name`, or an
+`arguments` that is not an object, is `-32602` too. Modern clients get HTTP
+`400` with it, initialize-based clients `200`.
+
+**An unknown resource is a JSON-RPC error.** `resources/read` answers `-32002`
+with `data.uri` for initialize-based clients and `-32602` with `data.uri` for
+modern clients; it used to answer a text content "Error: Resource not found".
+A read that raises is `-32603`.
+
+**Arguments are checked against the schema.** A missing required parameter, a
+wrong JSON type (a string for a number, a fraction for an integer, a string
+for a boolean) or an unknown enumeration name is an `isError` result naming
+the parameter, before the tool runs. A parameter that may be absent needs the
+`[Optional]` attribute; without it the old behaviour (silently defaulting)
+is gone. `null` counts as absent.
+
+**Generated schemas changed.** Integer properties are `integer` (they were
+`number`), `TDateTime` is a `string` with `format: date-time`, enumerations
+and sets list their names, and a tool without parameters declares
+`additionalProperties: false`. Clients that validate arguments against the
+schema now reject `1.5` for an integer.
+
+**Result and resource JSON changed.** Enumerations are written by name (they
+were booleans), sets and dynamic arrays as arrays, `nil` objects as `null`
+and `TDateTime` as an ISO 8601 string. The `logs://recent` timestamps and the
+`server://status` times are strings now.
+
+**Tools and resources are listed in registration order.** Anything that
+depended on the previous dictionary order should use the names instead.
+
+**A typed tool result also gets a text block.** `TMCPToolBase<T, R>` results
+carry `structuredContent` and a text block with the same JSON; `content` is
+never empty.
+
 ## Library use
 
 - `TMCPJsonRpcProcessor.ProcessRequest` and the manager interfaces are
   unchanged. `ProcessRequestEx` returns the HTTP status your own transport
   should answer with.
+- `TMCPToolBase<T>` gains `ExecuteWithContext(Params, Context): TValue`;
+  override it to return a `TMCPToolResult` (images, audio, embedded
+  resources, resource links, `_meta`) or to read the request context.
+  `ExecuteWithParams` keeps working as before. Raise `EMCPToolError` for a
+  failure the model should see as an `isError` result; any other exception
+  is reported the same way with its message.
+- `TMCPResourceBase<T>` has `FTitle`, `FSize`, `FAnnotations`, `FTtlMs` and
+  `FCacheScope` for the list and read results; implement `IMCPBinaryResource`
+  for a `blob` resource.
+- `TMCPToolsManager.CallTool` raises `EMCPError` (-32602) for an unknown tool
+  instead of returning an error result; `TMCPResourcesManager.ReadResource`
+  raises `EMCPError` for an unknown URI. Both have era-aware overloads.
 - `TMCPCoreManager.SessionID` returns an empty string.
 - `initialize` answers the requested revision (`2025-06-18` or `2025-11-25`)
   and its `capabilities` come from the registered managers; a registry with

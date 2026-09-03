@@ -312,6 +312,38 @@ initialization
 end.
 ```
 
+Arguments are validated against the generated schema before the tool runs: a
+missing property without `[Optional]`, a value of the wrong JSON type or an
+unknown enumeration name is answered as an `isError` result that names the
+parameter. Integer properties are published as `integer`, `TDateTime` as a
+`string` with `format: date-time`, enumerations and sets with their names;
+`[SchemaTitle]`, `[SchemaFormat]`, `[SchemaMinimum]` and `[SchemaMaximum]`
+add the corresponding keywords.
+
+A tool that returns more than text overrides `ExecuteWithContext` and builds
+a `TMCPToolResult` (`MCPServer.Tool.Result`):
+
+```pascal
+function TChartTool.ExecuteWithContext(const AParams: TChartParams;
+  const Context: IMCPRequestContext): TValue;
+begin
+  Result := TMCPToolResult.Create
+    .AddText('Chart for ' + AParams.Series)
+    .AddImage(RenderPng(AParams), 'image/png')
+    .AddResourceLink('chart://' + AParams.Series, AParams.Series, '', 'image/png');
+end;
+```
+
+The builder also has `AddAudio`, `AddEmbeddedText`, `AddEmbeddedBlob`,
+`WithAnnotations` (for the last block), `SetStructuredContent`, `SetMeta` and
+`SetError`. Raise `EMCPToolError` for a failure the model should see as an
+`isError` result; the request context gives the protocol era and the
+client's `_meta`. Tools that inherit from `TMCPToolBase<T, R>` return an
+object that becomes `structuredContent` plus a text block with the same
+JSON. Set `FAnnotations` (for example `readOnlyHint`) or `FIcons` in the
+constructor to publish them in `tools/list`. `MCPServer.Tool.ContentSamples`
+has one small example per content type.
+
 ### Creating Custom Resources
 
 ```pascal
@@ -369,6 +401,15 @@ initialization
 
 end.
 ```
+
+`FTitle`, `FSize` and `FAnnotations` are published in `resources/list`;
+`FTtlMs` and `FCacheScope` (`private` unless set) are the cache hints modern
+clients get on `resources/read`. A binary resource implements
+`IMCPBinaryResource.ReadBinary` and is delivered as a `blob`;
+`MCPServer.Resource.Samples` shows a text and a binary example. A URI that is
+not registered is answered with a JSON-RPC error (`-32002` for
+initialize-based clients, `-32602` for modern clients), a read that raises
+with `-32603`.
 
 ## Integration with Claude Code
 
@@ -470,15 +511,22 @@ The Inspector provides a web interface to interact with your MCP server, making 
 - **get_time**: Get the current server time
 - **list_files**: List files in a directory
 - **calculate**: Perform basic arithmetic calculations
+- **test_simple_text**, **test_image_content**, **test_audio_content**,
+  **test_embedded_resource**, **test_multiple_content_types**,
+  **test_error_handling**: one small tool per content type and one that
+  fails, from `MCPServer.Tool.ContentSamples`; the conformance suite calls
+  these by name
 
 ## Available Example resources
 
-The server provides four resources accessible via URIs:
+The server provides six resources accessible via URIs:
 
-- **project://info** - Project information (JSON metadata with collections)
-- **project://readme** - This README file (markdown content) 
-- **logs://recent** - Recent log entries from all categories (with thread safety)
 - **server://status** - Current server status and health information (request and connection counters)
+- **project://info** - Project information (JSON metadata with collections)
+- **project://readme** - This README file (markdown content)
+- **logs://recent** - Recent log entries from all categories (with thread safety)
+- **test://static-text** - A fixed text resource
+- **test://static-binary** - A fixed PNG image, delivered as a `blob`
 
 ## Configuration
 

@@ -21,42 +21,35 @@
           "text": {
             "entries": [
               {
-                "timestamp": "number",
+                "timestamp": "string",
                 "level": "string",
                 "message": "string",
                 "threadid": "number",
                 "category": "string"
               },
               {
-                "timestamp": "number",
+                "timestamp": "string",
                 "level": "string",
                 "message": "string",
                 "threadid": "number",
                 "category": "string"
               },
               {
-                "timestamp": "number",
+                "timestamp": "string",
                 "level": "string",
                 "message": "string",
                 "threadid": "number",
                 "category": "string"
               },
               {
-                "timestamp": "number",
+                "timestamp": "string",
                 "level": "string",
                 "message": "string",
                 "threadid": "number",
                 "category": "string"
               },
               {
-                "timestamp": "number",
-                "level": "string",
-                "message": "string",
-                "threadid": "number",
-                "category": "string"
-              },
-              {
-                "timestamp": "number",
+                "timestamp": "string",
                 "level": "string",
                 "message": "string",
                 "threadid": "number",

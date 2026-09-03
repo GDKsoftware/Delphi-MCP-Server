@@ -10,14 +10,12 @@
   "expected": {
     "jsonrpc": "2.0",
     "id": 17,
-    "result": {
-      "contents": [
-        {
-          "uri": "nope://missing",
-          "mimeType": "text/plain",
-          "text": "Error: Resource not found: nope://missing"
-        }
-      ]
+    "error": {
+      "code": -32002,
+      "message": "Resource not found",
+      "data": {
+        "uri": "nope://missing"
+      }
     }
   }
 }

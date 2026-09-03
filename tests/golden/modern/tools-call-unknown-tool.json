@@ -21,20 +21,11 @@
   "expected": {
     "jsonrpc": "2.0",
     "id": 3,
-    "result": {
-      "content": [
-        {
-          "type": "text",
-          "text": "Error: Tool not found: no_such_tool"
-        }
-      ],
-      "isError": true,
-      "resultType": "complete",
-      "_meta": {
-        "io.modelcontextprotocol/serverInfo": {
-          "name": "delphi-mcp-server",
-          "version": "1.0.0"
-        }
+    "error": {
+      "code": -32602,
+      "message": "Unknown tool: no_such_tool",
+      "data": {
+        "name": "no_such_tool"
       }
     }
   }

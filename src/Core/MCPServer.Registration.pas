@@ -15,7 +15,8 @@ type
   TMCPToolFactory = reference to function: IMCPTool;
   TMCPResourceFactory = reference to function: IMCPResource;
 
-  /// Process-wide registry of tool and resource factories.
+  /// Process-wide registry of tool and resource factories, enumerated in
+  /// registration order.
   ///
   /// The dictionaries exist from the class constructor on, so registration
   /// from unit initialization sections needs no lazy checks. Registration is
@@ -26,7 +27,9 @@ type
   TMCPRegistry = class
   private
     class var FTools: TDictionary<string, TMCPToolFactory>;
+    class var FToolOrder: TList<string>;
     class var FResources: TDictionary<string, TMCPResourceFactory>;
+    class var FResourceOrder: TList<string>;
 
     class constructor Create;
     class destructor Destroy;
@@ -40,7 +43,9 @@ type
     class function CreateTool(const Name: string): IMCPTool;
     class function CreateResource(const URI: string): IMCPResource;
 
+    /// Names in registration order.
     class function GetToolNames: TArray<string>;
+    /// URIs in registration order.
     class function GetResourceURIs: TArray<string>;
 
     class function HasTool(const Name: string): Boolean;
@@ -54,23 +59,31 @@ implementation
 class constructor TMCPRegistry.Create;
 begin
   FTools := TDictionary<string, TMCPToolFactory>.Create;
+  FToolOrder := TList<string>.Create;
   FResources := TDictionary<string, TMCPResourceFactory>.Create;
+  FResourceOrder := TList<string>.Create;
 end;
 
 class destructor TMCPRegistry.Destroy;
 begin
   FreeAndNil(FTools);
+  FreeAndNil(FToolOrder);
   FreeAndNil(FResources);
+  FreeAndNil(FResourceOrder);
 end;
 
 class procedure TMCPRegistry.RegisterTool(const Name: string; Factory: TMCPToolFactory);
 begin
+  if not FTools.ContainsKey(Name) then
+    FToolOrder.Add(Name);
   FTools.AddOrSetValue(Name, Factory);
   TLogger.Info('Registered tool: ' + Name);
 end;
 
 class procedure TMCPRegistry.RegisterResource(const URI: string; Factory: TMCPResourceFactory);
 begin
+  if not FResources.ContainsKey(URI) then
+    FResourceOrder.Add(URI);
   FResources.AddOrSetValue(URI, Factory);
   TLogger.Info('Registered resource: ' + URI);
 end;
@@ -80,6 +93,7 @@ begin
   if FResources.ContainsKey(URI) then
   begin
     FResources.Remove(URI);
+    FResourceOrder.Remove(URI);
     TLogger.Info('Unregistered resource: ' + URI);
   end;
 end;
@@ -106,12 +120,12 @@ end;
 
 class function TMCPRegistry.GetToolNames: TArray<string>;
 begin
-  Result := FTools.Keys.ToArray;
+  Result := FToolOrder.ToArray;
 end;
 
 class function TMCPRegistry.GetResourceURIs: TArray<string>;
 begin
-  Result := FResources.Keys.ToArray;
+  Result := FResourceOrder.ToArray;
 end;
 
 class function TMCPRegistry.HasTool(const Name: string): Boolean;

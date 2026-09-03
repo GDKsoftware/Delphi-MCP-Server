@@ -19,9 +19,10 @@
       "content": [
         {
           "type": "text",
-          "text": "0 add 3 = 3"
+          "text": "Invalid arguments: Parameter \"a\": expected a number"
         }
-      ]
+      ],
+      "isError": true
     }
   }
 }

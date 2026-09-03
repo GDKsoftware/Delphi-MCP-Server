@@ -21,15 +21,15 @@
     "result": {
       "resourceTemplates": [
       ],
+      "ttlMs": 0,
+      "cacheScope": "private",
       "resultType": "complete",
       "_meta": {
         "io.modelcontextprotocol/serverInfo": {
           "name": "delphi-mcp-server",
           "version": "1.0.0"
         }
-      },
-      "ttlMs": 0,
-      "cacheScope": "private"
+      }
     }
   }
 }

@@ -152,6 +152,9 @@
         <DCCReference Include="Tools\MCPServer.Tool.Calculate.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Logs.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Project.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.Result.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.ContentSamples.pas"/>
+        <DCCReference Include="Resources\MCPServer.Resource.Samples.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

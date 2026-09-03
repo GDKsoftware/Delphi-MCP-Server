@@ -80,6 +80,33 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and `UseStdErr := False` is refused with a one-time warning.
 - README sections "Protocol Versions and Dual-Era Behaviour", the library
   checklist and "Automated tests".
+- `TMCPToolResult` (`MCPServer.Tool.Result`): a builder for tool results with
+  text, image, audio, embedded resource and resource link content blocks,
+  `structuredContent`, `_meta`, per-block annotations and `isError`;
+  `EncodeBase64Blob` encodes without line breaks.
+- `TMCPToolBase<T>.ExecuteWithContext(Params, Context)` returning a `TValue`
+  (a string, a `TMCPToolResult`, a `TJSONObject` for structured content or a
+  ready-made `TJSONArray` of content blocks) next to `ExecuteWithParams`;
+  `EMCPToolError` for a failure the tool wants reported as an `isError` result.
+- Tool metadata through `IMCPToolMetadata` (`annotations`, `icons`) on every
+  tool base; resource metadata through `IMCPResourceMetadata` (`title`, `size`,
+  `annotations`), `IMCPBinaryResource` (`blob` contents) and
+  `IMCPCacheableResource` (`ttlMs`, `cacheScope`) on `TMCPResourceBase<T>`.
+- `TMCPToolsManager` and `TMCPResourcesManager`: `AddTool` / `AddResource`
+  for instances outside `TMCPRegistry`, `ListTtlMs` and `ListCacheScope` for
+  the modern list results.
+- Schema attributes `SchemaTitle`, `SchemaFormat`, `SchemaMinimum` and
+  `SchemaMaximum`.
+- Example tools `test_simple_text`, `test_image_content`, `test_audio_content`,
+  `test_embedded_resource`, `test_multiple_content_types` and
+  `test_error_handling` (`MCPServer.Tool.ContentSamples`) and the resources
+  `test://static-text` and `test://static-binary`
+  (`MCPServer.Resource.Samples`): one example per content type, and the
+  fixtures the conformance suite calls.
+- `EMCPError.UnknownTool` and `EMCPError.ResourceNotFound(Uri, Era)`;
+  `MCP_CACHE_SCOPE_PUBLIC` and `MCP_CACHE_SCOPE_PRIVATE`.
+- Tests for the tool result builder, the serializer, the schema generator and
+  the tools and resources managers in both eras.
 
 ### Changed
 
@@ -133,6 +160,40 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `TLogger.StdoutReserved`. Library consumers that create the transport with
   console logging enabled and never set `UseStdErr` now get their log lines on
   stderr instead of corrupting the MCP channel on stdout.
+- `tools/call` with an unknown tool answers `-32602` with `data.name` (it
+  answered an `isError` result "Tool not found"); a missing or empty `name`
+  and an `arguments` that is not an object are `-32602` as well (they were an
+  `isError` result "Invalid tool parameters").
+- `resources/read` for an unknown URI answers `-32002` with `data.uri` for
+  initialize-based clients and `-32602` with `data.uri` for modern clients (it
+  answered a text content "Error: Resource not found"); a missing `uri` is
+  `-32602`, a read that raises is `-32603`.
+- Tool arguments are checked against the schema before the tool runs: a
+  missing required parameter, a value of the wrong JSON type, a fraction for an
+  integer or an unknown enumeration name is an `isError` result that names the
+  parameter. Missing parameters were silently defaulted and wrong types
+  coerced.
+- Every `tools/call` result has a `content` array; a typed result
+  (`TMCPToolBase<T, R>`) gets a text block with the compact JSON next to
+  `structuredContent`, so clients without structured-content support see it.
+- Tools and resources are listed in registration order (they were listed in
+  dictionary order).
+- Generated schemas: integer properties are `integer` (they were `number`),
+  `TDateTime` is a `string` with `format: date-time`, enumerations, sets,
+  dynamic arrays, `TList<T>` and nested classes get typed schemas, and a tool
+  without parameters gets `additionalProperties: false`.
+- Serialisation of results and resource data: enumerations by name (they were
+  written as booleans), sets and dynamic arrays as arrays, `nil` objects as
+  `null`, `TDateTime` as an ISO 8601 string (the `logs://recent` timestamps and
+  the `server://status` times were floating-point day numbers).
+- `resources/list` carries `title`, `size` and `annotations` when the resource
+  provides them and omits an empty `description` or `mimeType`. Modern
+  `tools/list`, `resources/list`, `resources/templates/list` and
+  `resources/read` results carry `ttlMs` and `cacheScope` from the manager or
+  the resource.
+- `logs://recent` no longer writes an access-log entry on every read;
+  `project://info` reports `MCP 2026-07-28 (initialize-based: 2025-11-25,
+  2025-06-18)` and is cacheable for an hour (`cacheScope: public`).
 
 ### Fixed
 
@@ -152,3 +213,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `-32603`); it is now handled like a missing `uri`.
 - `tools/call` without `arguments` raised an access violation inside the tool
   (returned as an `isError` result); the tool now receives an empty object.
+- The result object of a `TMCPToolBase<T, R>` tool was cloned into
+  `structuredContent` and never freed; every call leaked it.
+- Enumeration properties of a result were serialised as booleans.

@@ -7,14 +7,9 @@
   "expected": {
     "jsonrpc": "2.0",
     "id": 18,
-    "result": {
-      "contents": [
-        {
-          "uri": "",
-          "mimeType": "text/plain",
-          "text": "Error: Resource not found: "
-        }
-      ]
+    "error": {
+      "code": -32602,
+      "message": "params.uri is required"
     }
   }
 }

@@ -7,6 +7,7 @@ uses
   System.Classes,
   System.Generics.Collections,
   System.SyncObjs,
+  MCPServer.Types,
   MCPServer.Resource.Base;
 
 type
@@ -200,6 +201,9 @@ begin
   FName := 'Recent Logs';
   FDescription := 'Recent log entries from all categories';
   FMimeType := 'application/json';
+  // Live data: never cache, never share between callers.
+  FTtlMs := 0;
+  FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
 end;
 
 function TLogsRecentResource.GetResourceData: TLogEntries;
@@ -207,10 +211,7 @@ var
   Logs: TObjectList<TLogEntry>;
 begin
   Result := TLogEntries.Create;
-  
-  // Add access log entry
-  TLogBuffer.Instance.AddLog('INFO', 'Resource accessed: logs://recent', 'ACCESS');
-  
+
   Logs := TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES);
   try
     Result.Entries.AddRange(Logs);
