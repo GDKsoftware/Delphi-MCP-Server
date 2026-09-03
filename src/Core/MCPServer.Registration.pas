@@ -7,6 +7,7 @@ uses
   System.Generics.Collections,
   MCPServer.Tool.Base,
   MCPServer.Resource.Base,
+  MCPServer.Prompt.Base,
   MCPServer.Logger;
 
 type
@@ -14,9 +15,11 @@ type
 
   TMCPToolFactory = reference to function: IMCPTool;
   TMCPResourceFactory = reference to function: IMCPResource;
+  TMCPPromptFactory = reference to function: IMCPPrompt;
+  TMCPResourceTemplateFactory = reference to function: IMCPResourceTemplate;
 
-  /// Process-wide registry of tool and resource factories, enumerated in
-  /// registration order.
+  /// Process-wide registry of tool, resource, prompt and resource-template
+  /// factories, enumerated in registration order.
   ///
   /// The dictionaries exist from the class constructor on, so registration
   /// from unit initialization sections needs no lazy checks. Registration is
@@ -30,26 +33,39 @@ type
     class var FToolOrder: TList<string>;
     class var FResources: TDictionary<string, TMCPResourceFactory>;
     class var FResourceOrder: TList<string>;
+    class var FPrompts: TDictionary<string, TMCPPromptFactory>;
+    class var FPromptOrder: TList<string>;
+    class var FResourceTemplates: TDictionary<string, TMCPResourceTemplateFactory>;
+    class var FResourceTemplateOrder: TList<string>;
 
     class constructor Create;
     class destructor Destroy;
   public
     class procedure RegisterTool(const Name: string; Factory: TMCPToolFactory);
     class procedure RegisterResource(const URI: string; Factory: TMCPResourceFactory);
+    class procedure RegisterPrompt(const Name: string; Factory: TMCPPromptFactory);
+    class procedure RegisterResourceTemplate(const UriTemplate: string; Factory: TMCPResourceTemplateFactory);
     /// Removes a registration again (no-op for an unknown URI). Like
     /// registration, only meaningful before the managers are created.
     class procedure UnregisterResource(const URI: string);
 
     class function CreateTool(const Name: string): IMCPTool;
     class function CreateResource(const URI: string): IMCPResource;
+    class function CreatePrompt(const Name: string): IMCPPrompt;
+    class function CreateResourceTemplate(const UriTemplate: string): IMCPResourceTemplate;
 
     /// Names in registration order.
     class function GetToolNames: TArray<string>;
     /// URIs in registration order.
     class function GetResourceURIs: TArray<string>;
+    /// Names in registration order.
+    class function GetPromptNames: TArray<string>;
+    /// Template strings in registration order.
+    class function GetResourceTemplateURIs: TArray<string>;
 
     class function HasTool(const Name: string): Boolean;
     class function HasResource(const URI: string): Boolean;
+    class function HasPrompt(const Name: string): Boolean;
   end;
 
 implementation
@@ -62,6 +78,10 @@ begin
   FToolOrder := TList<string>.Create;
   FResources := TDictionary<string, TMCPResourceFactory>.Create;
   FResourceOrder := TList<string>.Create;
+  FPrompts := TDictionary<string, TMCPPromptFactory>.Create;
+  FPromptOrder := TList<string>.Create;
+  FResourceTemplates := TDictionary<string, TMCPResourceTemplateFactory>.Create;
+  FResourceTemplateOrder := TList<string>.Create;
 end;
 
 class destructor TMCPRegistry.Destroy;
@@ -70,6 +90,10 @@ begin
   FreeAndNil(FToolOrder);
   FreeAndNil(FResources);
   FreeAndNil(FResourceOrder);
+  FreeAndNil(FPrompts);
+  FreeAndNil(FPromptOrder);
+  FreeAndNil(FResourceTemplates);
+  FreeAndNil(FResourceTemplateOrder);
 end;
 
 class procedure TMCPRegistry.RegisterTool(const Name: string; Factory: TMCPToolFactory);
@@ -86,6 +110,23 @@ begin
     FResourceOrder.Add(URI);
   FResources.AddOrSetValue(URI, Factory);
   TLogger.Info('Registered resource: ' + URI);
+end;
+
+class procedure TMCPRegistry.RegisterPrompt(const Name: string; Factory: TMCPPromptFactory);
+begin
+  if not FPrompts.ContainsKey(Name) then
+    FPromptOrder.Add(Name);
+  FPrompts.AddOrSetValue(Name, Factory);
+  TLogger.Info('Registered prompt: ' + Name);
+end;
+
+class procedure TMCPRegistry.RegisterResourceTemplate(const UriTemplate: string;
+  Factory: TMCPResourceTemplateFactory);
+begin
+  if not FResourceTemplates.ContainsKey(UriTemplate) then
+    FResourceTemplateOrder.Add(UriTemplate);
+  FResourceTemplates.AddOrSetValue(UriTemplate, Factory);
+  TLogger.Info('Registered resource template: ' + UriTemplate);
 end;
 
 class procedure TMCPRegistry.UnregisterResource(const URI: string);
@@ -118,6 +159,26 @@ begin
     raise Exception.CreateFmt('Resource not found: %s', [URI]);
 end;
 
+class function TMCPRegistry.CreatePrompt(const Name: string): IMCPPrompt;
+var
+  Factory: TMCPPromptFactory;
+begin
+  if FPrompts.TryGetValue(Name, Factory) then
+    Result := Factory()
+  else
+    raise Exception.CreateFmt('Prompt not found: %s', [Name]);
+end;
+
+class function TMCPRegistry.CreateResourceTemplate(const UriTemplate: string): IMCPResourceTemplate;
+var
+  Factory: TMCPResourceTemplateFactory;
+begin
+  if FResourceTemplates.TryGetValue(UriTemplate, Factory) then
+    Result := Factory()
+  else
+    raise Exception.CreateFmt('Resource template not found: %s', [UriTemplate]);
+end;
+
 class function TMCPRegistry.GetToolNames: TArray<string>;
 begin
   Result := FToolOrder.ToArray;
@@ -128,6 +189,16 @@ begin
   Result := FResourceOrder.ToArray;
 end;
 
+class function TMCPRegistry.GetPromptNames: TArray<string>;
+begin
+  Result := FPromptOrder.ToArray;
+end;
+
+class function TMCPRegistry.GetResourceTemplateURIs: TArray<string>;
+begin
+  Result := FResourceTemplateOrder.ToArray;
+end;
+
 class function TMCPRegistry.HasTool(const Name: string): Boolean;
 begin
   Result := FTools.ContainsKey(Name);
@@ -136,6 +207,11 @@ end;
 class function TMCPRegistry.HasResource(const URI: string): Boolean;
 begin
   Result := FResources.ContainsKey(URI);
+end;
+
+class function TMCPRegistry.HasPrompt(const Name: string): Boolean;
+begin
+  Result := FPrompts.ContainsKey(Name);
 end;
 
 end.

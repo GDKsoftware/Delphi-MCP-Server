@@ -1,0 +1,281 @@
+unit MCPServer.PromptsManager;
+
+interface
+
+uses
+  System.SysUtils,
+  System.Classes,
+  System.JSON,
+  System.Rtti,
+  System.Generics.Collections,
+  MCPServer.Types,
+  MCPServer.Logger,
+  MCPServer.Prompt.Base;
+
+type
+  /// prompts/list and prompts/get over the prompts registered in
+  /// TMCPRegistry, listed in registration order.
+  ///
+  /// A missing or unknown prompt name is -32602 (EMCPError.UnknownPrompt);
+  /// a missing required argument or a wrong argument type is -32602 too
+  /// (mapped from the prompt's own EArgumentException), since prompts/get
+  /// has no isError concept to report it through instead.
+  TMCPPromptsManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPCapabilityProvider)
+  strict private
+    FPrompts: TDictionary<string, IMCPPrompt>;
+    FOrder: TList<string>;
+    FListTtlMs: Integer;
+    FListCacheScope: string;
+    procedure RegisterPrompt(const Prompt: IMCPPrompt);
+    procedure RegisterBuiltInPrompts;
+    procedure CheckCursor(const Params: TJSONObject);
+    function CreatePromptJSON(const Prompt: IMCPPrompt): TJSONObject;
+    function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    /// Adds a prompt to this manager only (next to the ones from TMCPRegistry).
+    procedure AddPrompt(const Prompt: IMCPPrompt);
+    /// The prompt registered under Name, or nil.
+    function TryGetPrompt(const Name: string; out Prompt: IMCPPrompt): Boolean;
+
+    function GetCapabilityName: string;
+    function HandlesMethod(const Method: string): Boolean;
+    function ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;
+    function ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
+      const Context: IMCPRequestContext): TValue;
+    procedure DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+
+    function ListPrompts: TValue; overload;
+    function ListPrompts(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
+    function GetPrompt(const Params: System.JSON.TJSONObject): TValue; overload;
+    function GetPrompt(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
+
+    /// Cache hints on prompts/list for modern clients; 0 and 'private' unless set.
+    property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
+    property ListCacheScope: string read FListCacheScope write FListCacheScope;
+  end;
+
+implementation
+
+uses
+  MCPServer.Registration,
+  MCPServer.RequestContext,
+  MCPServer.Errors;
+
+{ TMCPPromptsManager }
+
+constructor TMCPPromptsManager.Create;
+begin
+  inherited;
+  FPrompts := TDictionary<string, IMCPPrompt>.Create;
+  FOrder := TList<string>.Create;
+  FListTtlMs := 0;
+  FListCacheScope := MCP_CACHE_SCOPE_PRIVATE;
+  RegisterBuiltInPrompts;
+end;
+
+destructor TMCPPromptsManager.Destroy;
+begin
+  FPrompts.Free;
+  FOrder.Free;
+  inherited;
+end;
+
+function TMCPPromptsManager.GetCapabilityName: string;
+begin
+  Result := 'prompts';
+end;
+
+function TMCPPromptsManager.HandlesMethod(const Method: string): Boolean;
+begin
+  Result := (Method = 'prompts/list') or (Method = 'prompts/get');
+end;
+
+procedure TMCPPromptsManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+begin
+  var Prompts := TJSONObject.Create;
+  Prompts.AddPair('listChanged', TJSONBool.Create(False));
+  Capabilities.AddPair('prompts', Prompts);
+end;
+
+function TMCPPromptsManager.EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
+begin
+  if Assigned(Context) then
+    Result := Context.Era
+  else
+    Result := TMCPProtocolEra.Legacy;
+end;
+
+function TMCPPromptsManager.ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;
+begin
+  Result := ExecuteMethodWithContext(Method, Params, TMCPRequestContext.Current);
+end;
+
+function TMCPPromptsManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
+  const Context: IMCPRequestContext): TValue;
+begin
+  if Method = 'prompts/list' then
+    Result := ListPrompts(Params, EraOf(Context))
+  else if Method = 'prompts/get' then
+    Result := GetPrompt(Params, EraOf(Context))
+  else
+    raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+end;
+
+procedure TMCPPromptsManager.RegisterPrompt(const Prompt: IMCPPrompt);
+begin
+  if not FPrompts.ContainsKey(Prompt.Name) then
+    FOrder.Add(Prompt.Name);
+  FPrompts.AddOrSetValue(Prompt.Name, Prompt);
+end;
+
+procedure TMCPPromptsManager.RegisterBuiltInPrompts;
+begin
+  for var PromptName in TMCPRegistry.GetPromptNames do
+    RegisterPrompt(TMCPRegistry.CreatePrompt(PromptName));
+end;
+
+procedure TMCPPromptsManager.AddPrompt(const Prompt: IMCPPrompt);
+begin
+  RegisterPrompt(Prompt);
+end;
+
+function TMCPPromptsManager.TryGetPrompt(const Name: string; out Prompt: IMCPPrompt): Boolean;
+begin
+  Result := FPrompts.TryGetValue(Name, Prompt);
+end;
+
+procedure TMCPPromptsManager.CheckCursor(const Params: TJSONObject);
+begin
+  // Every list fits in one page; a cursor is never one this server issued.
+  if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
+    raise EMCPError.InvalidParams('Invalid cursor');
+end;
+
+function TMCPPromptsManager.CreatePromptJSON(const Prompt: IMCPPrompt): TJSONObject;
+var
+  Metadata: IMCPPromptMetadata;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair('name', Prompt.Name);
+  if Prompt.Title <> Prompt.Name then
+    Result.AddPair('title', Prompt.Title);
+  if Prompt.Description <> '' then
+    Result.AddPair('description', Prompt.Description);
+
+  var Arguments := Prompt.Arguments;
+  if Length(Arguments) > 0 then
+  begin
+    var ArgumentsArray := TJSONArray.Create;
+    Result.AddPair('arguments', ArgumentsArray);
+    for var Arg in Arguments do
+    begin
+      var ArgObject := TJSONObject.Create;
+      ArgumentsArray.AddElement(ArgObject);
+      ArgObject.AddPair('name', Arg.Name);
+      if Arg.Description <> '' then
+        ArgObject.AddPair('description', Arg.Description);
+      ArgObject.AddPair('required', TJSONBool.Create(Arg.Required));
+    end;
+  end;
+
+  if Supports(Prompt, IMCPPromptMetadata, Metadata) and Assigned(Metadata.Icons) then
+    Result.AddPair('icons', TJSONArray(Metadata.Icons.Clone));
+end;
+
+function TMCPPromptsManager.ListPrompts: TValue;
+begin
+  Result := ListPrompts(nil, TMCPProtocolEra.Legacy);
+end;
+
+function TMCPPromptsManager.ListPrompts(const Params: TJSONObject; Era: TMCPProtocolEra): TValue;
+begin
+  TLogger.Info('MCP ListPrompts called');
+  CheckCursor(Params);
+
+  var ResultJSON := TJSONObject.Create;
+  try
+    var PromptsArray := TJSONArray.Create;
+    ResultJSON.AddPair('prompts', PromptsArray);
+    for var Name in FOrder do
+      PromptsArray.AddElement(CreatePromptJSON(FPrompts[Name]));
+
+    if Era = TMCPProtocolEra.Modern then
+    begin
+      ResultJSON.AddPair('ttlMs', TJSONNumber.Create(FListTtlMs));
+      ResultJSON.AddPair('cacheScope', FListCacheScope);
+    end;
+
+    Result := TValue.From<TJSONObject>(ResultJSON);
+  except
+    ResultJSON.Free;
+    raise;
+  end;
+end;
+
+function TMCPPromptsManager.GetPrompt(const Params: System.JSON.TJSONObject): TValue;
+begin
+  Result := GetPrompt(Params, TMCPProtocolEra.Legacy);
+end;
+
+function TMCPPromptsManager.GetPrompt(const Params: TJSONObject; Era: TMCPProtocolEra): TValue;
+var
+  Prompt: IMCPPrompt;
+begin
+  if not Assigned(Params) then
+    raise EMCPError.InvalidParams('params.name is required');
+  var NameValue := Params.GetValue('name');
+  if not (NameValue is TJSONString) or (TJSONString(NameValue).Value = '') then
+    raise EMCPError.InvalidParams('params.name is required and must be a non-empty string');
+  var PromptName := TJSONString(NameValue).Value;
+
+  var ArgumentsValue := Params.GetValue('arguments');
+  if Assigned(ArgumentsValue) and not (ArgumentsValue is TJSONObject) and not (ArgumentsValue is TJSONNull) then
+    raise EMCPError.InvalidParams('params.arguments must be an object');
+  var OwnedArguments: TJSONObject := nil;
+  var Arguments: TJSONObject;
+  if ArgumentsValue is TJSONObject then
+    Arguments := TJSONObject(ArgumentsValue)
+  else
+  begin
+    OwnedArguments := TJSONObject.Create;
+    Arguments := OwnedArguments;
+  end;
+
+  try
+    if not FPrompts.TryGetValue(PromptName, Prompt) then
+      raise EMCPError.UnknownPrompt(PromptName);
+
+    TLogger.Info('MCP GetPrompt called for prompt: ' + PromptName);
+
+    var Messages := TMCPPromptMessages.Create;
+    try
+      var Description: string;
+      try
+        Description := Prompt.Get(Arguments, Messages);
+      except
+        on E: EArgumentException do
+          raise EMCPError.InvalidParams('Invalid arguments: ' + E.Message);
+      end;
+
+      var ResultJSON := TJSONObject.Create;
+      try
+        if Description <> '' then
+          ResultJSON.AddPair('description', Description);
+        ResultJSON.AddPair('messages', Messages.ToJson);
+        Result := TValue.From<TJSONObject>(ResultJSON);
+      except
+        ResultJSON.Free;
+        raise;
+      end;
+    finally
+      Messages.Free;
+    end;
+  finally
+    OwnedArguments.Free;
+  end;
+end;
+
+end.
