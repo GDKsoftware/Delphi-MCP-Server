@@ -19,6 +19,11 @@
         "resources": {
           "subscribe": false,
           "listChanged": false
+        },
+        "prompts": {
+          "listChanged": false
+        },
+        "completions": {
         }
       },
       "serverInfo": {

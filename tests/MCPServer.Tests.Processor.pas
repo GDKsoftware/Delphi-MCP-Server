@@ -126,7 +126,7 @@ end;
 
 procedure TProcessorTests.Modern_UnknownMethod_Is404;
 begin
-  var Outcome := Run('{"jsonrpc":"2.0","id":1,"method":"prompts/list","params":{' + META + '}}', TMCPTransportHints.None);
+  var Outcome := Run('{"jsonrpc":"2.0","id":1,"method":"totally/bogus/method","params":{' + META + '}}', TMCPTransportHints.None);
   Assert.AreEqual(404, Outcome.HttpStatus);
   Assert.AreEqual(TMCPProtocolEra.Modern, Outcome.Era);
   var Response := Parse(Outcome.Body);
@@ -139,7 +139,7 @@ end;
 
 procedure TProcessorTests.Legacy_UnknownMethod_Is200;
 begin
-  var Outcome := Run('{"jsonrpc":"2.0","id":1,"method":"prompts/list"}', TMCPTransportHints.ForHttp(True, '2025-06-18'));
+  var Outcome := Run('{"jsonrpc":"2.0","id":1,"method":"totally/bogus/method"}', TMCPTransportHints.ForHttp(True, '2025-06-18'));
   Assert.AreEqual(200, Outcome.HttpStatus);
   Assert.AreEqual(TMCPProtocolEra.Legacy, Outcome.Era);
 end;

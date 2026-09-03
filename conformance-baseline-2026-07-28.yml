@@ -3,16 +3,7 @@
 # Regenerate with scripts/run-conformance.ps1 -NoBaseline after a change and prune what passes.
 server:
   - server-stateless
-  - completion-complete
   - tools-call-with-progress
-  # resource templates are not implemented
-  - resources-templates-read
-  - prompts-list
-  - prompts-get-simple
-  - prompts-get-with-args
-  - prompts-get-embedded-resource
-  - prompts-get-with-image
-  - caching
   - input-required-result-basic-elicitation
   - input-required-result-basic-sampling
   - input-required-result-basic-list-roots

@@ -121,7 +121,7 @@ try {
         @{ Name = 'modern-discover';               Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: server/discover'); Body = '{"jsonrpc":"2.0","id":"d1","method":"server/discover","params":{' + $modernMeta + '}}' }
         @{ Name = 'modern-tools-list';             Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: tools/list'); Body = '{"jsonrpc":"2.0","id":20,"method":"tools/list","params":{' + $modernMeta + '}}' }
         @{ Name = 'modern-tools-call-name-base64';  Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: tools/call', 'Mcp-Name: =?base64?ZWNobw==?='); Body = '{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello modern"},' + $modernMeta + '}}' }
-        @{ Name = 'modern-unknown-method';         Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: prompts/list'); Body = '{"jsonrpc":"2.0","id":21,"method":"prompts/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-unknown-method';         Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: totally/bogus/method'); Body = '{"jsonrpc":"2.0","id":21,"method":"totally/bogus/method","params":{' + $modernMeta + '}}' }
         @{ Name = 'modern-missing-version-header'; Method = 'POST';    Headers = @($jsonType, $jsonAccept, 'Mcp-Method: tools/list'); Body = '{"jsonrpc":"2.0","id":22,"method":"tools/list","params":{' + $modernMeta + '}}' }
         @{ Name = 'modern-missing-method-header';  Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":26,"method":"tools/list","params":{' + $modernMeta + '}}' }
         @{ Name = 'modern-method-header-mismatch'; Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: tools/call'); Body = '{"jsonrpc":"2.0","id":27,"method":"tools/list","params":{' + $modernMeta + '}}' }
@@ -140,7 +140,7 @@ try {
         @{ Name = 'post-client-response';          Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":1,"result":{}}' }
         @{ Name = 'post-batch-notifications';      Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '[{"jsonrpc":"2.0","method":"notifications/initialized"}]' }
         @{ Name = 'post-batch-requests';           Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '[{"jsonrpc":"2.0","id":6,"method":"ping"}]' }
-        @{ Name = 'post-unknown-method';           Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":7,"method":"prompts/list"}' }
+        @{ Name = 'post-unknown-method';           Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":7,"method":"totally/bogus/method"}' }
         @{ Name = 'post-parse-error';              Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":8,"method":' }
         @{ Name = 'post-empty-body';               Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '' }
         @{ Name = 'post-no-accept-header';         Method = 'POST';    Headers = @($jsonType);              Body = '{"jsonrpc":"2.0","id":9,"method":"ping"}' }

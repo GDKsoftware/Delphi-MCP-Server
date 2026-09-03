@@ -89,6 +89,17 @@ type
     constructor Create; override;
   end;
 
+  /// A hand-written schema exercising the JSON Schema 2020-12 keywords the
+  /// conformance suite checks for verbatim preservation: $schema, $defs,
+  /// $anchor, $ref, allOf/anyOf, if/then/else and additionalProperties.
+  TJsonSchema202012Tool = class(TMCPToolBase)
+  protected
+    function BuildSchema: TJSONObject; override;
+    function DoExecute(const Arguments: TJSONObject): TValue; override;
+  public
+    constructor Create; override;
+  end;
+
 const
   SAMPLE_TEXT_RESOURCE_URI = 'test://static-text';
   SAMPLE_TEXT_RESOURCE_CONTENT = 'This is the content of the static text resource.';
@@ -227,6 +238,43 @@ begin
   Result := Format('Completed %d steps', [Steps]);
 end;
 
+{ TJsonSchema202012Tool }
+
+constructor TJsonSchema202012Tool.Create;
+begin
+  inherited;
+  FName := 'json_schema_2020_12_tool';
+  FDescription := 'Tool with JSON Schema 2020-12 features';
+end;
+
+function TJsonSchema202012Tool.BuildSchema: TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(
+    '{'+
+    '"$schema":"https://json-schema.org/draft/2020-12/schema",'+
+    '"type":"object",'+
+    '"$defs":{"address":{"$anchor":"addressDef","type":"object",'+
+      '"properties":{"street":{"type":"string"},"city":{"type":"string"}}}},'+
+    '"properties":{'+
+      '"name":{"type":"string"},'+
+      '"address":{"$ref":"#/$defs/address"},'+
+      '"contactMethod":{"type":"string","enum":["phone","email"]},'+
+      '"phone":{"type":"string"},'+
+      '"email":{"type":"string"}'+
+    '},'+
+    '"allOf":[{"anyOf":[{"required":["phone"]},{"required":["email"]}]}],'+
+    '"if":{"properties":{"contactMethod":{"const":"phone"}},"required":["contactMethod"]},'+
+    '"then":{"required":["phone"]},'+
+    '"else":{"required":["email"]},'+
+    '"additionalProperties":false'+
+    '}') as TJSONObject;
+end;
+
+function TJsonSchema202012Tool.DoExecute(const Arguments: TJSONObject): TValue;
+begin
+  Result := TValue.From<string>('ok');
+end;
+
 initialization
   TMCPRegistry.RegisterTool('test_simple_text',
     function: IMCPTool
@@ -262,6 +310,11 @@ initialization
     function: IMCPTool
     begin
       Result := TErrorHandlingTool.Create;
+    end);
+  TMCPRegistry.RegisterTool('json_schema_2020_12_tool',
+    function: IMCPTool
+    begin
+      Result := TJsonSchema202012Tool.Create;
     end);
 
 end.

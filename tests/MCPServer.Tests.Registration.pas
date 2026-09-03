@@ -13,6 +13,8 @@ type
   public
     [Test] procedure BuiltInTools_AreRegisteredFromInitialization;
     [Test] procedure BuiltInResources_AreRegisteredFromInitialization;
+    [Test] procedure BuiltInPrompts_AreRegisteredFromInitialization;
+    [Test] procedure BuiltInResourceTemplates_AreRegisteredFromInitialization;
     [Test] procedure ServerStatus_IsRegisteredByDefault;
     [Test] procedure CreateTool_UnknownName_Raises;
     [Test] procedure CreateResource_UnknownUri_Raises;
@@ -34,7 +36,7 @@ begin
   Assert.IsTrue(TMCPRegistry.HasTool('get_time'));
   Assert.IsTrue(TMCPRegistry.HasTool('list_files'));
   Assert.IsTrue(TMCPRegistry.HasTool('calculate'));
-  Assert.AreEqual(11, Integer(Length(TMCPRegistry.GetToolNames)));
+  Assert.AreEqual(12, Integer(Length(TMCPRegistry.GetToolNames)));
 end;
 
 procedure TRegistryTests.BuiltInResources_AreRegisteredFromInitialization;
@@ -44,6 +46,23 @@ begin
   Assert.IsTrue(TMCPRegistry.HasResource('logs://recent'));
   Assert.IsTrue(TMCPRegistry.HasResource('server://status'));
   Assert.AreEqual(6, Integer(Length(TMCPRegistry.GetResourceURIs)));
+end;
+
+procedure TRegistryTests.BuiltInPrompts_AreRegisteredFromInitialization;
+begin
+  Assert.IsTrue(TMCPRegistry.HasPrompt('summarize_logs'));
+  Assert.IsTrue(TMCPRegistry.HasPrompt('test_simple_prompt'));
+  Assert.IsTrue(TMCPRegistry.HasPrompt('test_prompt_with_arguments'));
+  Assert.IsTrue(TMCPRegistry.HasPrompt('test_prompt_with_embedded_resource'));
+  Assert.IsTrue(TMCPRegistry.HasPrompt('test_prompt_with_image'));
+  Assert.AreEqual(5, Integer(Length(TMCPRegistry.GetPromptNames)));
+end;
+
+procedure TRegistryTests.BuiltInResourceTemplates_AreRegisteredFromInitialization;
+begin
+  Assert.AreEqual(2, Integer(Length(TMCPRegistry.GetResourceTemplateURIs)));
+  Assert.AreEqual('logs://{level}', TMCPRegistry.GetResourceTemplateURIs[0]);
+  Assert.AreEqual('test://template/{id}/data', TMCPRegistry.GetResourceTemplateURIs[1]);
 end;
 
 procedure TRegistryTests.ServerStatus_IsRegisteredByDefault;

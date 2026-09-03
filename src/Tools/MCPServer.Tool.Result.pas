@@ -6,7 +6,9 @@ uses
   System.SysUtils,
   System.Classes,
   System.JSON,
-  MCPServer.Types;
+  System.Generics.Collections,
+  MCPServer.Types,
+  MCPServer.ContentBlocks;
 
 type
   /// Builds a tools/call result: content blocks of every kind, optional
@@ -19,7 +21,6 @@ type
     FStructuredContent: TJSONValue;
     FMeta: TJSONObject;
     FIsError: Boolean;
-    function AddBlock(const BlockType: string): TJSONObject;
     function BuildContent(Era: TMCPProtocolEra): TJSONArray;
   public
     constructor Create;
@@ -56,23 +57,7 @@ type
     property StructuredContent: TJSONValue read FStructuredContent;
   end;
 
-  /// Base64 without line breaks, as the schema requires for blobs.
-  function EncodeBase64Blob(const Data: TBytes): string;
-
 implementation
-
-uses
-  System.NetEncoding;
-
-function EncodeBase64Blob(const Data: TBytes): string;
-begin
-  var Encoding := TBase64Encoding.Create(0);
-  try
-    Result := Encoding.EncodeBytesToString(Data);
-  finally
-    Encoding.Free;
-  end;
-end;
 
 { TMCPToolResult }
 
@@ -90,16 +75,9 @@ begin
   inherited;
 end;
 
-function TMCPToolResult.AddBlock(const BlockType: string): TJSONObject;
-begin
-  Result := TJSONObject.Create;
-  Result.AddPair('type', BlockType);
-  FContent.AddElement(Result);
-end;
-
 function TMCPToolResult.AddText(const Text: string): TMCPToolResult;
 begin
-  AddBlock('text').AddPair('text', Text);
+  FContent.AddElement(CreateTextBlock(Text));
   Result := Self;
 end;
 
@@ -110,9 +88,7 @@ end;
 
 function TMCPToolResult.AddImage(const Base64Data, MimeType: string): TMCPToolResult;
 begin
-  var Block := AddBlock('image');
-  Block.AddPair('data', Base64Data);
-  Block.AddPair('mimeType', MimeType);
+  FContent.AddElement(CreateImageBlock(Base64Data, MimeType));
   Result := Self;
 end;
 
@@ -123,41 +99,25 @@ end;
 
 function TMCPToolResult.AddAudio(const Base64Data, MimeType: string): TMCPToolResult;
 begin
-  var Block := AddBlock('audio');
-  Block.AddPair('data', Base64Data);
-  Block.AddPair('mimeType', MimeType);
+  FContent.AddElement(CreateAudioBlock(Base64Data, MimeType));
   Result := Self;
 end;
 
 function TMCPToolResult.AddResourceLink(const Uri, Name, Description, MimeType: string): TMCPToolResult;
 begin
-  var Block := AddBlock('resource_link');
-  Block.AddPair('uri', Uri);
-  Block.AddPair('name', Name);
-  if Description <> '' then
-    Block.AddPair('description', Description);
-  if MimeType <> '' then
-    Block.AddPair('mimeType', MimeType);
+  FContent.AddElement(CreateResourceLinkBlock(Uri, Name, Description, MimeType));
   Result := Self;
 end;
 
 function TMCPToolResult.AddEmbeddedText(const Uri, MimeType, Text: string): TMCPToolResult;
 begin
-  var Resource := TJSONObject.Create;
-  Resource.AddPair('uri', Uri);
-  Resource.AddPair('mimeType', MimeType);
-  Resource.AddPair('text', Text);
-  AddBlock('resource').AddPair('resource', Resource);
+  FContent.AddElement(CreateEmbeddedTextBlock(Uri, MimeType, Text));
   Result := Self;
 end;
 
 function TMCPToolResult.AddEmbeddedBlob(const Uri, MimeType: string; const Data: TBytes): TMCPToolResult;
 begin
-  var Resource := TJSONObject.Create;
-  Resource.AddPair('uri', Uri);
-  Resource.AddPair('mimeType', MimeType);
-  Resource.AddPair('blob', EncodeBase64Blob(Data));
-  AddBlock('resource').AddPair('resource', Resource);
+  FContent.AddElement(CreateEmbeddedBlobBlock(Uri, MimeType, EncodeBase64Blob(Data)));
   Result := Self;
 end;
 

@@ -64,6 +64,26 @@ type
     constructor Create; override;
   end;
 
+  /// A single log level, e.g. "logs://INFO"; matched by TLogsByLevelTemplate.
+  TLogsByLevelResource = class(TMCPResourceBase<TLogEntries>)
+  private
+    FLevel: string;
+  protected
+    function GetResourceData: TLogEntries; override;
+  public
+    constructor CreateForLevel(const AUri, ALevel: string); reintroduce;
+  end;
+
+  /// logs://{level}: the same recent-log data as logs://recent, filtered to
+  /// one level. Completes the level argument against the levels actually
+  /// present in the buffer.
+  TLogsByLevelTemplate = class(TMCPResourceTemplateBase, IMCPCompletable)
+  public
+    constructor Create; override;
+    function CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource; override;
+    function Complete(const ArgumentName, Value: string;
+      const Context: TArray<TPair<string, string>>): TMCPCompletion;
+  end;
 
 implementation
 
@@ -226,6 +246,77 @@ begin
 end;
 
 
+{ TLogsByLevelResource }
+
+constructor TLogsByLevelResource.CreateForLevel(const AUri, ALevel: string);
+begin
+  inherited Create;
+  FLevel := ALevel;
+  FURI := AUri;
+  FName := 'Recent logs (' + ALevel + ')';
+  FDescription := 'Recent log entries at level ' + ALevel;
+  FMimeType := 'application/json';
+  FTtlMs := 0;
+  FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
+end;
+
+function TLogsByLevelResource.GetResourceData: TLogEntries;
+var
+  Logs: TObjectList<TLogEntry>;
+begin
+  Result := TLogEntries.Create;
+
+  Logs := TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES, FLevel);
+  try
+    Result.Entries.AddRange(Logs);
+    Result.TotalCount := Logs.Count;
+    Result.FilteredCount := Logs.Count;
+    Logs.OwnsObjects := False;
+  finally
+    Logs.Free;
+  end;
+end;
+
+{ TLogsByLevelTemplate }
+
+constructor TLogsByLevelTemplate.Create;
+begin
+  inherited;
+  FUriTemplate := 'logs://{level}';
+  FName := 'Recent logs by level';
+  FDescription := 'Recent log entries at the given level, e.g. logs://INFO';
+  FMimeType := 'application/json';
+end;
+
+function TLogsByLevelTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
+begin
+  Result := TLogsByLevelResource.CreateForLevel(URI, Vars['level']);
+end;
+
+function TLogsByLevelTemplate.Complete(const ArgumentName, Value: string;
+  const Context: TArray<TPair<string, string>>): TMCPCompletion;
+begin
+  if ArgumentName <> 'level' then
+    Exit(TMCPCompletion.Create(nil));
+
+  var Levels := TStringList.Create;
+  try
+    Levels.Sorted := True;
+    Levels.Duplicates := dupIgnore;
+    var Entries := TLogBuffer.Instance.GetLogs(1000);
+    try
+      for var Entry in Entries do
+        if Entry.Level.StartsWith(Value, True) then
+          Levels.Add(Entry.Level);
+    finally
+      Entries.Free;
+    end;
+    Result := TMCPCompletion.Create(Levels.ToStringArray, Levels.Count);
+  finally
+    Levels.Free;
+  end;
+end;
+
 initialization
   TLogBuffer.FLock := TCriticalSection.Create;
   
@@ -241,6 +332,13 @@ initialization
     function: IMCPResource
     begin
       Result := TLogsRecentResource.Create;
+    end
+  );
+
+  TMCPRegistry.RegisterResourceTemplate('logs://{level}',
+    function: IMCPResourceTemplate
+    begin
+      Result := TLogsByLevelTemplate.Create;
     end
   );
   

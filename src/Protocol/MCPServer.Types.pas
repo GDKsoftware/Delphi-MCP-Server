@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils,
   System.JSON,
-  System.Rtti;
+  System.Rtti,
+  System.Generics.Collections;
 
 const
   /// Protocol version answered by the initialize handshake. Kept under its
@@ -136,6 +137,72 @@ type
     constructor Create(const AValue1, AValue2, AValue3: string); overload;
     constructor Create(const AValue1, AValue2, AValue3, AValue4: string); overload;
     property Values: TArray<string> read FValues;
+  end;
+
+  /// JSON Schema "minLength" of a string parameter.
+  SchemaMinLengthAttribute = class(TCustomAttribute)
+  private
+    FMinLength: Integer;
+  public
+    constructor Create(const AMinLength: Integer);
+    property MinLength: Integer read FMinLength;
+  end;
+
+  /// JSON Schema "maxLength" of a string parameter.
+  SchemaMaxLengthAttribute = class(TCustomAttribute)
+  private
+    FMaxLength: Integer;
+  public
+    constructor Create(const AMaxLength: Integer);
+    property MaxLength: Integer read FMaxLength;
+  end;
+
+  /// JSON Schema "pattern" of a string parameter (an ECMA-262 regex).
+  SchemaPatternAttribute = class(TCustomAttribute)
+  private
+    FPattern: string;
+  public
+    constructor Create(const APattern: string);
+    property Pattern: string read FPattern;
+  end;
+
+  /// JSON Schema "default" of a parameter, given as its JSON text
+  /// (for example '"red"', '0', 'true').
+  SchemaDefaultAttribute = class(TCustomAttribute)
+  private
+    FJson: string;
+  public
+    constructor Create(const AJson: string);
+    property Json: string read FJson;
+  end;
+
+  /// Explicit JSON property name, overriding the default (lowercased
+  /// property name) the generator and the serializer otherwise use.
+  SchemaNameAttribute = class(TCustomAttribute)
+  private
+    FName: string;
+  public
+    constructor Create(const AName: string);
+    property Name: string read FName;
+  end;
+
+  /// Class-level: forbids properties the schema does not list. Applies to a
+  /// tool's or prompt's parameter class; default is to allow them.
+  SchemaAdditionalPropertiesAttribute = class(TCustomAttribute)
+  private
+    FAllowed: Boolean;
+  public
+    constructor Create(const AAllowed: Boolean);
+    property Allowed: Boolean read FAllowed;
+  end;
+
+  /// Class-level: the JSON Schema dialect ($schema) of a generated schema.
+  SchemaDialectAttribute = class(TCustomAttribute)
+  private
+    FUri: string;
+  public
+    constructor Create(const AUri: string);
+    property Uri: string read FUri;
   end;
 
   TMCPToolsCapability = class;
@@ -331,6 +398,30 @@ type
     function GetCacheScope: string;
     property TtlMs: Integer read GetTtlMs;
     property CacheScope: string read GetCacheScope;
+  end;
+
+  /// Optional icons for prompts/list. May be nil; the prompt keeps ownership.
+  IMCPPromptMetadata = interface
+    ['{16C8DAEC-5F70-4192-D3E4-6F708192A3B4}']
+    function GetIcons: TJSONArray;
+    property Icons: TJSONArray read GetIcons;
+  end;
+
+  /// One suggestion set from completion/complete: at most 100 values, an
+  /// optional total (-1 when unknown) and whether more exist beyond Values.
+  TMCPCompletion = record
+    Values: TArray<string>;
+    Total: Integer;
+    HasMore: Boolean;
+    class function Create(const Values: TArray<string>; Total: Integer = -1): TMCPCompletion; static;
+  end;
+
+  /// Implemented by a prompt or resource template that offers argument
+  /// completion; checked with Supports before completion/complete calls it.
+  IMCPCompletable = interface
+    ['{27D9EBFD-6081-42A3-E4F5-708192A3B4C5}']
+    function Complete(const ArgumentName, Value: string;
+      const Context: TArray<TPair<string, string>>): TMCPCompletion;
   end;
 
   TMCPCapabilities = class
@@ -579,6 +670,81 @@ begin
   FValues[1] := AValue2;
   FValues[2] := AValue3;
   FValues[3] := AValue4;
+end;
+
+{ SchemaMinLengthAttribute }
+
+constructor SchemaMinLengthAttribute.Create(const AMinLength: Integer);
+begin
+  inherited Create;
+  FMinLength := AMinLength;
+end;
+
+{ SchemaMaxLengthAttribute }
+
+constructor SchemaMaxLengthAttribute.Create(const AMaxLength: Integer);
+begin
+  inherited Create;
+  FMaxLength := AMaxLength;
+end;
+
+{ SchemaPatternAttribute }
+
+constructor SchemaPatternAttribute.Create(const APattern: string);
+begin
+  inherited Create;
+  FPattern := APattern;
+end;
+
+{ SchemaDefaultAttribute }
+
+constructor SchemaDefaultAttribute.Create(const AJson: string);
+begin
+  inherited Create;
+  FJson := AJson;
+end;
+
+{ SchemaNameAttribute }
+
+constructor SchemaNameAttribute.Create(const AName: string);
+begin
+  inherited Create;
+  FName := AName;
+end;
+
+{ SchemaAdditionalPropertiesAttribute }
+
+constructor SchemaAdditionalPropertiesAttribute.Create(const AAllowed: Boolean);
+begin
+  inherited Create;
+  FAllowed := AAllowed;
+end;
+
+{ SchemaDialectAttribute }
+
+constructor SchemaDialectAttribute.Create(const AUri: string);
+begin
+  inherited Create;
+  FUri := AUri;
+end;
+
+{ TMCPCompletion }
+
+class function TMCPCompletion.Create(const Values: TArray<string>; Total: Integer): TMCPCompletion;
+const
+  MAX_COMPLETION_VALUES = 100;
+begin
+  if Length(Values) > MAX_COMPLETION_VALUES then
+  begin
+    Result.Values := Copy(Values, 0, MAX_COMPLETION_VALUES);
+    Result.HasMore := True;
+  end
+  else
+  begin
+    Result.Values := Values;
+    Result.HasMore := False;
+  end;
+  Result.Total := Total;
 end;
 
 { TMCPInitializeResponse }

@@ -23,14 +23,19 @@ type
   private
     FResources: TDictionary<string, IMCPResource>;
     FOrder: TList<string>;
+    FTemplates: TList<IMCPResourceTemplate>;
     FListTtlMs: Integer;
     FListCacheScope: string;
     procedure RegisterResource(const Resource: IMCPResource);
     procedure RegisterBuiltInResources;
+    procedure RegisterBuiltInResourceTemplates;
     procedure CheckCursor(const Params: TJSONObject);
     procedure AddListCacheHints(const ResultJSON: TJSONObject; Era: TMCPProtocolEra);
     function CreateResourceJSON(const Resource: IMCPResource): TJSONObject;
+    function CreateResourceTemplateJSON(const Template: IMCPResourceTemplate): TJSONObject;
     function CreateContentsItem(const Resource: IMCPResource): TJSONObject;
+    /// Exact match first, then the first matching template; nil when neither.
+    function FindResource(const URI: string): IMCPResource;
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
   public
     constructor Create;
@@ -38,6 +43,11 @@ type
 
     /// Adds a resource to this manager only (next to the ones from TMCPRegistry).
     procedure AddResource(const Resource: IMCPResource);
+    /// Adds a resource template to this manager only.
+    procedure AddResourceTemplate(const Template: IMCPResourceTemplate);
+    /// Exact registration lookups, for completion/complete.
+    function TryGetResource(const URI: string; out Resource: IMCPResource): Boolean;
+    function TryGetResourceTemplate(const UriTemplate: string; out Template: IMCPResourceTemplate): Boolean;
 
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
@@ -64,7 +74,7 @@ uses
   MCPServer.Registration,
   MCPServer.RequestContext,
   MCPServer.Errors,
-  MCPServer.Tool.Result;
+  MCPServer.ContentBlocks;
 
 { TMCPResourcesManager }
 
@@ -73,15 +83,18 @@ begin
   inherited;
   FResources := TDictionary<string, IMCPResource>.Create;
   FOrder := TList<string>.Create;
+  FTemplates := TList<IMCPResourceTemplate>.Create;
   FListTtlMs := 0;
   FListCacheScope := MCP_CACHE_SCOPE_PRIVATE;
   RegisterBuiltInResources;
+  RegisterBuiltInResourceTemplates;
 end;
 
 destructor TMCPResourcesManager.Destroy;
 begin
   FResources.Free;
   FOrder.Free;
+  FTemplates.Free;
   inherited;
 end;
 
@@ -144,9 +157,54 @@ begin
     RegisterResource(TMCPRegistry.CreateResource(ResourceURI));
 end;
 
+procedure TMCPResourcesManager.RegisterBuiltInResourceTemplates;
+begin
+  for var UriTemplate in TMCPRegistry.GetResourceTemplateURIs do
+    FTemplates.Add(TMCPRegistry.CreateResourceTemplate(UriTemplate));
+end;
+
 procedure TMCPResourcesManager.AddResource(const Resource: IMCPResource);
 begin
   RegisterResource(Resource);
+end;
+
+procedure TMCPResourcesManager.AddResourceTemplate(const Template: IMCPResourceTemplate);
+begin
+  FTemplates.Add(Template);
+end;
+
+function TMCPResourcesManager.TryGetResource(const URI: string; out Resource: IMCPResource): Boolean;
+begin
+  Result := FResources.TryGetValue(URI, Resource);
+end;
+
+function TMCPResourcesManager.TryGetResourceTemplate(const UriTemplate: string;
+  out Template: IMCPResourceTemplate): Boolean;
+begin
+  for var Candidate in FTemplates do
+    if Candidate.UriTemplate = UriTemplate then
+    begin
+      Template := Candidate;
+      Exit(True);
+    end;
+  Template := nil;
+  Result := False;
+end;
+
+function TMCPResourcesManager.FindResource(const URI: string): IMCPResource;
+begin
+  if FResources.TryGetValue(URI, Result) then
+    Exit;
+
+  var Vars := TMCPTemplateVars.Create;
+  try
+    for var Template in FTemplates do
+      if Template.Matches(URI, Vars) then
+        Exit(Template.CreateResource(URI, Vars));
+  finally
+    Vars.Free;
+  end;
+  Result := nil;
 end;
 
 procedure TMCPResourcesManager.CheckCursor(const Params: TJSONObject);
@@ -189,6 +247,19 @@ begin
     if Assigned(Metadata.Annotations) then
       Result.AddPair('annotations', TJSONObject(Metadata.Annotations.Clone));
   end;
+end;
+
+function TMCPResourcesManager.CreateResourceTemplateJSON(const Template: IMCPResourceTemplate): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair('uriTemplate', Template.UriTemplate);
+  Result.AddPair('name', Template.Name);
+  if Template.Title <> '' then
+    Result.AddPair('title', Template.Title);
+  if Template.Description <> '' then
+    Result.AddPair('description', Template.Description);
+  if Template.MimeType <> '' then
+    Result.AddPair('mimeType', Template.MimeType);
 end;
 
 function TMCPResourcesManager.CreateContentsItem(const Resource: IMCPResource): TJSONObject;
@@ -255,7 +326,8 @@ begin
 
   TLogger.Info('MCP ReadResource called for URI: ' + URI);
 
-  if not FResources.TryGetValue(URI, Resource) then
+  Resource := FindResource(URI);
+  if not Assigned(Resource) then
     raise EMCPError.ResourceNotFound(URI, Era);
 
   var ResultJSON := TJSONObject.Create;
@@ -305,8 +377,10 @@ begin
 
   var ResultJSON := TJSONObject.Create;
   try
-    // This server has no resource templates.
-    ResultJSON.AddPair('resourceTemplates', TJSONArray.Create);
+    var TemplatesArray := TJSONArray.Create;
+    ResultJSON.AddPair('resourceTemplates', TemplatesArray);
+    for var Template in FTemplates do
+      TemplatesArray.AddElement(CreateResourceTemplateJSON(Template));
     AddListCacheHints(ResultJSON, Era);
     Result := TValue.From<TJSONObject>(ResultJSON);
   except

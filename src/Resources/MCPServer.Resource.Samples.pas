@@ -33,6 +33,33 @@ type
     function ReadBinary: TBytes;
   end;
 
+  TTemplateData = class
+  private
+    FId: string;
+    FTemplateTest: Boolean;
+    FData: string;
+  public
+    property Id: string read FId write FId;
+    property TemplateTest: Boolean read FTemplateTest write FTemplateTest;
+    property Data: string read FData write FData;
+  end;
+
+  /// test://template/{id}/data, matched by TTemplateDataResourceTemplate.
+  TTemplateDataResource = class(TMCPResourceBase<TTemplateData>)
+  private
+    FId: string;
+  protected
+    function GetResourceData: TTemplateData; override;
+  public
+    constructor CreateForId(const AUri, AId: string);
+  end;
+
+  TTemplateDataResourceTemplate = class(TMCPResourceTemplateBase)
+  public
+    constructor Create; override;
+    function CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource; override;
+  end;
+
 implementation
 
 uses
@@ -89,6 +116,42 @@ begin
   Result := TNetEncoding.Base64.DecodeStringToBytes(SAMPLE_PNG_BASE64);
 end;
 
+{ TTemplateDataResource }
+
+constructor TTemplateDataResource.CreateForId(const AUri, AId: string);
+begin
+  inherited Create;
+  FId := AId;
+  FURI := AUri;
+  FName := 'Template data';
+  FDescription := 'Data keyed by the id captured from the template';
+  FMimeType := 'application/json';
+end;
+
+function TTemplateDataResource.GetResourceData: TTemplateData;
+begin
+  Result := TTemplateData.Create;
+  Result.Id := FId;
+  Result.TemplateTest := True;
+  Result.Data := 'Data for ID: ' + FId;
+end;
+
+{ TTemplateDataResourceTemplate }
+
+constructor TTemplateDataResourceTemplate.Create;
+begin
+  inherited;
+  FUriTemplate := 'test://template/{id}/data';
+  FName := 'Template data';
+  FDescription := 'Data keyed by an id path segment';
+  FMimeType := 'application/json';
+end;
+
+function TTemplateDataResourceTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
+begin
+  Result := TTemplateDataResource.CreateForId(URI, Vars['id']);
+end;
+
 initialization
   TMCPRegistry.RegisterResource(SAMPLE_TEXT_RESOURCE_URI,
     function: IMCPResource
@@ -99,6 +162,11 @@ initialization
     function: IMCPResource
     begin
       Result := TStaticBinaryResource.Create;
+    end);
+  TMCPRegistry.RegisterResourceTemplate('test://template/{id}/data',
+    function: IMCPResourceTemplate
+    begin
+      Result := TTemplateDataResourceTemplate.Create;
     end);
 
 end.

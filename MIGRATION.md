@@ -115,6 +115,21 @@ consumer), then cancels what is left rather than blocking forever.
 **A duplicate request id while the first is still in flight is `-32600`**,
 answered immediately, instead of being silently queued behind it.
 
+## Prompts, resource templates and completion
+
+**New capabilities, off unless you register the managers.** A registry that
+never registers `TMCPPromptsManager` or `TMCPCompletionManager` behaves
+exactly as before; the built-in `MCPServer.dpr`/stdio server registers both,
+so the shipped executable now advertises `prompts` and `completions` and
+answers `prompts/list`, `prompts/get`, `resources/templates/list` (with real
+entries instead of an empty array) and `completion/complete`.
+
+**A hand-written tool (`TMCPToolBase`) now validates its arguments.**
+Override `DoExecute` instead of `Execute`; the base class validates
+`Arguments` against `BuildSchema` first and raises `EArgumentException` (an
+`isError` result) on a mismatch. `TMCPToolBase<T>` and `TMCPToolBase<T, R>`
+tools are unaffected.
+
 ## Library use
 
 - `TMCPJsonRpcProcessor.ProcessRequest` and the manager interfaces are

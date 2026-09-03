@@ -68,10 +68,26 @@ uses
   MCPServer.Registration,
   MCPServer.RequestContext,
   MCPServer.Errors,
-  MCPServer.Tool.Result;
+  MCPServer.Tool.Result,
+  MCPServer.Schema.Validator;
 
 const
   TOOL_NAME_PATTERN = '^[A-Za-z0-9_.\-]{1,128}$';
+
+{$IFDEF DEBUG}
+procedure WarnIfStructuredContentMismatchesSchema(const Tool: IMCPTool; const Result: TJSONObject);
+begin
+  var OutputSchema := Tool.OutputSchema;
+  var StructuredContent := Result.GetValue('structuredContent');
+  if not Assigned(OutputSchema) or not Assigned(StructuredContent) then
+    Exit;
+
+  var Errors: TArray<string>;
+  if not TMCPSchemaValidator.Validate(OutputSchema, StructuredContent, Errors) then
+    TLogger.Warning(Format('Tool "%s" structuredContent does not match its outputSchema: %s',
+      [Tool.Name, string.Join('; ', Errors)]));
+end;
+{$ENDIF}
 
 { TMCPToolsManager }
 
@@ -250,6 +266,9 @@ begin
         Exit(ErrorResult('Error executing tool: ' + E.Message, Era));
     end;
     Result := ResultToJson(ResultValue, Era);
+    {$IFDEF DEBUG}
+    WarnIfStructuredContentMismatchesSchema(Tool, Result);
+    {$ENDIF}
   finally
     OwnedArguments.Free;
   end;

@@ -23,8 +23,11 @@ type
   ///   TJSONArray / TJSONObject        array / object (free form)
   ///   other classes                   nested object schema
   ///
-  /// Attributes: [SchemaDescription], [SchemaTitle], [SchemaFormat],
-  /// [SchemaMinimum], [SchemaMaximum], [SchemaEnum] and [Optional].
+  /// Property attributes: [SchemaDescription], [SchemaTitle], [SchemaFormat],
+  /// [SchemaMinimum], [SchemaMaximum], [SchemaMinLength], [SchemaMaxLength],
+  /// [SchemaPattern], [SchemaDefault], [SchemaEnum], [SchemaName] (overrides
+  /// the wire name) and [Optional]. Class attributes:
+  /// [SchemaAdditionalProperties] and [SchemaDialect] (root schema only).
   TMCPSchemaGenerator = class
   private
     const MAX_NESTING_DEPTH = 8;
@@ -64,6 +67,9 @@ end;
 
 class function TMCPSchemaGenerator.GetPropertyJsonName(Prop: TRttiProperty): string;
 begin
+  for var Attr in Prop.GetAttributes do
+    if Attr is SchemaNameAttribute then
+      Exit(SchemaNameAttribute(Attr).Name);
   Result := LowerCase(Prop.Name);
 end;
 
@@ -228,7 +234,15 @@ begin
       for var Value in SchemaEnumAttribute(Attr).Values do
         EnumArray.Add(Value);
       PropSchema.AddPair('enum', EnumArray);
-    end;
+    end
+    else if Attr is SchemaMinLengthAttribute then
+      PropSchema.AddPair('minLength', TJSONNumber.Create(SchemaMinLengthAttribute(Attr).MinLength))
+    else if Attr is SchemaMaxLengthAttribute then
+      PropSchema.AddPair('maxLength', TJSONNumber.Create(SchemaMaxLengthAttribute(Attr).MaxLength))
+    else if Attr is SchemaPatternAttribute then
+      PropSchema.AddPair('pattern', SchemaPatternAttribute(Attr).Pattern)
+    else if Attr is SchemaDefaultAttribute then
+      PropSchema.AddPair('default', TJSONObject.ParseJSONValue(SchemaDefaultAttribute(Attr).Json));
   end;
 end;
 
@@ -236,6 +250,11 @@ class function TMCPSchemaGenerator.ObjectSchema(RttiType: TRttiType; Depth: Inte
 begin
   Result := TJSONObject.Create;
   try
+    if Depth = 0 then
+      for var Attr in RttiType.GetAttributes do
+        if Attr is SchemaDialectAttribute then
+          Result.AddPair('$schema', SchemaDialectAttribute(Attr).Uri);
+
     Result.AddPair('type', 'object');
     var Properties := TJSONObject.Create;
     Result.AddPair('properties', Properties);
@@ -260,8 +279,17 @@ begin
     else
       RequiredArray.Free;
 
-    // A tool without parameters accepts an empty object and nothing else.
-    if Properties.Count = 0 then
+    var ExplicitAdditionalProperties := False;
+    for var Attr in RttiType.GetAttributes do
+      if Attr is SchemaAdditionalPropertiesAttribute then
+      begin
+        Result.AddPair('additionalProperties', TJSONBool.Create(SchemaAdditionalPropertiesAttribute(Attr).Allowed));
+        ExplicitAdditionalProperties := True;
+      end;
+
+    // A tool without parameters accepts an empty object and nothing else,
+    // unless the class said otherwise.
+    if not ExplicitAdditionalProperties and (Properties.Count = 0) then
       Result.AddPair('additionalProperties', TJSONBool.Create(False));
   except
     Result.Free;
