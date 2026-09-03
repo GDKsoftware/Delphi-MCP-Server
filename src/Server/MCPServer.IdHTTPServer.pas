@@ -408,8 +408,8 @@ end;
 
 function TMCPIdHTTPServer.GetNextEventID: string;
 begin
-  Inc(FEventIDCounter);
-  Result := IntToStr(FEventIDCounter);
+  // Called from Indy connection threads.
+  Result := IntToStr(AtomicIncrement(FEventIDCounter));
 end;
 
 function TMCPIdHTTPServer.AcceptsSSE(const AcceptHeader: string): Boolean;

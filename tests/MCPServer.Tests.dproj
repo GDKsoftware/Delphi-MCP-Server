@@ -96,6 +96,8 @@
         <DCCReference Include="MCPServer.Tests.Golden.pas"/>
         <DCCReference Include="MCPServer.Tests.Golden.Legacy.pas"/>
         <DCCReference Include="MCPServer.Tests.Constants.pas"/>
+        <DCCReference Include="MCPServer.Tests.ServerStatus.pas"/>
+        <DCCReference Include="MCPServer.Tests.Registration.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

@@ -34,7 +34,9 @@ uses
   MCPServer.Tests.Harness in 'MCPServer.Tests.Harness.pas',
   MCPServer.Tests.Golden in 'MCPServer.Tests.Golden.pas',
   MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas',
-  MCPServer.Tests.Constants in 'MCPServer.Tests.Constants.pas';
+  MCPServer.Tests.Constants in 'MCPServer.Tests.Constants.pas',
+  MCPServer.Tests.ServerStatus in 'MCPServer.Tests.ServerStatus.pas',
+  MCPServer.Tests.Registration in 'MCPServer.Tests.Registration.pas';
 
 procedure RunTests;
 begin
