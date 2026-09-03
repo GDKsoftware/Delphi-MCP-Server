@@ -87,6 +87,34 @@ depended on the previous dictionary order should use the names instead.
 carry `structuredContent` and a text block with the same JSON; `content` is
 never empty.
 
+## stdio transport
+
+**Non-ASCII input is no longer mangled.** stdin and stdout are read and
+written as UTF-8 byte streams now instead of Text I/O; a message with `é` or
+an emoji comes back unchanged. A client that worked around the old mangling
+should remove that workaround.
+
+**Requests are answered one at a time by default, still in arrival order.**
+Set `[Server] MaxConcurrentRequests` above 1 for a client that issues several
+requests before waiting for a reply and wants them handled in parallel.
+
+**`notifications/cancelled` now does something.** Sending it for a request
+still in flight stops that request and it gets no response, matching the
+specification; previously the notification was accepted but ignored.
+
+**A request with `_meta.progressToken` gets `notifications/progress`** from
+tools that report progress (`test_tool_with_progress` is the example); this
+is new traffic on stdout a client that does not expect it should tolerate,
+since it was already required by the specification.
+
+**The server exits promptly when stdin closes**, even with a request still
+running: it waits `[Server] MaxConcurrentRequests`-many workers up to 2
+seconds (configurable via `TMCPStdioTransport.ShutdownDrainMs` for a library
+consumer), then cancels what is left rather than blocking forever.
+
+**A duplicate request id while the first is still in flight is `-32600`**,
+answered immediately, instead of being silently queued behind it.
+
 ## Library use
 
 - `TMCPJsonRpcProcessor.ProcessRequest` and the manager interfaces are

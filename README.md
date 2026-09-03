@@ -119,9 +119,12 @@ Win32\Debug\MCPServer.exe --stdio
 ```
 
 The server will:
-- Read JSON-RPC requests from stdin (one per line)
-- Write JSON-RPC responses to stdout (one per line)
-- Log diagnostic messages to stderr
+- Read JSON-RPC messages from stdin, UTF-8, one per line, no byte-order mark
+- Write JSON-RPC messages to stdout the same way
+- Log diagnostic messages to stderr, never to stdout
+- Answer `notifications/cancelled` by stopping the named request; it gets no response
+- Send `notifications/progress` for a request that carries `_meta.progressToken`, before its response
+- Exit within `[Server] MaxConcurrentRequests` worker threads' drain time (2 seconds by default) once stdin closes
 
 **Use STDIO transport for:**
 - Codex (OpenAI)
@@ -129,6 +132,19 @@ The server will:
 - Automated testing and scripting
 
 **Supported flag variants:** `--stdio`, `-stdio`, `/stdio`
+
+By default requests are answered one at a time, in the order they arrive.
+`[Server] MaxConcurrentRequests` in `settings.ini` raises the number of worker
+threads for a client that issues concurrent requests over the same process; a
+stdio server never writes `settings.ini` on its own, so this and the other
+`[Server]` limits still need explicit configuration when they should differ
+from the defaults.
+
+A tool sees the request it is answering through `TMCPRequestContext.Current`:
+`CheckCancelled` raises once the client cancels, and `ReportProgress` sends a
+`notifications/progress` when the request carries a progress token. See
+`test_tool_with_progress` in `MCPServer.Tool.ContentSamples` for a worked
+example.
 
 ## Protocol Versions and Dual-Era Behaviour
 
@@ -513,9 +529,10 @@ The Inspector provides a web interface to interact with your MCP server, making 
 - **calculate**: Perform basic arithmetic calculations
 - **test_simple_text**, **test_image_content**, **test_audio_content**,
   **test_embedded_resource**, **test_multiple_content_types**,
-  **test_error_handling**: one small tool per content type and one that
-  fails, from `MCPServer.Tool.ContentSamples`; the conformance suite calls
-  these by name
+  **test_error_handling**, **test_tool_with_progress**: one small tool per
+  content type, one that fails, and one that reports progress and honours
+  cancellation, from `MCPServer.Tool.ContentSamples`; the conformance suite
+  calls these by name
 
 ## Available Example resources
 

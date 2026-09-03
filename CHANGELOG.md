@@ -7,6 +7,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Rewritten stdio transport (`MCPServer.StdioTransport`, `MCPServer.StdioChannel`):
+  UTF-8 byte framing on the standard handles instead of Text I/O (`é` and
+  other non-ASCII input used to come back mangled), a reader thread that
+  answers notifications, client responses and legacy `ping` inline, and
+  `[Server] MaxConcurrentRequests` (default 1) worker threads for everything
+  else, so responses keep arriving in request order by default.
+- `notifications/cancelled` over stdio: the named request stops and gets no
+  response (`IMCPRequestContext.IsCancelled`, `CheckCancelled`, `Cancel`,
+  `IMCPRequestTracker`). `_meta.progressToken` on a request gets
+  `notifications/progress` before its response
+  (`IMCPRequestContext.ReportProgress`, monotonic and throttled to one every
+  50 ms except the notification that reaches the total).
+  `test_tool_with_progress` (`MCPServer.Tool.ContentSamples`) exercises both.
+- On EOF, stdin closing drains in-flight work for `ShutdownDrainMs` (2 s
+  default) before cancelling what is left; the process no longer waits on a
+  request that never finishes.
+- A stdio server never writes `settings.ini` next to the executable; the
+  Windows console-control handler and the POSIX `SIGINT`/`SIGTERM` handlers,
+  and the debug memory-leak report, are skipped in stdio mode.
 - Streamable HTTP for both eras in `MCPServer.IdHTTPServer`: the processor's
   HTTP status is answered (400 for modern protocol errors, 404 for an unknown
   method in the modern era, 200 for every legacy JSON-RPC error); `Mcp-Method`
@@ -110,6 +129,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Non-ASCII input over stdio is decoded and echoed back unchanged; Text I/O
+  decoded stdin with the console code page, corrupting characters outside it
+  (a Windows console defaults to an ANSI code page, not UTF-8).
+- A duplicate request id on stdio while the first is still in flight is
+  `-32600`, answered at once, instead of being queued behind it.
+- `settings.ini`: `[Server] MaxConcurrentRequests` (default 1).
 - The server binds to loopback (`127.0.0.1` and `::1`) when `Host` is
   `localhost`; it listened on every interface. A non-loopback `Host` or an
   explicit `BindAddress` binds elsewhere.
