@@ -24,55 +24,79 @@ type
     property OutputSchema: TJSONObject read GetOutputSchema;
   end;
 
-  TMCPToolBase = class(TInterfacedObject, IMCPTool)
+  { Optional: a tool implements this alongside IMCPTool to describe its side effects and
+    network reach as MCP tool annotations (hints, not guarantees per the spec). tools/list
+    adds them to the response only when a tool supports this interface, so an existing
+    IMCPTool implementation that does not know about it keeps compiling and working unchanged. }
+  IMCPToolAnnotations = interface
+    ['{7B54B6B9-9A9B-4A9F-9C7B-1F6E2C6B7A9C}']
+    function GetAnnotations: TJSONObject;
+    property Annotations: TJSONObject read GetAnnotations;
+  end;
+
+  TMCPToolBase = class(TInterfacedObject, IMCPTool, IMCPToolAnnotations)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
+    FAnnotations: TJSONObject;
     function BuildSchema: TJSONObject; virtual; abstract;
+    { Declares the tool read-only (it never modifies state) and, unless OpenWorld is set,
+      confined to local/deterministic data (no calls to external services). }
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
     function Execute(const Arguments: TJSONObject): TValue; virtual; abstract;
   end;
 
-  TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool)
+  TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolAnnotations)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
+    FAnnotations: TJSONObject;
     function ExecuteWithParams(const Params: T): string;virtual; abstract;
     function GetParamsClass: TClass; virtual;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
     function Execute(const Arguments: TJSONObject): TValue;
   end;
 
-  TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool)
+  TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolAnnotations)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
+    FAnnotations: TJSONObject;
     function ExecuteWithParams(const Params: T): R;virtual; abstract;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
     function Execute(const Arguments: TJSONObject): TValue;
   end;
 
@@ -90,6 +114,33 @@ uses
 constructor TMCPToolBase.Create;
 begin
   inherited Create;
+end;
+
+destructor TMCPToolBase.Destroy;
+begin
+  FAnnotations.Free;
+  inherited;
+end;
+
+procedure TMCPToolBase.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  if not Assigned(FAnnotations) then
+    FAnnotations := TJSONObject.Create;
+{$IF COMPILERVERSION <= 29}
+  FAnnotations.AddPair('readOnlyHint', TJSONTrue.Create);
+  if OpenWorld then
+    FAnnotations.AddPair('openWorldHint', TJSONTrue.Create)
+  else
+    FAnnotations.AddPair('openWorldHint', TJSONFalse.Create);
+{$ELSE}
+  FAnnotations.AddPair('readOnlyHint', TJSONBool.Create(True));
+  FAnnotations.AddPair('openWorldHint', TJSONBool.Create(OpenWorld));
+{$ENDIF}
+end;
+
+function TMCPToolBase.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
 end;
 
 function TMCPToolBase.GetName: string;
@@ -125,6 +176,33 @@ end;
 constructor TMCPToolBase<T>.Create;
 begin
   inherited Create;
+end;
+
+destructor TMCPToolBase<T>.Destroy;
+begin
+  FAnnotations.Free;
+  inherited;
+end;
+
+procedure TMCPToolBase<T>.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  if not Assigned(FAnnotations) then
+    FAnnotations := TJSONObject.Create;
+{$IF COMPILERVERSION <= 29}
+  FAnnotations.AddPair('readOnlyHint', TJSONTrue.Create);
+  if OpenWorld then
+    FAnnotations.AddPair('openWorldHint', TJSONTrue.Create)
+  else
+    FAnnotations.AddPair('openWorldHint', TJSONFalse.Create);
+{$ELSE}
+  FAnnotations.AddPair('readOnlyHint', TJSONBool.Create(True));
+  FAnnotations.AddPair('openWorldHint', TJSONBool.Create(OpenWorld));
+{$ENDIF}
+end;
+
+function TMCPToolBase<T>.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
 end;
 
 function TMCPToolBase<T>.GetName: string;
@@ -178,6 +256,33 @@ end;
 constructor TMCPToolBase<T, R>.Create;
 begin
   inherited Create;
+end;
+
+destructor TMCPToolBase<T, R>.Destroy;
+begin
+  FAnnotations.Free;
+  inherited;
+end;
+
+procedure TMCPToolBase<T, R>.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  if not Assigned(FAnnotations) then
+    FAnnotations := TJSONObject.Create;
+{$IF COMPILERVERSION <= 29}
+  FAnnotations.AddPair('readOnlyHint', TJSONTrue.Create);
+  if OpenWorld then
+    FAnnotations.AddPair('openWorldHint', TJSONTrue.Create)
+  else
+    FAnnotations.AddPair('openWorldHint', TJSONFalse.Create);
+{$ELSE}
+  FAnnotations.AddPair('readOnlyHint', TJSONBool.Create(True));
+  FAnnotations.AddPair('openWorldHint', TJSONBool.Create(OpenWorld));
+{$ENDIF}
+end;
+
+function TMCPToolBase<T, R>.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
 end;
 
 function TMCPToolBase<T, R>.Execute(const Arguments: TJSONObject): TValue;

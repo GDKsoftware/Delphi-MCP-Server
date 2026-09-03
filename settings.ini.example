@@ -8,6 +8,9 @@ Host=localhost
 Name=delphi-mcp-server
 Version=1.0.0
 Endpoint=/mcp
+; Optional hint for the calling model, sent as "instructions" in the initialize response
+; (MCP spec: clients MAY add it to the system prompt). Leave empty to omit the field.
+Instructions=
 
 [CORS]
 ; Cross-Origin Resource Sharing configuration

@@ -283,6 +283,28 @@ initialization
 end.
 ```
 
+### Declaring Tool Annotations
+
+MCP clients decide things like whether to run tool calls in parallel, or whether to prompt the
+user for confirmation before a call, based on [tool annotations](https://modelcontextprotocol.io/docs/concepts/tools#tool-annotations)
+such as `readOnlyHint` and `openWorldHint`. Without them, a client has to assume the worst case:
+that a tool may write, may destroy data, and may call out to the network. If your tool never
+does any of that, say so by calling `MarkReadOnly` in its constructor:
+
+```pascal
+constructor TCustomTool.Create;
+begin
+  inherited;
+  FName := 'custom_tool';
+  FDescription := 'A custom tool that processes input';
+  MarkReadOnly; // readOnlyHint: true, openWorldHint: false (pass True for a tool that calls out)
+end;
+```
+
+This is entirely optional; a tool that never calls `MarkReadOnly` is reported to clients without
+an `annotations` object, which is the same as declaring nothing (the spec's defaults apply).
+Annotations are hints, not a security boundary — clients are not required to act on them.
+
 ### Creating Custom Resources
 
 ```pascal
@@ -454,6 +476,23 @@ The server provides four essential resources accessible via URIs:
 ## Configuration
 
 The server supports configuration through `settings.ini` files. A default `settings.ini.example` is provided in the repository.
+
+### Server Instructions
+
+`Server.Instructions` in `settings.ini` (or `TMCPSettings.Instructions` in code) is returned as
+`instructions` in the `initialize` response. Per the MCP spec this is a hint the client MAY add
+to its system prompt; some clients (Claude Code) do, others (Claude.ai, Claude Desktop as of
+this writing) currently ignore the field. Use it for guidance that applies across tools —
+_when_ to reach for this server at all — rather than duplicating what a single tool's
+description already says:
+
+```ini
+[Server]
+Instructions=Call search_docs before answering any question about this product's API, even when you already know a similar API from another product.
+```
+
+Left empty (the default), the field is omitted from the response entirely rather than sent as
+an empty string.
 
 ### SSL/TLS Configuration
 

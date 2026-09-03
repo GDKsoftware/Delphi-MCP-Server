@@ -124,12 +124,17 @@ begin
 {$ENDIF}
     
     ResultJSON.AddPair('sessionId', FSessionID);
-    
+
     ServerInfo := TJSONObject.Create;
     ResultJSON.AddPair('serverInfo', ServerInfo);
     ServerInfo.AddPair('name', FSettings.ServerName);
     ServerInfo.AddPair('version', FSettings.ServerVersion);
-    
+
+    { Optional per the MCP spec; left out entirely when empty rather than sent as "". }
+    if FSettings.Instructions <> '' then
+      ResultJSON.AddPair('instructions', FSettings.Instructions);
+
+
     TLogger.Info('Created new MCP session: ' + FSessionID);
     
     Result := TValue.From<TJSONObject>(ResultJSON);

@@ -15,6 +15,7 @@ type
     FServerName: string;
     FServerVersion: string;
     FEndpoint: string;
+    FInstructions: string;
     FCorsEnabled: Boolean;
     FCorsAllowedOrigins: string;
     FSettingsFile: string;
@@ -39,6 +40,10 @@ type
     property ServerName: string read FServerName write FServerName;
     property ServerVersion: string read FServerVersion write FServerVersion;
     property Endpoint: string read FEndpoint write FEndpoint;
+    { Optional guidance for the calling model, returned as "instructions" in the initialize
+      result (MCP spec: a hint the client MAY add to its system prompt). Empty by default;
+      the field is left out of the response entirely when empty. }
+    property Instructions: string read FInstructions write FInstructions;
     property CorsEnabled: Boolean read FCorsEnabled write FCorsEnabled;
     property CorsAllowedOrigins: string read FCorsAllowedOrigins write FCorsAllowedOrigins;
     property SettingsFile: string read FSettingsFile;
@@ -87,6 +92,7 @@ begin
   FServerName := 'delphi-mcp-server';
   FServerVersion := '1.0.0';
   FEndpoint := '/mcp';
+  FInstructions := '';
   FCorsEnabled := True;
   FCorsAllowedOrigins := 'http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1';
   FSSLEnabled := False;
@@ -115,7 +121,9 @@ begin
     IniFile.WriteString('Server', 'Name', FServerName);
     IniFile.WriteString('Server', 'Version', FServerVersion);
     IniFile.WriteString('Server', 'Endpoint', FEndpoint);
-    
+    IniFile.WriteString('Server', '; Optional hint added to the initialize response for the calling model', '');
+    IniFile.WriteString('Server', 'Instructions', FInstructions);
+
     IniFile.WriteString('CORS', '; Cross-Origin Resource Sharing configuration', '');
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', '; Comma-separated list of allowed origins', '');
@@ -145,7 +153,8 @@ begin
     FServerName := IniFile.ReadString('Server', 'Name', FServerName);
     FServerVersion := IniFile.ReadString('Server', 'Version', FServerVersion);
     FEndpoint := IniFile.ReadString('Server', 'Endpoint', FEndpoint);
-    
+    FInstructions := IniFile.ReadString('Server', 'Instructions', FInstructions);
+
     FCorsEnabled := IniFile.ReadBool('CORS', 'Enabled', FCorsEnabled);
     FCorsAllowedOrigins := IniFile.ReadString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
     
@@ -181,7 +190,8 @@ begin
     IniFile.WriteString('Server', 'Name', FServerName);
     IniFile.WriteString('Server', 'Version', FServerVersion);
     IniFile.WriteString('Server', 'Endpoint', FEndpoint);
-    
+    IniFile.WriteString('Server', 'Instructions', FInstructions);
+
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
     

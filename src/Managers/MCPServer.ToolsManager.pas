@@ -186,6 +186,8 @@ function TMCPToolsManager.CreateToolJSON(const Tool: IMCPTool): TJSONObject;
 var
   Schema: TJSONObject;
   SchemaClone: TJSONObject;
+  ToolAnnotations: IMCPToolAnnotations;
+  AnnotationsSource: TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('name', Tool.Name);
@@ -208,6 +210,14 @@ begin
     Schema.Free;
   end;
 
+  { Optional: only tools that implement IMCPToolAnnotations (the base classes do) carry
+    readOnlyHint/openWorldHint, so a tool built directly on IMCPTool is unaffected. }
+  if Supports(Tool, IMCPToolAnnotations, ToolAnnotations) then
+  begin
+    AnnotationsSource := ToolAnnotations.Annotations;
+    if Assigned(AnnotationsSource) then
+      Result.AddPair('annotations', TJSONObject(AnnotationsSource.Clone));
+  end;
 end;
 
 function TMCPToolsManager.BuildToolListResponse: TJSONObject;
