@@ -36,6 +36,7 @@ type
 
     // Single normalization rule shared by lookup and validation
     class function NormalizeKey(const Name: string): string; inline;
+    class function IsRequiredProperty(const Prop: TRttiProperty): Boolean;
   public
     class constructor Create;
     class destructor Destroy;
@@ -47,6 +48,11 @@ type
   end;
 
 implementation
+
+uses
+  System.Math,
+  System.DateUtils,
+  MCPServer.Types;
 
 { TMCPSerializer }
 
@@ -128,8 +134,13 @@ begin
 
     JsonValue := GetJsonValueCaseInsensitive(Json, RttiProp.Name);
 
-    if not Assigned(JsonValue) then
+    // Absent and null both mean "not given"; a required parameter must be given.
+    if not Assigned(JsonValue) or (JsonValue is TJSONNull) then
+    begin
+      if IsRequiredProperty(RttiProp) then
+        raise EArgumentException.CreateFmt('Missing required parameter "%s"', [LowerCase(RttiProp.Name)]);
       Continue;
+    end;
 
     try
       PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
@@ -145,6 +156,14 @@ begin
       {$WARN UNSAFE_CAST ON}
     end;
   end;
+end;
+
+class function TMCPSerializer.IsRequiredProperty(const Prop: TRttiProperty): Boolean;
+begin
+  for var Attr in Prop.GetAttributes do
+    if Attr is OptionalAttribute then
+      Exit(False);
+  Result := True;
 end;
 
 class procedure TMCPSerializer.Serialize(Obj: TObject; Json: TJSONObject);
@@ -196,49 +215,56 @@ begin
   if not Assigned(JsonValue) then
     Exit;
     
+  // Values must have the JSON type the schema advertises; a mismatch is an
+  // argument error the tool reports as isError, so the model can correct it.
   case RttiType.TypeKind of
-    tkInteger:
-      if JsonValue is TJSONNumber then
-        Result := (JsonValue as TJSONNumber).AsInt
-      else
-        Result := StrToIntDef(JsonValue.Value, 0);
-
-    tkInt64:
-      if JsonValue is TJSONNumber then
-        Result := (JsonValue as TJSONNumber).AsInt64
-      else
-        Result := StrToInt64Def(JsonValue.Value, 0);
-        
-    tkFloat:
-      if JsonValue is TJSONNumber then
-        Result := (JsonValue as TJSONNumber).AsDouble
-      else
-{$IF COMPILERVERSION <= 28}
-        Result := StrToFloatDef(JsonValue.Value, 0, TFormatSettings.Create('en-US'));
-{$ELSE}
-        Result := StrToFloatDef(JsonValue.Value, 0, FormatSettings.Invariant);
-{$ENDIF}
-
-    tkString, tkLString, tkWString, tkUString:
-      Result := JsonValue.Value;
-      
-    tkEnumeration:
-      if RttiType.Handle = TypeInfo(Boolean) then
+    tkInteger, tkInt64:
       begin
-{$IF COMPILERVERSION <= 29}
-        if (JsonValue is TJSONTrue) or (JsonValue is TJSONFalse) then
-          Result := JsonValue is TJSONTrue
-{$ELSE}
-        if JsonValue is TJSONBool then
-          Result := (JsonValue as TJSONBool).AsBoolean
-{$ENDIF}
+        if not (JsonValue is TJSONNumber) then
+          raise EArgumentException.Create('expected an integer');
+        var Number := TJSONNumber(JsonValue);
+        if Frac(Number.AsDouble) <> 0 then
+          raise EArgumentException.Create('expected an integer');
+        if RttiType.TypeKind = tkInt64 then
+          Result := Number.AsInt64
         else
-          Result := LowerCase(JsonValue.Value) = 'true';
+          Result := TValue.FromOrdinal(RttiType.Handle, Number.AsInt64);
+      end;
+
+    tkFloat:
+      if RttiType.Handle = TypeInfo(TDateTime) then
+      begin
+        if not (JsonValue is TJSONString) then
+          raise EArgumentException.Create('expected a date-time string');
+        try
+          Result := TValue.From<TDateTime>(ISO8601ToDate(JsonValue.Value, False));
+        except
+          raise EArgumentException.Create('expected an ISO 8601 date-time');
+        end;
       end
       else
       begin
-        Result := ConvertJsonToEnum(JsonValue, RttiType);
+        if not (JsonValue is TJSONNumber) then
+          raise EArgumentException.Create('expected a number');
+        Result := TJSONNumber(JsonValue).AsDouble;
       end;
+
+    tkString, tkLString, tkWString, tkUString:
+      begin
+        if not (JsonValue is TJSONString) or (JsonValue is TJSONNumber) then
+          raise EArgumentException.Create('expected a string');
+        Result := JsonValue.Value;
+      end;
+
+    tkEnumeration:
+      if RttiType.Handle = TypeInfo(Boolean) then
+      begin
+        if not (JsonValue is TJSONBool) then
+          raise EArgumentException.Create('expected a boolean');
+        Result := TJSONBool(JsonValue).AsBoolean;
+      end
+      else
+        Result := ConvertJsonToEnum(JsonValue, RttiType);
 
     tkClass:
       if JsonValue is TJSONObject then
@@ -246,16 +272,26 @@ begin
         NestedInstance := CreateInstanceFromType(RttiType);
         if Assigned(NestedInstance) then
         begin
-          DeserializeObject(NestedInstance, JsonValue as TJSONObject);
+          try
+            DeserializeObject(NestedInstance, JsonValue as TJSONObject);
+          except
+            NestedInstance.Free;
+            raise;
+          end;
           Result := NestedInstance;
         end;
       end
       else if JsonValue is TJSONArray then
-        Result := DeserializeArray(RttiType, JsonValue as TJSONArray);
-        
+        Result := DeserializeArray(RttiType, JsonValue as TJSONArray)
+      else
+        raise EArgumentException.Create('expected an object');
+
     tkDynArray:
-      if JsonValue is TJSONArray then
+      begin
+        if not (JsonValue is TJSONArray) then
+          raise EArgumentException.Create('expected an array');
         Result := DeserializeArray(RttiType, JsonValue as TJSONArray);
+      end;
   end;
 end;
 
@@ -327,33 +363,70 @@ var
   Obj: TObject;
 begin
   Result := nil;
-  
+
+  // Empty means nil for objects and [] for dynamic arrays; both are worth
+  // writing so the JSON has the property the schema advertises.
   if Value.IsEmpty then
+  begin
+    case RttiType.TypeKind of
+      tkClass:
+        Result := TJSONNull.Create;
+      tkDynArray:
+        Result := TJSONArray.Create;
+    end;
     Exit;
-    
+  end;
+
   case RttiType.TypeKind of
     tkInteger:
       Result := TJSONNumber.Create(Value.AsInteger);
 
     tkInt64:
       Result := TJSONNumber.Create(Value.AsInt64);
-      
+
     tkFloat:
-      Result := TJSONNumber.Create(Value.AsExtended);
-      
-    tkString, tkLString, tkWString, tkUString:
+      if RttiType.Handle = TypeInfo(TDateTime) then
+        Result := TJSONString.Create(DateToISO8601(Value.AsType<TDateTime>, False))
+      else
+        Result := TJSONNumber.Create(Value.AsExtended);
+
+    tkString, tkLString, tkWString, tkUString, tkChar, tkWChar:
       Result := TJSONString.Create(Value.AsString);
-      
+
     tkEnumeration:
+      if RttiType.Handle = TypeInfo(Boolean) then
+        Result := TJSONBool.Create(Value.AsBoolean)
+      else
+        Result := TJSONString.Create(GetEnumName(RttiType.Handle, Value.AsOrdinal));
+
+    tkSet:
       begin
-{$IF COMPILERVERSION <= 29}
-        if Value.AsBoolean then
-          Result := TJSONTrue.Create
-        else
-          Result := TJSONFalse.Create;
-{$ELSE}
-        Result := TJSONBool.Create(Value.AsBoolean);
-{$ENDIF}
+        // Every included element by its enum name.
+        var Names := TJSONArray.Create;
+        var ElementType := TRttiEnumerationType(TRttiSetType(RttiType).ElementType);
+        // A set is stored from the byte that holds its lowest element.
+        var SetBits: Int64 := 0;
+        Move(Value.GetReferenceToRawData^, SetBits, Min(Value.DataSize, SizeOf(SetBits)));
+        var FirstBit := ElementType.MinValue and not 7;
+        for var Ordinal := ElementType.MinValue to ElementType.MaxValue do
+          if (SetBits and (Int64(1) shl (Ordinal - FirstBit))) <> 0 then
+            Names.Add(GetEnumName(ElementType.Handle, Ordinal));
+        Result := Names;
+      end;
+
+    tkDynArray:
+      begin
+        var Items := TJSONArray.Create;
+        var ElementType := TRttiDynamicArrayType(RttiType).ElementType;
+        for var I := 0 to Value.GetArrayLength - 1 do
+        begin
+          var Item := ConvertValueToJson(Value.GetArrayElement(I), ElementType);
+          if Assigned(Item) then
+            Items.AddElement(Item)
+          else
+            Items.AddElement(TJSONNull.Create);
+        end;
+        Result := Items;
       end;
 
     tkClass:
@@ -371,7 +444,9 @@ begin
           Serialize(Obj, ChildJson);
           Result := ChildJson;
         end;
-      end;
+      end
+      else
+        Result := TJSONNull.Create;
   end;
 end;
 
