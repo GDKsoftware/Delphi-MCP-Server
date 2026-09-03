@@ -39,6 +39,7 @@ type
     class function UnsupportedProtocolVersion(const Requested: string; const Supported: TArray<string>): EMCPError;
     /// -32602 with data.name: tools/call names a tool the server does not have.
     class function UnknownTool(const Name: string): EMCPError;
+    class function UnknownPrompt(const Name: string): EMCPError;
     /// Resource not found with data.uri: -32602 in the modern era, -32002 in
     /// the initialize-based revisions.
     class function ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
@@ -144,6 +145,13 @@ begin
   var Data := TJSONObject.Create;
   Data.AddPair('name', Name);
   Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown tool: ' + Name, Data);
+end;
+
+class function EMCPError.UnknownPrompt(const Name: string): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair('name', Name);
+  Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown prompt: ' + Name, Data);
 end;
 
 class function EMCPError.ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
