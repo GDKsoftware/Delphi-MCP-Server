@@ -31,7 +31,11 @@ type
   /// Tool with a hand-written schema and raw JSON arguments.
   ///
   /// The protected fields FAnnotations and FIcons (nil by default) are
-  /// reported in tools/list when set; the tool owns them.
+  /// reported in tools/list when set; the tool owns them. Execute validates
+  /// Arguments against BuildSchema (raising EArgumentException, which the
+  /// tools manager reports as an isError result) before calling DoExecute;
+  /// this is the only validation a hand-written schema gets, since it does
+  /// not go through TMCPSerializer.
   TMCPToolBase = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
@@ -40,6 +44,7 @@ type
     FAnnotations: TJSONObject;
     FIcons: TJSONArray;
     function BuildSchema: TJSONObject; virtual; abstract;
+    function DoExecute(const Arguments: TJSONObject): TValue; virtual; abstract;
   public
     constructor Create; virtual;
     destructor Destroy; override;
@@ -51,7 +56,7 @@ type
     function GetOutputSchema: TJSONObject;
     function GetAnnotations: TJSONObject;
     function GetIcons: TJSONArray;
-    function Execute(const Arguments: TJSONObject): TValue; virtual; abstract;
+    function Execute(const Arguments: TJSONObject): TValue;
   end;
 
   /// Tool whose parameters are a class T; the schema comes from T's RTTI.
@@ -112,6 +117,7 @@ implementation
 
 uses
   MCPServer.Schema.Generator,
+  MCPServer.Schema.Validator,
   MCPServer.Serializer,
   MCPServer.RequestContext,
   MCPServer.Tool.Result;
@@ -166,6 +172,19 @@ end;
 function TMCPToolBase.GetIcons: TJSONArray;
 begin
   Result := FIcons;
+end;
+
+function TMCPToolBase.Execute(const Arguments: TJSONObject): TValue;
+begin
+  var Schema := BuildSchema;
+  try
+    var Errors: TArray<string>;
+    if not TMCPSchemaValidator.Validate(Schema, Arguments, Errors) then
+      raise EArgumentException.Create(string.Join('; ', Errors));
+  finally
+    Schema.Free;
+  end;
+  Result := DoExecute(Arguments);
 end;
 
 { TMCPToolBase<T> }

@@ -37,6 +37,9 @@ type
     // Single normalization rule shared by lookup and validation
     class function NormalizeKey(const Name: string): string; inline;
     class function IsRequiredProperty(const Prop: TRttiProperty): Boolean;
+    /// The wire name: [SchemaName] when present, otherwise the lowercased
+    /// property name, matching the schema generator.
+    class function GetWireName(const Prop: TRttiProperty): string;
   public
     class constructor Create;
     class destructor Destroy;
@@ -113,7 +116,7 @@ begin
   try
     for RttiProp in RttiType.GetProperties do
       if RttiProp.IsWritable then
-        KnownNorms.Add(NormalizeKey(RttiProp.Name));
+        KnownNorms.Add(NormalizeKey(GetWireName(RttiProp)));
 
     for Pair in Json do
     begin
@@ -132,13 +135,13 @@ begin
     if not RttiProp.IsWritable then
       Continue;
 
-    JsonValue := GetJsonValueCaseInsensitive(Json, RttiProp.Name);
+    JsonValue := GetJsonValueCaseInsensitive(Json, GetWireName(RttiProp));
 
     // Absent and null both mean "not given"; a required parameter must be given.
     if not Assigned(JsonValue) or (JsonValue is TJSONNull) then
     begin
       if IsRequiredProperty(RttiProp) then
-        raise EArgumentException.CreateFmt('Missing required parameter "%s"', [LowerCase(RttiProp.Name)]);
+        raise EArgumentException.CreateFmt('Missing required parameter "%s"', [GetWireName(RttiProp)]);
       Continue;
     end;
 
@@ -146,7 +149,7 @@ begin
       PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
     except
       on E: EArgumentException do
-        raise EArgumentException.CreateFmt('Parameter "%s": %s', [LowerCase(RttiProp.Name), E.Message]);
+        raise EArgumentException.CreateFmt('Parameter "%s": %s', [GetWireName(RttiProp), E.Message]);
     end;
 
     if not PropValue.IsEmpty then
@@ -166,6 +169,14 @@ begin
   Result := True;
 end;
 
+class function TMCPSerializer.GetWireName(const Prop: TRttiProperty): string;
+begin
+  for var Attr in Prop.GetAttributes do
+    if Attr is SchemaNameAttribute then
+      Exit(SchemaNameAttribute(Attr).Name);
+  Result := LowerCase(Prop.Name);
+end;
+
 class procedure TMCPSerializer.Serialize(Obj: TObject; Json: TJSONObject);
 var
   JsonValue: TJSONValue;
@@ -181,7 +192,7 @@ begin
     if not RttiProp.IsReadable then
       Continue;
 
-    PropName := LowerCase(RttiProp.Name);
+    PropName := GetWireName(RttiProp);
     {$WARN UNSAFE_CAST OFF}
     PropValue := RttiProp.GetValue(Obj);
     {$WARN UNSAFE_CAST ON}
