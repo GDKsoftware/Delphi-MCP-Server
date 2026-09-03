@@ -7,6 +7,42 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Prompts: `MCPServer.Prompt.Base` (`IMCPPrompt`, `TMCPPromptBase`,
+  `TMCPPromptBase<T>` with RTTI-derived arguments, `TMCPPromptMessages` for
+  text/image/audio/resource-link/embedded-resource content) and
+  `MCPServer.PromptsManager` (`prompts/list` with pagination and modern cache
+  hints, `prompts/get` with `-32602` for an unknown prompt or a missing
+  required argument). `MCPServer.Prompt.SummarizeLogs` (an example that
+  embeds `logs://recent` and offers level completion) and
+  `MCPServer.Prompt.ContentSamples` (`test_simple_prompt` and friends, the
+  conformance fixtures for prompts).
+- Resource templates: `IMCPResourceTemplate`, `TMCPResourceTemplateBase`
+  (RFC 6570 level 1 and a level 2 subset, `{var}` and `{+var}`),
+  `TMCPRegistry.RegisterResourceTemplate`; `resources/templates/list` lists
+  them and `resources/read` resolves a URI against them when no exact
+  resource matches. `logs://{level}` (`MCPServer.Resource.Logs`) and
+  `test://template/{id}/data` (`MCPServer.Resource.Samples`, the conformance
+  fixture) are the examples.
+- Completion: `MCPServer.CompletionManager` (`completion/complete` for
+  `ref/prompt` and `ref/resource`, capped at 100 values with `hasMore`),
+  `IMCPCompletable` and `TMCPCompletion`, implemented optionally by a prompt
+  or resource template; a target without it answers an empty `values` array.
+- `MCPServer.Schema.Validator`: a JSON Schema 2020-12 subset validator (type,
+  enum, const, required, properties, items, additionalProperties, minimum,
+  maximum, minLength, maxLength, pattern, a same-document `$ref`, a depth
+  cap) used by `TMCPToolBase`'s own argument validation and, in DEBUG builds,
+  to warn when a tool's `structuredContent` does not match its
+  `outputSchema`.
+- Schema attributes `SchemaMinLength`, `SchemaMaxLength`, `SchemaPattern`,
+  `SchemaDefault`, `SchemaName` (overrides the wire name, honoured by the
+  serializer too) and the class-level `SchemaAdditionalProperties` and
+  `SchemaDialect` (root schema only).
+- `json_schema_2020_12_tool`: a hand-written schema exercising `$schema`,
+  `$defs`, `$anchor`, `$ref`, `allOf`/`anyOf` and `if`/`then`/`else`, the
+  conformance fixture for schema-keyword preservation.
+- `MCPServer.ContentBlocks`: the text/image/audio/resource-link/embedded-
+  resource block builders shared by `TMCPToolResult` and
+  `TMCPPromptMessages`, so both produce byte-identical content blocks.
 - Rewritten stdio transport (`MCPServer.StdioTransport`, `MCPServer.StdioChannel`):
   UTF-8 byte framing on the standard handles instead of Text I/O (`é` and
   other non-ASCII input used to come back mangled), a reader thread that
@@ -129,6 +165,17 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `TMCPToolBase` (the non-generic, hand-written-schema base) now validates
+  its arguments against `BuildSchema` before calling the tool: the abstract
+  method a descendant overrides is `DoExecute`, not `Execute`, which is now
+  a concrete template method. Tools deriving from `TMCPToolBase` previously
+  got no argument validation at all; `TMCPToolBase<T>` and
+  `TMCPToolBase<T, R>` are unaffected (their arguments already go through
+  `TMCPSerializer`).
+- The property name a tool or prompt parameter class publishes on the wire
+  is looked up the same way in both directions: `TMCPSerializer` honours
+  `[SchemaName]` for deserializing and serializing, not only the schema
+  generator.
 - Non-ASCII input over stdio is decoded and echoed back unchanged; Text I/O
   decoded stdin with the console code page, corrupting characters outside it
   (a Windows console defaults to an ANSI code page, not UTF-8).

@@ -194,6 +194,7 @@ Copy the `src` folder from MCPServer into your project and add the units to your
    - `lib\mcpserver\src\Server`
    - `lib\mcpserver\src\Tools`
    - `lib\mcpserver\src\Resources`
+   - `lib\mcpserver\src\Prompts`
 
 2. **Required Units**: Include these core units in your project:
    ```pascal
@@ -263,6 +264,7 @@ end.
 - **STDIO: keep stdout clean.** Everything on stdout must be an MCP message. `TMCPStdioTransport.Create` forces `TLogger.UseStdErr := True` and sets `TLogger.StdoutReserved`, so console logging goes to stderr and an attempt to switch it back is refused with a one-time warning. Never `Writeln` from tools, managers or resources; log through `TLogger`.
 - **`server://status` is registered by default** by the unit initialization of `MCPServer.Resource.Server`. `TServerStatusResource.SetNamePrefix('myapp_')` renames it to `server://myapp_status`; call it before the managers are created.
 - **Error codes and protocol constants** live in `MCPServer.Types` (`JSONRPC_*`, `MCP_ERROR_*`, `MCP_PROTOCOL_VERSION_*`, `MCP_META_*`). The `JSONRPC_*` names in `MCPServer.JsonRpcProcessor` remain as aliases.
+- **Prompts and completion are optional managers**, registered the same way as tools and resources: `ManagerRegistry.RegisterManager(TMCPPromptsManager.Create)` and, if you want argument completion, `ManagerRegistry.RegisterManager(TMCPCompletionManager.Create(PromptsManager, ResourcesManager))` (it needs the concrete manager instances, not the `IMCPCapabilityManager` interface, to look prompts and resource templates up by name). The `prompts` and `completions` capabilities are only advertised when these managers are registered.
 
 ### Creating Custom Tools
 
@@ -427,6 +429,138 @@ not registered is answered with a JSON-RPC error (`-32002` for
 initialize-based clients, `-32602` for modern clients), a read that raises
 with `-32603`.
 
+### Resource Templates
+
+A template matches a family of URIs and resolves the actual resource from
+the captured variables. It supports RFC 6570 level 1 (`{var}`, one path
+segment) and a level 2 subset (`{+var}`, the rest of the URI including
+`/`); `{/var}` and `{?var}` are not implemented.
+
+```pascal
+unit YourProject.Resource.CustomTemplate;
+
+interface
+
+uses
+  MCPServer.Resource.Base,
+  MCPServer.Registration;
+
+type
+  TCustomTemplate = class(TMCPResourceTemplateBase)
+  public
+    constructor Create; override;
+    function CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource; override;
+  end;
+
+implementation
+
+constructor TCustomTemplate.Create;
+begin
+  inherited;
+  FUriTemplate := 'custom://{id}';
+  FName := 'Custom item';
+  FMimeType := 'application/json';
+end;
+
+function TCustomTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
+begin
+  Result := TCustomResource.CreateForId(URI, Vars['id']);
+end;
+
+initialization
+  TMCPRegistry.RegisterResourceTemplate('custom://{id}',
+    function: IMCPResourceTemplate
+    begin
+      Result := TCustomTemplate.Create;
+    end
+  );
+
+end.
+```
+
+`CreateResource` gets the actual requested URI (not the template) and the
+captured variables, and returns an ordinary `IMCPResource` (typically a
+`TMCPResourceBase<T>` with a constructor of your own choosing, since the
+registry never constructs a template's resources itself); `resources/read`
+tries an exact match first, then each registered template in order. See
+`MCPServer.Resource.Samples` (`test://template/{id}/data`) and
+`MCPServer.Resource.Logs` (`logs://{level}`, reusing the existing log
+filtering) for worked examples.
+
+### Creating Custom Prompts
+
+```pascal
+unit YourProject.Prompt.Custom;
+
+interface
+
+uses
+  MCPServer.Types,
+  MCPServer.Prompt.Base,
+  MCPServer.Registration;
+
+type
+  TCustomPromptParams = class
+  private
+    FTopic: string;
+  public
+    [SchemaDescription('What to write about')]
+    property Topic: string read FTopic write FTopic;
+  end;
+
+  TCustomPrompt = class(TMCPPromptBase<TCustomPromptParams>)
+  protected
+    function ExecuteWithParams(const Params: TCustomPromptParams;
+      Messages: TMCPPromptMessages): string; override;
+  public
+    constructor Create; override;
+  end;
+
+implementation
+
+constructor TCustomPrompt.Create;
+begin
+  inherited;
+  FName := 'custom_prompt';
+  FDescription := 'Asks the model to write about a topic';
+end;
+
+function TCustomPrompt.ExecuteWithParams(const Params: TCustomPromptParams;
+  Messages: TMCPPromptMessages): string;
+begin
+  Messages.AddText('user', 'Write a short paragraph about ' + Params.Topic + '.');
+  Result := 'Writing prompt';
+end;
+
+initialization
+  TMCPRegistry.RegisterPrompt('custom_prompt',
+    function: IMCPPrompt
+    begin
+      Result := TCustomPrompt.Create;
+    end
+  );
+
+end.
+```
+
+The argument list in `prompts/list` comes from `T`'s string properties, the
+same `[SchemaDescription]`/`[Optional]` attributes tools use; a required
+argument missing from `arguments` is `-32602`, since `prompts/get` has no
+`isError` result to report it through instead. `TMCPPromptMessages` builds
+the messages: `AddText`, `AddImage`, `AddAudio`, `AddResourceLink`,
+`AddEmbeddedText`, `AddEmbeddedBlob`, `AddEmbeddedResource` (wraps an
+existing `IMCPResource`) and `WithAnnotations` for the last message added.
+For a prompt with no natural parameter class, derive from the non-generic
+`TMCPPromptBase` instead and set `FArguments` directly. `MCPServer.Prompt.SummarizeLogs`
+and `MCPServer.Prompt.ContentSamples` show both content and templates in use.
+
+A prompt or resource template that wants to offer argument completion
+implements `IMCPCompletable` (`function Complete(const ArgumentName, Value: string;
+const Context: TArray<TPair<string, string>>): TMCPCompletion`); a target
+that does not implement it answers `completion/complete` with an empty
+`values` array rather than an error, since not offering completion is a
+valid choice.
+
 ## Integration with Claude Code
 
 Configure using the Streamable HTTP transport:
@@ -533,15 +667,30 @@ The Inspector provides a web interface to interact with your MCP server, making 
   content type, one that fails, and one that reports progress and honours
   cancellation, from `MCPServer.Tool.ContentSamples`; the conformance suite
   calls these by name
+- **json_schema_2020_12_tool**: a hand-written schema exercising `$schema`,
+  `$defs`, `$anchor`, `$ref`, `allOf`/`anyOf` and `if`/`then`/`else`, for the
+  conformance suite's schema-preservation check
+
+## Available Example prompts
+
+- **summarize_logs**: summarizes the server's recent log entries, optionally
+  filtered by level (argument completion suggests the levels actually
+  present in the log buffer)
+- **test_simple_prompt**, **test_prompt_with_arguments**,
+  **test_prompt_with_embedded_resource**, **test_prompt_with_image**: one
+  prompt per content type, from `MCPServer.Prompt.ContentSamples`; the
+  conformance suite calls these by name
 
 ## Available Example resources
 
-The server provides six resources accessible via URIs:
+The server provides six resources and two resource templates, accessible via URIs:
 
 - **server://status** - Current server status and health information (request and connection counters)
 - **project://info** - Project information (JSON metadata with collections)
 - **project://readme** - This README file (markdown content)
 - **logs://recent** - Recent log entries from all categories (with thread safety)
+- **logs://{level}** - Recent log entries at one level, e.g. `logs://WARNING`
+- **test://template/{id}/data** - A template resource for the conformance suite
 - **test://static-text** - A fixed text resource
 - **test://static-binary** - A fixed PNG image, delivered as a `blob`
 
