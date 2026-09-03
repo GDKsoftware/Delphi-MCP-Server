@@ -9,6 +9,7 @@ CHANGELOG; an unintended change is a regression.
 | Directory | Layer | Recorded by | Verified by |
 |---|---|---|---|
 | `legacy/` | JSON-RPC processor (`TMCPJsonRpcProcessor.ProcessRequest`) with the same registry as `MCPServer.dpr`, initialize-based protocol revisions | `scripts\run-tests.ps1 -Record` | `scripts\run-tests.ps1` (DUnitX fixture `TLegacyGoldenTests`) |
+| `modern/` | The same layer for requests that carry per-request `_meta` (MCP 2026-07-28), including the rejected shapes | `scripts\run-tests.ps1 -Record` | `scripts\run-tests.ps1` (DUnitX fixture `TModernGoldenTests`) |
 | `http/` | Streamable HTTP transport (`TMCPIdHTTPServer`) of the built executable, captured with curl | `scripts\capture-http-goldens.ps1 -Record` | `scripts\capture-http-goldens.ps1` |
 
 ## Legacy case files

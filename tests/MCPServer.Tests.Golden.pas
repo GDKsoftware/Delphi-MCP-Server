@@ -23,6 +23,7 @@ type
     const GOLDEN_DIR_ENVIRONMENT_VARIABLE = 'MCP_GOLDEN_DIR';
     const GOLDEN_DIRECTORY_NAME = 'golden';
     const LEGACY_SUITE = 'legacy';
+    const MODERN_SUITE = 'modern';
 
     class function GoldenRoot: string;
     class function TestsRoot: string;
@@ -95,6 +96,15 @@ type
     property RequestBody: string read GetRequestBody;
     property WorkingDirectory: string read GetWorkingDirectory;
     property HasExpected: Boolean read GetHasExpected;
+  end;
+
+  TGoldenProcessFunc = reference to function(const RequestBody: string): string;
+
+  /// Replays one golden case through the given processing function and
+  /// compares (or records) the response.
+  TGoldenRunner = class
+  public
+    class procedure Check(const Suite, CaseName: string; const Process: TGoldenProcessFunc);
   end;
 
 implementation
@@ -401,6 +411,38 @@ procedure TGoldenCase.Save;
 begin
   var Text := FDocument.Format(INDENTATION) + sLineBreak;
   TFile.WriteAllBytes(FFileName, TEncoding.UTF8.GetBytes(Text));
+end;
+
+{ TGoldenRunner }
+
+class procedure TGoldenRunner.Check(const Suite, CaseName: string; const Process: TGoldenProcessFunc);
+begin
+  var GoldenCase := TGoldenCase.Create(TGoldenFiles.CaseFile(Suite, CaseName));
+  try
+    var Response: string;
+    var SavedDirectory := GetCurrentDir;
+    if GoldenCase.WorkingDirectory <> '' then
+      SetCurrentDir(GoldenCase.WorkingDirectory);
+    try
+      Response := Process(GoldenCase.RequestBody);
+    finally
+      SetCurrentDir(SavedDirectory);
+    end;
+
+    if TGoldenFiles.RecordMode then
+    begin
+      GoldenCase.RecordExpected(Response);
+      Exit;
+    end;
+
+    var Expected := GoldenCase.ExpectedText;
+    var Actual := GoldenCase.NormalizeResponse(Response);
+    if Expected <> Actual then
+      raise EGoldenError.CreateFmt('Golden mismatch for %s/%s'#13#10'--- expected ---'#13#10'%s'#13#10'--- actual ---'#13#10'%s',
+        [Suite, CaseName, Expected, Actual]);
+  finally
+    GoldenCase.Free;
+  end;
 end;
 
 end.

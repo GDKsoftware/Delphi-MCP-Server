@@ -73,6 +73,9 @@
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="..\src\Protocol\MCPServer.Types.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Errors.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.RequestContext.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Capabilities.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.Serializer.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.Schema.Generator.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.Logger.pas"/>
@@ -100,6 +103,10 @@
         <DCCReference Include="MCPServer.Tests.ServerStatus.pas"/>
         <DCCReference Include="MCPServer.Tests.Registration.pas"/>
         <DCCReference Include="MCPServer.Tests.Logger.pas"/>
+        <DCCReference Include="MCPServer.Tests.RequestContext.pas"/>
+        <DCCReference Include="MCPServer.Tests.Processor.pas"/>
+        <DCCReference Include="MCPServer.Tests.Capabilities.pas"/>
+        <DCCReference Include="MCPServer.Tests.Golden.Modern.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

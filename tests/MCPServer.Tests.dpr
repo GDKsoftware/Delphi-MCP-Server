@@ -9,6 +9,9 @@ uses
   DUnitX.Loggers.Xml.NUnit,
   DUnitX.TestFramework,
   MCPServer.Types in '..\src\Protocol\MCPServer.Types.pas',
+  MCPServer.Errors in '..\src\Protocol\MCPServer.Errors.pas',
+  MCPServer.RequestContext in '..\src\Protocol\MCPServer.RequestContext.pas',
+  MCPServer.Capabilities in '..\src\Protocol\MCPServer.Capabilities.pas',
   MCPServer.Serializer in '..\src\Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in '..\src\Protocol\MCPServer.Schema.Generator.pas',
   MCPServer.Logger in '..\src\Core\MCPServer.Logger.pas',
@@ -38,7 +41,11 @@ uses
   MCPServer.Tests.Constants in 'MCPServer.Tests.Constants.pas',
   MCPServer.Tests.ServerStatus in 'MCPServer.Tests.ServerStatus.pas',
   MCPServer.Tests.Registration in 'MCPServer.Tests.Registration.pas',
-  MCPServer.Tests.Logger in 'MCPServer.Tests.Logger.pas';
+  MCPServer.Tests.Logger in 'MCPServer.Tests.Logger.pas',
+  MCPServer.Tests.RequestContext in 'MCPServer.Tests.RequestContext.pas',
+  MCPServer.Tests.Processor in 'MCPServer.Tests.Processor.pas',
+  MCPServer.Tests.Capabilities in 'MCPServer.Tests.Capabilities.pas',
+  MCPServer.Tests.Golden.Modern in 'MCPServer.Tests.Golden.Modern.pas';
 
 procedure RunTests;
 begin

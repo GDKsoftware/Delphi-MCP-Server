@@ -113,8 +113,16 @@ try {
     $sseAccept = 'Accept: application/json, text/event-stream'
     $jsonType = 'Content-Type: application/json'
     $initialize = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"golden-client","version":"1.0.0"}}}'
+    $modernHeader = 'MCP-Protocol-Version: 2026-07-28'
+    $modernMeta = '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"golden-client","version":"1.0.0"}}'
 
     $cases = @(
+        @{ Name = 'modern-discover';               Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":"d1","method":"server/discover","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-tools-list';             Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":20,"method":"tools/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-unknown-method';         Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":21,"method":"prompts/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-missing-version-header'; Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":22,"method":"tools/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-unsupported-version';    Method = 'POST';    Headers = @($jsonType, $jsonAccept, 'MCP-Protocol-Version: 1900-01-01'); Body = '{"jsonrpc":"2.0","id":23,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1900-01-01","io.modelcontextprotocol/clientCapabilities":{}}}}' }
+        @{ Name = 'modern-missing-client-capabilities'; Method = 'POST'; Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":24,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' }
         @{ Name = 'post-initialize';               Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = $initialize }
         @{ Name = 'post-initialize-sse';           Method = 'POST';    Headers = @($jsonType, $sseAccept);  Body = $initialize }
         @{ Name = 'post-tools-list';               Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' }

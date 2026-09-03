@@ -7,8 +7,8 @@
     "jsonrpc": "2.0",
     "id": 26,
     "error": {
-      "code": -32601,
-      "message": "Method [] not found. The method does not exist or is not available."
+      "code": -32600,
+      "message": "method must be a string"
     }
   }
 }

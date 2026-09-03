@@ -1,13 +1,12 @@
 HTTP/1.1 200 OK
 Connection: keep-alive
 Content-Type: application/json
-Content-Length: 312
+Content-Length: 225
 Access-Control-Allow-Origin: *
 Access-Control-Allow-Methods: POST, GET, OPTIONS
 Access-Control-Allow-Headers: Accept, Content-Type, Last-Event-ID, Mcp-Protocol-Version, Mcp-Session-Id
 Access-Control-Expose-Headers: Mcp-Session-Id
 Access-Control-Max-Age: 86400
 Connection: keep-alive
-Mcp-Session-Id: <guid>
 
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"supportsProgress":false,"supportsCancellation":false},"resources":{"subscribe":false,"listChanged":false}},"sessionId":"<guid>","serverInfo":{"name":"delphi-mcp-server","version":"1.0.0"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false}},"serverInfo":{"name":"delphi-mcp-server","version":"1.0.0"}}}

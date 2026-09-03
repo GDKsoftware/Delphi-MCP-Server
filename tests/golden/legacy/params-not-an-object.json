@@ -11,14 +11,9 @@
   "expected": {
     "jsonrpc": "2.0",
     "id": 27,
-    "result": {
-      "content": [
-        {
-          "type": "text",
-          "text": "Error: Invalid tool parameters"
-        }
-      ],
-      "isError": true
+    "error": {
+      "code": -32602,
+      "message": "params must be an object"
     }
   }
 }
