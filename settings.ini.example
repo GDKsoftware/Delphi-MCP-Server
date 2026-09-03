@@ -27,6 +27,8 @@ MaxRequestBodyBytes=4194304
 MaxJsonDepth=64
 ; Indy connection limit; 0 = unlimited
 MaxConnections=0
+; Worker threads of the stdio transport; 1 answers requests in arrival order
+MaxConcurrentRequests=1
 
 [Security]
 ; Origins allowed next to the loopback origins (localhost, 127.0.0.1, [::1] on

@@ -54,6 +54,9 @@ const
   MCP_META_SUBSCRIPTION_ID = 'io.modelcontextprotocol/subscriptionId';
   MCP_META_PROGRESS_TOKEN = 'progressToken';
 
+  MCP_METHOD_NOTIFICATIONS_CANCELLED = 'notifications/cancelled';
+  MCP_METHOD_NOTIFICATIONS_PROGRESS = 'notifications/progress';
+
   // Cache scopes (server/utilities/caching.mdx)
   MCP_CACHE_SCOPE_PUBLIC = 'public';
   MCP_CACHE_SCOPE_PRIVATE = 'private';
@@ -197,6 +200,14 @@ type
     property ProtocolVersion: string read FProtocolVersion write FProtocolVersion;
   end;
 
+  /// Where a transport delivers the server-to-client messages that belong to
+  /// a request in flight (notifications/progress). The stdio transport
+  /// writes them to stdout; a transport without such a channel passes nil.
+  IMCPMessageSink = interface
+    ['{2B7D4E90-6C1A-4F3B-9E8D-5A0C1B2D3E4F}']
+    procedure Send(const Json: string);
+  end;
+
   /// What a handler may know about the request it is serving. Built once
   /// per request by the JSON-RPC processor and reachable through
   /// TMCPRequestContext.Current while the handler runs.
@@ -220,8 +231,23 @@ type
     function HasClientCapability(const Path: string): Boolean;
     /// Raises EMCPError -32021 when the capability was not declared.
     procedure RequireClientCapability(const Path: string);
+    /// True once the client cancelled the request (notifications/cancelled
+    /// on stdio).
     function IsCancelled: Boolean;
+    /// Raises EMCPRequestCancelled when the request was cancelled; the
+    /// processor then sends no response. Long-running handlers call this
+    /// between steps.
     procedure CheckCancelled;
+    /// Marks the request cancelled. Called by the transport.
+    procedure Cancel;
+    /// True when the request carries _meta.progressToken.
+    function HasProgressToken: Boolean;
+    /// Sends notifications/progress for this request when it carries a
+    /// progress token and the transport can deliver it; otherwise nothing
+    /// happens. Progress must increase: a value at or below the last one is
+    /// dropped, and so is a notification within PROGRESS_MIN_INTERVAL_MS of
+    /// the previous one unless it reaches Total. Total < 0 means unknown.
+    procedure ReportProgress(const Progress: Double; const Total: Double = -1; const Message: string = '');
 
     property Era: TMCPProtocolEra read GetEra;
     property ProtocolVersion: string read GetProtocolVersion;
@@ -237,6 +263,19 @@ type
     property ProgressToken: TJSONValue read GetProgressToken;
     property LegacySession: TMCPLegacySession read GetLegacySession;
     property ManagerRegistry: IMCPManagerRegistry read GetManagerRegistry;
+  end;
+
+  /// In-flight bookkeeping a transport keeps so notifications/cancelled can
+  /// reach the request it names. The processor binds every request context
+  /// while its handler runs.
+  IMCPRequestTracker = interface
+    ['{8C5E1F2A-3B4D-4E6F-A1B2-C3D4E5F6A7B8}']
+    /// Binds the context to its request id for the duration of the handler.
+    /// A request cancelled before its handler started begins cancelled.
+    procedure Track(const Context: IMCPRequestContext);
+    procedure Untrack(const Context: IMCPRequestContext);
+    /// Cancels the request with that id; False when it is unknown or done.
+    function TryCancel(const RequestId: TMCPRequestId; const Reason: string): Boolean;
   end;
 
   /// Managers that want the request context receive it through this

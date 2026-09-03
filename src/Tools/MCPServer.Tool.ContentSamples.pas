@@ -55,6 +55,33 @@ type
   end;
 
   /// Always fails with a tool execution error (isError: true).
+  TProgressToolParams = class
+  private
+    FSteps: Integer;
+    FStepMs: Integer;
+  public
+    [Optional]
+    [SchemaDescription('Number of steps to report (default 5)')]
+    property Steps: Integer read FSteps write FSteps;
+    [Optional]
+    [SchemaDescription('Pause per step in milliseconds (default 100)')]
+    property StepMs: Integer read FStepMs write FStepMs;
+  end;
+
+  /// Reports progress for every step and stops when the client cancels.
+  TProgressTool = class(TMCPToolBase<TProgressToolParams>)
+  public
+    const DEFAULT_STEPS = 5;
+    const DEFAULT_STEP_MS = 100;
+    const MAX_STEPS = 1000;
+    const MAX_STEP_MS = 10000;
+  protected
+    function ExecuteWithContext(const Params: TProgressToolParams;
+      const Context: IMCPRequestContext): TValue; override;
+  public
+    constructor Create; override;
+  end;
+
   TErrorHandlingTool = class(TMCPToolBase<TNoParams>)
   protected
     function ExecuteWithParams(const Params: TNoParams): string; override;
@@ -166,6 +193,40 @@ begin
   raise EMCPToolError.Create('This tool always fails, as an example of a tool execution error');
 end;
 
+{ TProgressTool }
+
+constructor TProgressTool.Create;
+begin
+  inherited;
+  FName := 'test_tool_with_progress';
+  FDescription := 'Runs a few steps and reports progress for each; honours cancellation';
+end;
+
+function TProgressTool.ExecuteWithContext(const Params: TProgressToolParams;
+  const Context: IMCPRequestContext): TValue;
+begin
+  var Steps := Params.Steps;
+  if (Steps <= 0) or (Steps > MAX_STEPS) then
+    Steps := DEFAULT_STEPS;
+  var StepMs := Params.StepMs;
+  if (StepMs <= 0) or (StepMs > MAX_STEP_MS) then
+    StepMs := DEFAULT_STEP_MS;
+
+  for var Step := 1 to Steps do
+  begin
+    if Assigned(Context) then
+    begin
+      Context.CheckCancelled;
+      Context.ReportProgress(Step - 1, Steps, Format('Step %d of %d', [Step, Steps]));
+    end;
+    Sleep(StepMs);
+  end;
+  if Assigned(Context) then
+    Context.ReportProgress(Steps, Steps, 'Done');
+
+  Result := Format('Completed %d steps', [Steps]);
+end;
+
 initialization
   TMCPRegistry.RegisterTool('test_simple_text',
     function: IMCPTool
@@ -191,6 +252,11 @@ initialization
     function: IMCPTool
     begin
       Result := TMultipleContentTypesTool.Create;
+    end);
+  TMCPRegistry.RegisterTool('test_tool_with_progress',
+    function: IMCPTool
+    begin
+      Result := TProgressTool.Create;
     end);
   TMCPRegistry.RegisterTool('test_error_handling',
     function: IMCPTool

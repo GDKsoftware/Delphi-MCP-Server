@@ -244,6 +244,8 @@ begin
         Exit(ErrorResult('Invalid arguments: ' + E.Message, Era));
       on E: EMCPError do
         raise;
+      on E: EMCPRequestCancelled do
+        raise;
       on E: Exception do
         Exit(ErrorResult('Error executing tool: ' + E.Message, Era));
     end;

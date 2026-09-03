@@ -52,6 +52,10 @@ type
   /// an isError result that the model can act on, not a protocol error.
   EMCPToolError = class(Exception);
 
+  /// Raised by IMCPRequestContext.CheckCancelled once the client cancelled
+  /// the request. The processor sends no response for it.
+  EMCPRequestCancelled = class(Exception);
+
 const
   HTTP_STATUS_OK = 200;
   HTTP_STATUS_ACCEPTED = 202;

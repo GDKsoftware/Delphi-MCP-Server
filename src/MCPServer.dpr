@@ -27,6 +27,7 @@ uses
   MCPServer.Resource.Base in 'Resources\MCPServer.Resource.Base.pas',
   MCPServer.IdHTTPServer in 'Server\MCPServer.IdHTTPServer.pas',
   MCPServer.StdioTransport in 'Server\MCPServer.StdioTransport.pas',
+  MCPServer.StdioChannel in 'Server\MCPServer.StdioChannel.pas',
   MCPServer.JsonRpcProcessor in 'Protocol\MCPServer.JsonRpcProcessor.pas',
   MCPServer.CoreManager in 'Managers\MCPServer.CoreManager.pas',
   MCPServer.ToolsManager in 'Managers\MCPServer.ToolsManager.pas',
@@ -122,7 +123,9 @@ procedure RunStdioServer;
 var
   StdioTransport: TMCPStdioTransport;
 begin
-  Settings := TMCPSettings.Create;
+  // A stdio server is spawned by its client; it reads settings.ini when
+  // present but never writes one next to the executable.
+  Settings := TMCPSettings.Create('', False);
 
   TLogger.Info('Delphi MCP Server v' + Settings.ServerVersion);
   TLogger.Info('================================');
@@ -174,20 +177,29 @@ begin
   TLogger.LogToConsole := True;
   TLogger.MinLogLevel := TLogLevel.Info;
 
-  ReportMemoryLeaksOnShutdown := True;
+  {$IFDEF DEBUG}
+  // The leak report is a dialog on Windows; a stdio server has no place for it.
+  ReportMemoryLeaksOnShutdown := not HasStdioFlag;
+  {$ENDIF}
   IsMultiThread := True;
   
   // Create shutdown event
   ShutdownEvent := TEvent.Create(nil, True, False, '');
   try
-    // Set up signal handlers
+    // Set up signal handlers. Over stdio the client ends the server by
+    // closing stdin; a signal keeps its default meaning (terminate) instead
+    // of setting an event nobody waits on.
     {$IFDEF MSWINDOWS}
-    SetConsoleCtrlHandler(@ConsoleCtrlHandler, True);
+    if not HasStdioFlag then
+      SetConsoleCtrlHandler(@ConsoleCtrlHandler, True);
     {$ENDIF}
     
     {$IFDEF POSIX}
-    signal(SIGINT, @SignalHandler);
-    signal(SIGTERM, @SignalHandler);
+    if not HasStdioFlag then
+    begin
+      signal(SIGINT, @SignalHandler);
+      signal(SIGTERM, @SignalHandler);
+    end;
     {$ENDIF}
     
     try
@@ -204,7 +216,8 @@ begin
     end;
     
     {$IFDEF MSWINDOWS}
-    SetConsoleCtrlHandler(@ConsoleCtrlHandler, False);
+    if not HasStdioFlag then
+      SetConsoleCtrlHandler(@ConsoleCtrlHandler, False);
     {$ENDIF}
   finally
     ShutdownEvent.Free;
