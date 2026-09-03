@@ -37,6 +37,9 @@ uses
   MCPServer.Tool.Calculate in '..\src\Tools\MCPServer.Tool.Calculate.pas',
   MCPServer.Resource.Logs in '..\src\Resources\MCPServer.Resource.Logs.pas',
   MCPServer.Resource.Project in '..\src\Resources\MCPServer.Resource.Project.pas',
+  MCPServer.Tool.ContentSamples in '..\src\Tools\MCPServer.Tool.ContentSamples.pas',
+  MCPServer.Resource.Samples in '..\src\Resources\MCPServer.Resource.Samples.pas',
+  MCPServer.Tool.Result in '..\src\Tools\MCPServer.Tool.Result.pas',
   MCPServer.Tests.Harness in 'MCPServer.Tests.Harness.pas',
   MCPServer.Tests.Golden in 'MCPServer.Tests.Golden.pas',
   MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas',
@@ -49,7 +52,12 @@ uses
   MCPServer.Tests.Capabilities in 'MCPServer.Tests.Capabilities.pas',
   MCPServer.Tests.Golden.Modern in 'MCPServer.Tests.Golden.Modern.pas',
   MCPServer.Tests.HttpHeaders in 'MCPServer.Tests.HttpHeaders.pas',
-  MCPServer.Tests.Http in 'MCPServer.Tests.Http.pas';
+  MCPServer.Tests.Http in 'MCPServer.Tests.Http.pas',
+  MCPServer.Tests.ToolResult in 'MCPServer.Tests.ToolResult.pas',
+  MCPServer.Tests.Serializer in 'MCPServer.Tests.Serializer.pas',
+  MCPServer.Tests.Schema in 'MCPServer.Tests.Schema.pas',
+  MCPServer.Tests.ToolsManager in 'MCPServer.Tests.ToolsManager.pas',
+  MCPServer.Tests.ResourcesManager in 'MCPServer.Tests.ResourcesManager.pas';
 
 procedure RunTests;
 begin

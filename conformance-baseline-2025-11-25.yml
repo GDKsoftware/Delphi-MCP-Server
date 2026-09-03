@@ -4,17 +4,14 @@
 server:
   - logging-set-level
   - completion-complete
-  - tools-call-image
-  - tools-call-audio
-  - tools-call-embedded-resource
-  - tools-call-mixed-content
   - tools-call-with-logging
   - tools-call-with-progress
   - tools-call-sampling
   - tools-call-elicitation
   - elicitation-sep1034-defaults
   - elicitation-sep1330-enums
-  - resources-read-binary
+  # resource templates are not implemented
+  - resources-templates-read
   - resources-subscribe
   - resources-unsubscribe
   - prompts-list

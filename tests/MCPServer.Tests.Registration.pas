@@ -34,7 +34,7 @@ begin
   Assert.IsTrue(TMCPRegistry.HasTool('get_time'));
   Assert.IsTrue(TMCPRegistry.HasTool('list_files'));
   Assert.IsTrue(TMCPRegistry.HasTool('calculate'));
-  Assert.AreEqual(4, Integer(Length(TMCPRegistry.GetToolNames)));
+  Assert.AreEqual(10, Integer(Length(TMCPRegistry.GetToolNames)));
 end;
 
 procedure TRegistryTests.BuiltInResources_AreRegisteredFromInitialization;
@@ -43,7 +43,7 @@ begin
   Assert.IsTrue(TMCPRegistry.HasResource('project://readme'));
   Assert.IsTrue(TMCPRegistry.HasResource('logs://recent'));
   Assert.IsTrue(TMCPRegistry.HasResource('server://status'));
-  Assert.AreEqual(4, Integer(Length(TMCPRegistry.GetResourceURIs)));
+  Assert.AreEqual(6, Integer(Length(TMCPRegistry.GetResourceURIs)));
 end;
 
 procedure TRegistryTests.ServerStatus_IsRegisteredByDefault;

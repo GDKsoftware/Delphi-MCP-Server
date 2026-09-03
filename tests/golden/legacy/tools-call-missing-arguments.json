@@ -14,9 +14,10 @@
       "content": [
         {
           "type": "text",
-          "text": "Echo: "
+          "text": "Invalid arguments: Missing required parameter \"message\""
         }
-      ]
+      ],
+      "isError": true
     }
   }
 }
