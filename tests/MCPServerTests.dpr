@@ -27,6 +27,7 @@ uses
   MCPServer.ToolsManager in '..\src\Managers\MCPServer.ToolsManager.pas',
   MCPServer.ResourcesManager in '..\src\Managers\MCPServer.ResourcesManager.pas',
   MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
+  MCPServer.StdioChannel in '..\src\Server\MCPServer.StdioChannel.pas',
   // The built-in tools and resources register themselves in their
   // initialization sections. Keep the order identical to MCPServer.dpr so the
   // registry (and therefore tools/list and resources/list) matches the server.
@@ -57,7 +58,10 @@ uses
   MCPServer.Tests.Serializer in 'MCPServer.Tests.Serializer.pas',
   MCPServer.Tests.Schema in 'MCPServer.Tests.Schema.pas',
   MCPServer.Tests.ToolsManager in 'MCPServer.Tests.ToolsManager.pas',
-  MCPServer.Tests.ResourcesManager in 'MCPServer.Tests.ResourcesManager.pas';
+  MCPServer.Tests.ResourcesManager in 'MCPServer.Tests.ResourcesManager.pas',
+  MCPServer.Tests.StdioChannel in 'MCPServer.Tests.StdioChannel.pas',
+  MCPServer.Tests.Cancellation in 'MCPServer.Tests.Cancellation.pas',
+  MCPServer.Tests.Stdio in 'MCPServer.Tests.Stdio.pas';
 
 procedure RunTests;
 begin

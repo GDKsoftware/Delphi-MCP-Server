@@ -34,7 +34,7 @@ begin
   Assert.IsTrue(TMCPRegistry.HasTool('get_time'));
   Assert.IsTrue(TMCPRegistry.HasTool('list_files'));
   Assert.IsTrue(TMCPRegistry.HasTool('calculate'));
-  Assert.AreEqual(10, Integer(Length(TMCPRegistry.GetToolNames)));
+  Assert.AreEqual(11, Integer(Length(TMCPRegistry.GetToolNames)));
 end;
 
 procedure TRegistryTests.BuiltInResources_AreRegisteredFromInitialization;

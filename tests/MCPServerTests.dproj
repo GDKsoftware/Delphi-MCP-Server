@@ -91,6 +91,10 @@
         <DCCReference Include="..\src\Managers\MCPServer.ToolsManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.ResourcesManager.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.StdioChannel.pas"/>
+        <DCCReference Include="MCPServer.Tests.StdioChannel.pas"/>
+        <DCCReference Include="MCPServer.Tests.Cancellation.pas"/>
+        <DCCReference Include="MCPServer.Tests.Stdio.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.GetTime.pas"/>
