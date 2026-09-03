@@ -65,6 +65,9 @@ implementation
 uses
   MCPServer.Registration;
 
+const
+  PROJECT_RESOURCE_TTL_MS = 3600000;
+
 { TProjectInfo }
 
 constructor TProjectInfo.Create;
@@ -88,6 +91,9 @@ begin
   FName := 'Project Information';
   FDescription := 'Basic information about the Delphi MCP Server project';
   FMimeType := 'application/json';
+  // Static content: an hour of caching, shareable between callers.
+  FTtlMs := PROJECT_RESOURCE_TTL_MS;
+  FCacheScope := MCP_CACHE_SCOPE_PUBLIC;
 end;
 
 function TProjectInfoResource.GetResourceData: TProjectInfo;
@@ -98,7 +104,8 @@ begin
   Result.Description := 'A Model Context Protocol (MCP) server implementation in Delphi';
   Result.Language := 'Delphi';
   Result.Framework := 'Indy HTTP Server (TIdHTTPServer)';
-  Result.Protocol := 'MCP ' + MCP_PROTOCOL_VERSION;
+  Result.Protocol := 'MCP ' + MCP_LATEST_PROTOCOL_VERSION + ' (initialize-based: '
+    + MCP_PROTOCOL_VERSION_2025_11_25 + ', ' + MCP_PROTOCOL_VERSION_2025_06_18 + ')';
   Result.Transport := 'Streamable HTTP';
   Result.Author := 'GDK Software';
   Result.Repository := 'https://github.com/GDKsoftware/delphi-mcp-server';
@@ -117,6 +124,8 @@ begin
   FName := 'Project README';
   FDescription := 'README.md file contents';
   FMimeType := 'text/markdown';
+  FTtlMs := PROJECT_RESOURCE_TTL_MS;
+  FCacheScope := MCP_CACHE_SCOPE_PUBLIC;
 end;
 
 function TProjectReadmeResource.GetResourceData: TTextContent;

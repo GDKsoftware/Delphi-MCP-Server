@@ -23,6 +23,7 @@ uses
   MCPServer.Registration in 'Core\MCPServer.Registration.pas',
   MCPServer.ManagerRegistry in 'Core\MCPServer.ManagerRegistry.pas',
   MCPServer.Tool.Base in 'Tools\MCPServer.Tool.Base.pas',
+  MCPServer.Tool.Result in 'Tools\MCPServer.Tool.Result.pas',
   MCPServer.Resource.Base in 'Resources\MCPServer.Resource.Base.pas',
   MCPServer.IdHTTPServer in 'Server\MCPServer.IdHTTPServer.pas',
   MCPServer.StdioTransport in 'Server\MCPServer.StdioTransport.pas',
@@ -36,7 +37,9 @@ uses
   MCPServer.Tool.ListFiles in 'Tools\MCPServer.Tool.ListFiles.pas',
   MCPServer.Tool.Calculate in 'Tools\MCPServer.Tool.Calculate.pas',
   MCPServer.Resource.Logs in 'Resources\MCPServer.Resource.Logs.pas',
-  MCPServer.Resource.Project in 'Resources\MCPServer.Resource.Project.pas';
+  MCPServer.Resource.Project in 'Resources\MCPServer.Resource.Project.pas',
+  MCPServer.Tool.ContentSamples in 'Tools\MCPServer.Tool.ContentSamples.pas',
+  MCPServer.Resource.Samples in 'Resources\MCPServer.Resource.Samples.pas';
 
 var
   Server: TMCPIdHTTPServer;
