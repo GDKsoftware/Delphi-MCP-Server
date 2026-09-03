@@ -16,16 +16,21 @@ uses
   MCPServer.IdHTTPServer in '..\src\Server\MCPServer.IdHTTPServer.pas',
   MCPServer.Serializer in '..\src\Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in '..\src\Protocol\MCPServer.Schema.Generator.pas',
+  MCPServer.Schema.Validator in '..\src\Protocol\MCPServer.Schema.Validator.pas',
+  MCPServer.ContentBlocks in '..\src\Protocol\MCPServer.ContentBlocks.pas',
   MCPServer.Logger in '..\src\Core\MCPServer.Logger.pas',
   MCPServer.Settings in '..\src\Core\MCPServer.Settings.pas',
   MCPServer.Registration in '..\src\Core\MCPServer.Registration.pas',
   MCPServer.ManagerRegistry in '..\src\Core\MCPServer.ManagerRegistry.pas',
   MCPServer.Tool.Base in '..\src\Tools\MCPServer.Tool.Base.pas',
   MCPServer.Resource.Base in '..\src\Resources\MCPServer.Resource.Base.pas',
+  MCPServer.Prompt.Base in '..\src\Prompts\MCPServer.Prompt.Base.pas',
   MCPServer.JsonRpcProcessor in '..\src\Protocol\MCPServer.JsonRpcProcessor.pas',
   MCPServer.CoreManager in '..\src\Managers\MCPServer.CoreManager.pas',
   MCPServer.ToolsManager in '..\src\Managers\MCPServer.ToolsManager.pas',
   MCPServer.ResourcesManager in '..\src\Managers\MCPServer.ResourcesManager.pas',
+  MCPServer.PromptsManager in '..\src\Managers\MCPServer.PromptsManager.pas',
+  MCPServer.CompletionManager in '..\src\Managers\MCPServer.CompletionManager.pas',
   MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
   MCPServer.StdioChannel in '..\src\Server\MCPServer.StdioChannel.pas',
   // The built-in tools and resources register themselves in their
@@ -40,6 +45,8 @@ uses
   MCPServer.Resource.Project in '..\src\Resources\MCPServer.Resource.Project.pas',
   MCPServer.Tool.ContentSamples in '..\src\Tools\MCPServer.Tool.ContentSamples.pas',
   MCPServer.Resource.Samples in '..\src\Resources\MCPServer.Resource.Samples.pas',
+  MCPServer.Prompt.SummarizeLogs in '..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas',
+  MCPServer.Prompt.ContentSamples in '..\src\Prompts\MCPServer.Prompt.ContentSamples.pas',
   MCPServer.Tool.Result in '..\src\Tools\MCPServer.Tool.Result.pas',
   MCPServer.Tests.Harness in 'MCPServer.Tests.Harness.pas',
   MCPServer.Tests.Golden in 'MCPServer.Tests.Golden.pas',
@@ -61,7 +68,11 @@ uses
   MCPServer.Tests.ResourcesManager in 'MCPServer.Tests.ResourcesManager.pas',
   MCPServer.Tests.StdioChannel in 'MCPServer.Tests.StdioChannel.pas',
   MCPServer.Tests.Cancellation in 'MCPServer.Tests.Cancellation.pas',
-  MCPServer.Tests.Stdio in 'MCPServer.Tests.Stdio.pas';
+  MCPServer.Tests.Stdio in 'MCPServer.Tests.Stdio.pas',
+  MCPServer.Tests.SchemaValidator in 'MCPServer.Tests.SchemaValidator.pas',
+  MCPServer.Tests.Prompt in 'MCPServer.Tests.Prompt.pas',
+  MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
+  MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas';
 
 procedure RunTests;
 begin

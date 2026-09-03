@@ -18,6 +18,8 @@ uses
   MCPServer.HttpHeaders in 'Server\MCPServer.HttpHeaders.pas',
   MCPServer.Serializer in 'Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in 'Protocol\MCPServer.Schema.Generator.pas',
+  MCPServer.Schema.Validator in 'Protocol\MCPServer.Schema.Validator.pas',
+  MCPServer.ContentBlocks in 'Protocol\MCPServer.ContentBlocks.pas',
   MCPServer.Logger in 'Core\MCPServer.Logger.pas',
   MCPServer.Settings in 'Core\MCPServer.Settings.pas',
   MCPServer.Registration in 'Core\MCPServer.Registration.pas',
@@ -25,6 +27,7 @@ uses
   MCPServer.Tool.Base in 'Tools\MCPServer.Tool.Base.pas',
   MCPServer.Tool.Result in 'Tools\MCPServer.Tool.Result.pas',
   MCPServer.Resource.Base in 'Resources\MCPServer.Resource.Base.pas',
+  MCPServer.Prompt.Base in 'Prompts\MCPServer.Prompt.Base.pas',
   MCPServer.IdHTTPServer in 'Server\MCPServer.IdHTTPServer.pas',
   MCPServer.StdioTransport in 'Server\MCPServer.StdioTransport.pas',
   MCPServer.StdioChannel in 'Server\MCPServer.StdioChannel.pas',
@@ -32,6 +35,8 @@ uses
   MCPServer.CoreManager in 'Managers\MCPServer.CoreManager.pas',
   MCPServer.ToolsManager in 'Managers\MCPServer.ToolsManager.pas',
   MCPServer.ResourcesManager in 'Managers\MCPServer.ResourcesManager.pas',
+  MCPServer.PromptsManager in 'Managers\MCPServer.PromptsManager.pas',
+  MCPServer.CompletionManager in 'Managers\MCPServer.CompletionManager.pas',
   MCPServer.Resource.Server in 'Resources\MCPServer.Resource.Server.pas',
   MCPServer.Tool.Echo in 'Tools\MCPServer.Tool.Echo.pas',
   MCPServer.Tool.GetTime in 'Tools\MCPServer.Tool.GetTime.pas',
@@ -40,7 +45,9 @@ uses
   MCPServer.Resource.Logs in 'Resources\MCPServer.Resource.Logs.pas',
   MCPServer.Resource.Project in 'Resources\MCPServer.Resource.Project.pas',
   MCPServer.Tool.ContentSamples in 'Tools\MCPServer.Tool.ContentSamples.pas',
-  MCPServer.Resource.Samples in 'Resources\MCPServer.Resource.Samples.pas';
+  MCPServer.Resource.Samples in 'Resources\MCPServer.Resource.Samples.pas',
+  MCPServer.Prompt.SummarizeLogs in 'Prompts\MCPServer.Prompt.SummarizeLogs.pas',
+  MCPServer.Prompt.ContentSamples in 'Prompts\MCPServer.Prompt.ContentSamples.pas';
 
 var
   Server: TMCPIdHTTPServer;
@@ -48,7 +55,9 @@ var
   ManagerRegistry: IMCPManagerRegistry;
   CoreManager: IMCPCapabilityManager;
   ToolsManager: IMCPCapabilityManager;
-  ResourcesManager: IMCPCapabilityManager;
+  ResourcesManager: TMCPResourcesManager;
+  PromptsManager: TMCPPromptsManager;
+  CompletionManager: IMCPCapabilityManager;
   ShutdownEvent: TEvent;
 
 {$IFDEF MSWINDOWS}
@@ -93,10 +102,14 @@ begin
   CoreManager := TMCPCoreManager.Create(Settings);
   ToolsManager := TMCPToolsManager.Create;
   ResourcesManager := TMCPResourcesManager.Create;
+  PromptsManager := TMCPPromptsManager.Create;
+  CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
 
   ManagerRegistry.RegisterManager(CoreManager);
   ManagerRegistry.RegisterManager(ToolsManager);
   ManagerRegistry.RegisterManager(ResourcesManager);
+  ManagerRegistry.RegisterManager(PromptsManager);
+  ManagerRegistry.RegisterManager(CompletionManager);
 
   Server := TMCPIdHTTPServer.Create(nil);
   try
@@ -136,10 +149,14 @@ begin
   CoreManager := TMCPCoreManager.Create(Settings);
   ToolsManager := TMCPToolsManager.Create;
   ResourcesManager := TMCPResourcesManager.Create;
+  PromptsManager := TMCPPromptsManager.Create;
+  CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
 
   ManagerRegistry.RegisterManager(CoreManager);
   ManagerRegistry.RegisterManager(ToolsManager);
   ManagerRegistry.RegisterManager(ResourcesManager);
+  ManagerRegistry.RegisterManager(PromptsManager);
+  ManagerRegistry.RegisterManager(CompletionManager);
 
   StdioTransport := TMCPStdioTransport.Create(ManagerRegistry, CoreManager);
   try

@@ -45,7 +45,7 @@
         <DCC_K>false</DCC_K>
         <SanitizedProjectName>MCPServerTests</SanitizedProjectName>
         <DCC_ConsoleTarget>true</DCC_ConsoleTarget>
-        <DCC_UnitSearchPath>..\src;..\src\Managers;..\src\Server;..\src\Tools;..\src\Core;..\src\Protocol;..\src\Libraries;..\src\Resources;$(DUnitX);$(BDS)\source\DUnitX;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\src;..\src\Managers;..\src\Server;..\src\Tools;..\src\Core;..\src\Protocol;..\src\Libraries;..\src\Resources;..\src\Prompts;$(DUnitX);$(BDS)\source\DUnitX;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
@@ -80,21 +80,30 @@
         <DCCReference Include="..\src\Server\MCPServer.IdHTTPServer.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.Serializer.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.Schema.Generator.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Schema.Validator.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.ContentBlocks.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.Logger.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.Settings.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.Registration.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.ManagerRegistry.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Base.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Base.pas"/>
+        <DCCReference Include="..\src\Prompts\MCPServer.Prompt.Base.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.JsonRpcProcessor.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.CoreManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.ToolsManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.ResourcesManager.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.PromptsManager.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.CompletionManager.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioChannel.pas"/>
         <DCCReference Include="MCPServer.Tests.StdioChannel.pas"/>
         <DCCReference Include="MCPServer.Tests.Cancellation.pas"/>
         <DCCReference Include="MCPServer.Tests.Stdio.pas"/>
+        <DCCReference Include="MCPServer.Tests.SchemaValidator.pas"/>
+        <DCCReference Include="MCPServer.Tests.Prompt.pas"/>
+        <DCCReference Include="MCPServer.Tests.PromptsManager.pas"/>
+        <DCCReference Include="MCPServer.Tests.CompletionManager.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.GetTime.pas"/>
@@ -123,6 +132,8 @@
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Samples.pas"/>
+        <DCCReference Include="..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas"/>
+        <DCCReference Include="..\src\Prompts\MCPServer.Prompt.ContentSamples.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
