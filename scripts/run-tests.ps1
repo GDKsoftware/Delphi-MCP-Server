@@ -3,7 +3,7 @@
     Builds and runs the DUnitX test project.
 
 .DESCRIPTION
-    Compiles tests\MCPServer.Tests.dpr with build-tests.bat and runs the
+    Compiles tests\MCPServerTests.dpr with build-tests.bat and runs the
     resulting executable. Results are written as NUnit XML to tests\results.
 
 .PARAMETER Configuration
@@ -46,7 +46,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$testExe = Join-Path $repoRoot "tests\$Platform\$Configuration\MCPServer.Tests.exe"
+$testExe = Join-Path $repoRoot "tests\$Platform\$Configuration\MCPServerTests.exe"
 $resultsDir = Join-Path $repoRoot 'tests\results'
 $xmlFile = Join-Path $resultsDir "dunitx-$Platform-$Configuration.xml"
 

@@ -1,4 +1,4 @@
-program MCPServer.Tests;
+program MCPServerTests;
 
 {$APPTYPE CONSOLE}
 {$STRONGLINKTYPES ON}
@@ -12,6 +12,8 @@ uses
   MCPServer.Errors in '..\src\Protocol\MCPServer.Errors.pas',
   MCPServer.RequestContext in '..\src\Protocol\MCPServer.RequestContext.pas',
   MCPServer.Capabilities in '..\src\Protocol\MCPServer.Capabilities.pas',
+  MCPServer.HttpHeaders in '..\src\Server\MCPServer.HttpHeaders.pas',
+  MCPServer.IdHTTPServer in '..\src\Server\MCPServer.IdHTTPServer.pas',
   MCPServer.Serializer in '..\src\Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in '..\src\Protocol\MCPServer.Schema.Generator.pas',
   MCPServer.Logger in '..\src\Core\MCPServer.Logger.pas',
@@ -45,7 +47,9 @@ uses
   MCPServer.Tests.RequestContext in 'MCPServer.Tests.RequestContext.pas',
   MCPServer.Tests.Processor in 'MCPServer.Tests.Processor.pas',
   MCPServer.Tests.Capabilities in 'MCPServer.Tests.Capabilities.pas',
-  MCPServer.Tests.Golden.Modern in 'MCPServer.Tests.Golden.Modern.pas';
+  MCPServer.Tests.Golden.Modern in 'MCPServer.Tests.Golden.Modern.pas',
+  MCPServer.Tests.HttpHeaders in 'MCPServer.Tests.HttpHeaders.pas',
+  MCPServer.Tests.Http in 'MCPServer.Tests.Http.pas';
 
 procedure RunTests;
 begin

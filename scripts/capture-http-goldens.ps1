@@ -65,6 +65,7 @@ Host=localhost
 Name=delphi-mcp-server
 Version=1.0.0
 Endpoint=/mcp
+EndpointInfoPath=/info
 
 [CORS]
 Enabled=1
@@ -117,12 +118,17 @@ try {
     $modernMeta = '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{"name":"golden-client","version":"1.0.0"}}'
 
     $cases = @(
-        @{ Name = 'modern-discover';               Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":"d1","method":"server/discover","params":{' + $modernMeta + '}}' }
-        @{ Name = 'modern-tools-list';             Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":20,"method":"tools/list","params":{' + $modernMeta + '}}' }
-        @{ Name = 'modern-unknown-method';         Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":21,"method":"prompts/list","params":{' + $modernMeta + '}}' }
-        @{ Name = 'modern-missing-version-header'; Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":22,"method":"tools/list","params":{' + $modernMeta + '}}' }
-        @{ Name = 'modern-unsupported-version';    Method = 'POST';    Headers = @($jsonType, $jsonAccept, 'MCP-Protocol-Version: 1900-01-01'); Body = '{"jsonrpc":"2.0","id":23,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1900-01-01","io.modelcontextprotocol/clientCapabilities":{}}}}' }
-        @{ Name = 'modern-missing-client-capabilities'; Method = 'POST'; Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":24,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' }
+        @{ Name = 'modern-discover';               Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: server/discover'); Body = '{"jsonrpc":"2.0","id":"d1","method":"server/discover","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-tools-list';             Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: tools/list'); Body = '{"jsonrpc":"2.0","id":20,"method":"tools/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-tools-call-name-base64';  Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: tools/call', 'Mcp-Name: =?base64?ZWNobw==?='); Body = '{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello modern"},' + $modernMeta + '}}' }
+        @{ Name = 'modern-unknown-method';         Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: prompts/list'); Body = '{"jsonrpc":"2.0","id":21,"method":"prompts/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-missing-version-header'; Method = 'POST';    Headers = @($jsonType, $jsonAccept, 'Mcp-Method: tools/list'); Body = '{"jsonrpc":"2.0","id":22,"method":"tools/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-missing-method-header';  Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","id":26,"method":"tools/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-method-header-mismatch'; Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: tools/call'); Body = '{"jsonrpc":"2.0","id":27,"method":"tools/list","params":{' + $modernMeta + '}}' }
+        @{ Name = 'modern-unsupported-version';    Method = 'POST';    Headers = @($jsonType, $jsonAccept, 'MCP-Protocol-Version: 1900-01-01', 'Mcp-Method: tools/list'); Body = '{"jsonrpc":"2.0","id":23,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"1900-01-01","io.modelcontextprotocol/clientCapabilities":{}}}}' }
+        @{ Name = 'modern-missing-client-capabilities'; Method = 'POST'; Headers = @($jsonType, $jsonAccept, $modernHeader, 'Mcp-Method: tools/list'); Body = '{"jsonrpc":"2.0","id":24,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' }
+        @{ Name = 'modern-notification';           Method = 'POST';    Headers = @($jsonType, $jsonAccept, $modernHeader); Body = '{"jsonrpc":"2.0","method":"notifications/initialized"}' }
+        @{ Name = 'get-info-path';                 Method = 'GET';     Headers = @($jsonAccept); Path = '/info' }
         @{ Name = 'post-initialize';               Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = $initialize }
         @{ Name = 'post-initialize-sse';           Method = 'POST';    Headers = @($jsonType, $sseAccept);  Body = $initialize }
         @{ Name = 'post-tools-list';               Method = 'POST';    Headers = @($jsonType, $jsonAccept); Body = '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' }

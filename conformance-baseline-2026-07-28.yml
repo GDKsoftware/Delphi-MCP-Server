@@ -16,7 +16,6 @@ server:
   - prompts-get-with-args
   - prompts-get-embedded-resource
   - prompts-get-with-image
-  - dns-rebinding-protection
   - caching
   - input-required-result-basic-elicitation
   - input-required-result-basic-sampling

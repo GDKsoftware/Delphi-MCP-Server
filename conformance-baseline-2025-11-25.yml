@@ -22,6 +22,5 @@ server:
   - prompts-get-with-args
   - prompts-get-embedded-resource
   - prompts-get-with-image
-  - dns-rebinding-protection
   # only a WARNING check (no session id on the SSE path); the runner counts it as not passed
   - server-sse-multiple-streams

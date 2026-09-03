@@ -30,13 +30,14 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Initialize_IsLegacy_EvenWithModernMeta;
+    [Test] procedure Initialize_WithModernMeta_IsNotFound;
     [Test] procedure Initialize_EchoesServedRevision;
     [Test] procedure Initialize_UnknownRevision_AnswersLatestLegacy;
     [Test] procedure ModernMeta_IsModern;
     [Test] procedure ModernMeta_Http_HeaderMissing_IsHeaderMismatch;
     [Test] procedure ModernMeta_Http_HeaderDiffers_IsHeaderMismatch;
     [Test] procedure ModernMeta_Http_HeaderMatches_IsModern;
+    [Test] procedure ModernMeta_Http_NameHeader_IsDecodedAndCompared;
     [Test] procedure ModernMeta_UnknownVersion_ListsSupported;
     [Test] procedure ModernMeta_MissingClientCapabilities_IsInvalidParams;
     [Test] procedure ModernMeta_ClientInfoNotObject_IsInvalidParams;
@@ -122,10 +123,14 @@ begin
   end;
 end;
 
-procedure TRequestContextTests.Initialize_IsLegacy_EvenWithModernMeta;
+procedure TRequestContextTests.Initialize_WithModernMeta_IsNotFound;
 begin
-  var Context := Build(Request('initialize', '{"protocolVersion":"2025-11-25",' + META_MODERN + '}'), TMCPTransportHints.None);
+  // A modern client probing with initialize must learn that the method does
+  // not exist in its era; only an initialize without modern _meta is legacy.
+  ExpectError(Request('initialize', '{"protocolVersion":"2025-11-25",' + META_MODERN + '}'), TMCPTransportHints.None,
+    JSONRPC_METHOD_NOT_FOUND, 404, 'initialize is legacy-only');
 
+  var Context := Build(Request('initialize', '{"protocolVersion":"2025-11-25","_meta":{"progressToken":"p"}}'), TMCPTransportHints.None);
   Assert.AreEqual(TMCPProtocolEra.Legacy, Context.Era);
   Assert.AreEqual('2025-11-25', Context.ProtocolVersion);
 end;
@@ -169,8 +174,42 @@ end;
 
 procedure TRequestContextTests.ModernMeta_Http_HeaderMatches_IsModern;
 begin
-  var Context := Build(Request('tools/list', '{' + META_MODERN + '}'), TMCPTransportHints.ForHttp(True, '2026-07-28'));
+  var Hints := TMCPTransportHints.ForHttp(True, '2026-07-28');
+  Hints.HasMethodHeader := True;
+  Hints.MethodHeader := 'tools/list';
+  var Context := Build(Request('tools/list', '{' + META_MODERN + '}'), Hints);
   Assert.AreEqual(TMCPProtocolEra.Modern, Context.Era);
+
+  // The mirrored method header is compared case-sensitively.
+  Hints.MethodHeader := 'TOOLS/LIST';
+  ExpectError(Request('tools/list', '{' + META_MODERN + '}'), Hints,
+    MCP_ERROR_HEADER_MISMATCH, 400, 'Mcp-Method differs from the body');
+
+  Hints.HasMethodHeader := False;
+  ExpectError(Request('tools/list', '{' + META_MODERN + '}'), Hints,
+    MCP_ERROR_HEADER_MISMATCH, 400, 'Mcp-Method is required on modern HTTP requests');
+end;
+
+procedure TRequestContextTests.ModernMeta_Http_NameHeader_IsDecodedAndCompared;
+begin
+  var Hints := TMCPTransportHints.ForHttp(True, '2026-07-28');
+  Hints.HasMethodHeader := True;
+  Hints.MethodHeader := 'resources/read';
+  var Body := Request('resources/read', '{"uri":"file:///caf' + #$00E9 + '.txt",' + META_MODERN + '}');
+
+  ExpectError(Body, Hints, MCP_ERROR_HEADER_MISMATCH, 400, 'Mcp-Name is required for resources/read');
+
+  Hints.HasNameHeader := True;
+  Hints.NameHeader := 'file:///cafe.txt';
+  ExpectError(Body, Hints, MCP_ERROR_HEADER_MISMATCH, 400, 'Mcp-Name differs from params.uri');
+
+  // "file:///café.txt" as UTF-8 in the Base64 sentinel form.
+  Hints.NameHeader := '=?base64?ZmlsZTovLy9jYWbDqS50eHQ=?=';
+  var Context := Build(Body, Hints);
+  Assert.AreEqual(TMCPProtocolEra.Modern, Context.Era);
+
+  Hints.NameHeader := '=?base64?not base64?=';
+  ExpectError(Body, Hints, MCP_ERROR_HEADER_MISMATCH, 400, 'malformed sentinel value');
 end;
 
 procedure TRequestContextTests.ModernMeta_UnknownVersion_ListsSupported;

@@ -69,6 +69,7 @@ Host=localhost
 Name=delphi-mcp-server
 Version=1.0.0
 Endpoint=/mcp
+EndpointInfoPath=/info
 
 [CORS]
 Enabled=1
