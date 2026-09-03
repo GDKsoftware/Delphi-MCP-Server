@@ -30,6 +30,11 @@
         "resources": {
           "subscribe": false,
           "listChanged": false
+        },
+        "prompts": {
+          "listChanged": false
+        },
+        "completions": {
         }
       },
       "_meta": {
