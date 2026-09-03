@@ -13,34 +13,65 @@ uses
   MCPServer.Tool.Base;
 
 type
-  TMCPToolsManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityProvider)
+  /// tools/list and tools/call over the tools registered in TMCPRegistry,
+  /// listed in registration order.
+  ///
+  /// Protocol errors (-32602) are raised for a missing or unknown tool name
+  /// and malformed params; everything a tool itself reports (EMCPToolError,
+  /// argument validation, unexpected exceptions) becomes an isError result
+  /// the model can act on.
+  TMCPToolsManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPCapabilityProvider)
   strict private
-    function ExtractToolNameAndArguments(const Params: System.JSON.TJSONObject; out ToolName: string; out Arguments: TJSONObject): Boolean;
-    function ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject): TValue;
-    function BuildToolCallResponse(const ResultValue: TValue): TJSONObject;
-    function BuildToolListResponse: TJSONObject;
-    function CreateToolJSON(const Tool: IMCPTool): TJSONObject;
-  private
     FTools: TDictionary<string, IMCPTool>;
+    FOrder: TList<string>;
+    FListTtlMs: Integer;
+    FListCacheScope: string;
+    function ErrorResult(const Message: string; Era: TMCPProtocolEra): TJSONObject;
+    function ResultToJson(const ResultValue: TValue; Era: TMCPProtocolEra): TJSONObject;
+    function ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject; Era: TMCPProtocolEra): TJSONObject;
+    function BuildToolListResponse(Era: TMCPProtocolEra): TJSONObject;
+    function CreateToolJSON(const Tool: IMCPTool): TJSONObject;
+    procedure CheckCursor(const Params: TJSONObject);
+    procedure ValidateToolName(const Name: string);
+    function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
+  private
     procedure RegisterTool(const Tool: IMCPTool);
     procedure RegisterBuiltInTools;
   public
     constructor Create;
     destructor Destroy; override;
-    
+
+    /// Adds a tool to this manager only (next to the ones from TMCPRegistry).
+    procedure AddTool(const Tool: IMCPTool);
+
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
     function ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;
+    function ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
+      const Context: IMCPRequestContext): TValue;
     procedure DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 
-    function ListTools: TValue;
-    function CallTool(const Params: System.JSON.TJSONObject): TValue;
+    function ListTools: TValue; overload;
+    function ListTools(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
+    function CallTool(const Params: System.JSON.TJSONObject): TValue; overload;
+    function CallTool(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
+
+    /// Cache hints on tools/list for modern clients; 0 and 'private' unless set.
+    property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
+    property ListCacheScope: string read FListCacheScope write FListCacheScope;
   end;
 
 implementation
 
 uses
-  MCPServer.Registration;
+  System.RegularExpressions,
+  MCPServer.Registration,
+  MCPServer.RequestContext,
+  MCPServer.Errors,
+  MCPServer.Tool.Result;
+
+const
+  TOOL_NAME_PATTERN = '^[A-Za-z0-9_.\-]{1,128}$';
 
 { TMCPToolsManager }
 
@@ -48,12 +79,16 @@ constructor TMCPToolsManager.Create;
 begin
   inherited;
   FTools := TDictionary<string, IMCPTool>.Create;
+  FOrder := TList<string>.Create;
+  FListTtlMs := 0;
+  FListCacheScope := MCP_CACHE_SCOPE_PRIVATE;
   RegisterBuiltInTools;
 end;
 
 destructor TMCPToolsManager.Destroy;
 begin
   FTools.Free;
+  FOrder.Free;
   inherited;
 end;
 
@@ -74,126 +109,153 @@ begin
   Capabilities.AddPair('tools', Tools);
 end;
 
+function TMCPToolsManager.EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
+begin
+  if Assigned(Context) then
+    Result := Context.Era
+  else
+    Result := TMCPProtocolEra.Legacy;
+end;
+
 function TMCPToolsManager.ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;
 begin
+  Result := ExecuteMethodWithContext(Method, Params, TMCPRequestContext.Current);
+end;
+
+function TMCPToolsManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
+  const Context: IMCPRequestContext): TValue;
+begin
   if Method = 'tools/list' then
-    Result := ListTools
+    Result := ListTools(Params, EraOf(Context))
   else if Method = 'tools/call' then
-    Result := CallTool(Params)
+    Result := CallTool(Params, EraOf(Context))
   else
     raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
 end;
 
+procedure TMCPToolsManager.ValidateToolName(const Name: string);
+begin
+  if not TRegEx.IsMatch(Name, TOOL_NAME_PATTERN) then
+    TLogger.Warning(Format('Tool name "%s" is outside the recommended form (1 to 128 characters from A-Z, a-z, 0-9, _, - and .)', [Name]));
+end;
+
 procedure TMCPToolsManager.RegisterTool(const Tool: IMCPTool);
 begin
-  FTools.Add(Tool.Name, Tool);
+  ValidateToolName(Tool.Name);
+  if not FTools.ContainsKey(Tool.Name) then
+    FOrder.Add(Tool.Name);
+  FTools.AddOrSetValue(Tool.Name, Tool);
 end;
 
 procedure TMCPToolsManager.RegisterBuiltInTools;
-var
-  Tool: IMCPTool;
-  ToolName: string;
 begin
-  for ToolName in TMCPRegistry.GetToolNames do
-  begin
-    Tool := TMCPRegistry.CreateTool(ToolName);
-    RegisterTool(Tool);
-  end;
+  for var ToolName in TMCPRegistry.GetToolNames do
+    RegisterTool(TMCPRegistry.CreateTool(ToolName));
 end;
 
-function TMCPToolsManager.ExtractToolNameAndArguments(const Params: System.JSON.TJSONObject; out ToolName: string; out Arguments: TJSONObject): Boolean;
-var
-  ArgsValue: TJSONValue;
-  NameValue: TJSONValue;
+procedure TMCPToolsManager.AddTool(const Tool: IMCPTool);
 begin
-  Result := False;
-  ToolName := '';
-  Arguments := nil;
-  
-  if not Assigned(Params) then
-    Exit;
-    
-  NameValue := Params.GetValue('name');
-  if Assigned(NameValue) then
-  begin
-    ToolName := NameValue.Value;
-    Result := ToolName <> '';
-  end;
-  
-  ArgsValue := Params.GetValue('arguments');
-  if Assigned(ArgsValue) and (ArgsValue is TJSONObject) then
-    Arguments := ArgsValue as TJSONObject;
+  RegisterTool(Tool);
 end;
 
-function TMCPToolsManager.ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject): TValue;
+procedure TMCPToolsManager.CheckCursor(const Params: TJSONObject);
 begin
+  // Every list fits in one page; a cursor is never one this server issued.
+  if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
+    raise EMCPError.InvalidParams('Invalid cursor');
+end;
+
+function TMCPToolsManager.ErrorResult(const Message: string; Era: TMCPProtocolEra): TJSONObject;
+begin
+  var ToolResult := TMCPToolResult.Error(Message);
   try
-    Result := Tool.Execute(Arguments);
-  except
-    on E: Exception do
-      Result := 'Error executing tool: ' + E.Message;
+    Result := ToolResult.ToJson(Era);
+  finally
+    ToolResult.Free;
   end;
 end;
 
-function TMCPToolsManager.BuildToolCallResponse(const ResultValue: TValue): TJSONObject;
-var
-  ContentArray: TJSONArray;
-  ContentItem: TJSONObject;
-  ErrorValue: TJSONValue;
-  HasError: Boolean;
-  JsonResult: TJSONObject;
-  TextValue: string;
+function TMCPToolsManager.ResultToJson(const ResultValue: TValue; Era: TMCPProtocolEra): TJSONObject;
 begin
-  Result := TJSONObject.Create;
+  if ResultValue.IsType<TMCPToolResult> then
+  begin
+    var ToolResult := ResultValue.AsType<TMCPToolResult>;
+    try
+      Exit(ToolResult.ToJson(Era));
+    finally
+      ToolResult.Free;
+    end;
+  end;
 
   if ResultValue.IsType<TJSONArray> then
   begin
-    // The tool already produced a content array (e.g. text plus an image item);
-    // take ownership so it is passed through verbatim and freed with the
-    // response (no clone, no leak of the original array).
+    // A ready-made content array is passed through as is.
+    Result := TJSONObject.Create;
     Result.AddPair('content', ResultValue.AsType<TJSONArray>);
-  end
-  else if ResultValue.IsType<string> then
-  begin
-    TextValue := ResultValue.AsString;
-    HasError := TextValue.StartsWith('Error:') or TextValue.StartsWith('Error executing tool:');
-
-    ContentArray := TJSONArray.Create;
-    Result.AddPair('content', ContentArray);
-
-    ContentItem := TJSONObject.Create;
-    ContentArray.AddElement(ContentItem);
-    ContentItem.AddPair('type', 'text');
-    ContentItem.AddPair('text', TextValue);
-
-    if HasError then
-{$IF COMPILERVERSION <= 29}
-      Result.AddPair('isError', TJSONTrue.Create);
-{$ELSE}
-      Result.AddPair('isError', TJSONBool.Create(True));
-{$ENDIF}
-  end
-  else if ResultValue.IsType<TJsonObject> then
-  begin
-    JsonResult := ResultValue.AsType<TJsonObject>;
-    Result.AddPair('structuredContent', TJSONObject(JsonResult.Clone));
-
-    ErrorValue := JsonResult.GetValue('error');
-    HasError := Assigned(ErrorValue) and (ErrorValue.Value <> '');
-    if HasError then
-{$IF COMPILERVERSION <= 29}
-      Result.AddPair('isError', TJSONTrue.Create);
-{$ELSE}
-      Result.AddPair('isError', TJSONBool.Create(True));
-{$ENDIF}
+    Exit;
   end;
 
+  var ToolResult := TMCPToolResult.Create;
+  try
+    if ResultValue.IsType<string> then
+    begin
+      var Text := ResultValue.AsString;
+      ToolResult.AddText(Text);
+      // Text results keep signalling failure with an "Error:" prefix.
+      ToolResult.IsError := Text.StartsWith('Error:') or Text.StartsWith('Error executing tool:');
+    end
+    else if ResultValue.IsType<TJSONObject> then
+    begin
+      var Structured := ResultValue.AsType<TJSONObject>;
+      ToolResult.SetStructuredContent(Structured);
+      var ErrorValue := Structured.GetValue('error');
+      ToolResult.IsError := Assigned(ErrorValue) and (ErrorValue.Value <> '');
+    end
+    else if not ResultValue.IsEmpty then
+      ToolResult.AddText(ResultValue.ToString);
+
+    Result := ToolResult.ToJson(Era);
+  finally
+    ToolResult.Free;
+  end;
+end;
+
+function TMCPToolsManager.ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject;
+  Era: TMCPProtocolEra): TJSONObject;
+var
+  ResultValue: TValue;
+begin
+  // "arguments" is optional on the wire; a tool always receives an object.
+  var OwnedArguments: TJSONObject := nil;
+  var EffectiveArguments := Arguments;
+  if not Assigned(EffectiveArguments) then
+  begin
+    OwnedArguments := TJSONObject.Create;
+    EffectiveArguments := OwnedArguments;
+  end;
+
+  try
+    try
+      ResultValue := Tool.Execute(EffectiveArguments);
+    except
+      on E: EMCPToolError do
+        Exit(ErrorResult(E.Message, Era));
+      on E: EArgumentException do
+        Exit(ErrorResult('Invalid arguments: ' + E.Message, Era));
+      on E: EMCPError do
+        raise;
+      on E: Exception do
+        Exit(ErrorResult('Error executing tool: ' + E.Message, Era));
+    end;
+    Result := ResultToJson(ResultValue, Era);
+  finally
+    OwnedArguments.Free;
+  end;
 end;
 
 function TMCPToolsManager.CreateToolJSON(const Tool: IMCPTool): TJSONObject;
 var
-  Schema: TJSONObject;
-  SchemaClone: TJSONObject;
+  Metadata: IMCPToolMetadata;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('name', Tool.Name);
@@ -201,78 +263,80 @@ begin
     Result.AddPair('title', Tool.Title);
   Result.AddPair('description', Tool.Description);
 
-  Schema := Tool.InputSchema;
+  var Schema := Tool.InputSchema;
   if Assigned(Schema) then
-  begin
-    SchemaClone := TJSONObject.ParseJSONValue(Schema.ToJSON) as TJSONObject;
-    Result.AddPair('inputSchema', SchemaClone);
-    Schema.Free;
-  end;
+    Result.AddPair('inputSchema', Schema);
+
   Schema := Tool.OutputSchema;
   if Assigned(Schema) then
-  begin
-    SchemaClone := TJSONObject.ParseJSONValue(Schema.ToJSON) as TJSONObject;
-    Result.AddPair('outputSchema', SchemaClone);
-    Schema.Free;
-  end;
+    Result.AddPair('outputSchema', Schema);
 
+  if Supports(Tool, IMCPToolMetadata, Metadata) then
+  begin
+    if Assigned(Metadata.Annotations) then
+      Result.AddPair('annotations', TJSONObject(Metadata.Annotations.Clone));
+    if Assigned(Metadata.Icons) then
+      Result.AddPair('icons', TJSONArray(Metadata.Icons.Clone));
+  end;
 end;
 
-function TMCPToolsManager.BuildToolListResponse: TJSONObject;
-var
-  Tool: IMCPTool;
-  ToolsArray: TJSONArray;
-  ToolJSON: TJSONObject;
+function TMCPToolsManager.BuildToolListResponse(Era: TMCPProtocolEra): TJSONObject;
 begin
   Result := TJSONObject.Create;
-  ToolsArray := TJSONArray.Create;
+  var ToolsArray := TJSONArray.Create;
   Result.AddPair('tools', ToolsArray);
 
-  for Tool in FTools.Values do
+  for var Name in FOrder do
+    ToolsArray.AddElement(CreateToolJSON(FTools[Name]));
+
+  if Era = TMCPProtocolEra.Modern then
   begin
-    ToolJSON := CreateToolJSON(Tool);
-    ToolsArray.AddElement(ToolJSON);
+    Result.AddPair('ttlMs', TJSONNumber.Create(FListTtlMs));
+    Result.AddPair('cacheScope', FListCacheScope);
   end;
-end;
-
-function TMCPToolsManager.CallTool(const Params: System.JSON.TJSONObject): TValue;
-var
-  Arguments: TJSONObject;
-  EmptyArguments: TJSONObject;
-  ResultValue: TValue;
-  Tool: IMCPTool;
-  ToolName: string;
-begin
-  if not ExtractToolNameAndArguments(Params, ToolName, Arguments) then
-  begin
-    Result := TValue.From<TJSONObject>(BuildToolCallResponse('Error: Invalid tool parameters'));
-    Exit;
-  end;
-
-  TLogger.Info('MCP CallTool called for tool: ' + ToolName);
-
-  if not FTools.TryGetValue(ToolName, Tool) then
-    ResultValue := TValue.From('Error: Tool not found: ' + ToolName)
-  else if Assigned(Arguments) then
-    ResultValue := ExecuteTool(Tool, Arguments)
-  else
-  begin
-    // "arguments" is optional on the wire; a tool always receives an object.
-    EmptyArguments := TJSONObject.Create;
-    try
-      ResultValue := ExecuteTool(Tool, EmptyArguments);
-    finally
-      EmptyArguments.Free;
-    end;
-  end;
-
-  Result := TValue.From<TJSONObject>(BuildToolCallResponse(ResultValue));
 end;
 
 function TMCPToolsManager.ListTools: TValue;
 begin
+  Result := ListTools(nil, TMCPProtocolEra.Legacy);
+end;
+
+function TMCPToolsManager.ListTools(const Params: TJSONObject; Era: TMCPProtocolEra): TValue;
+begin
   TLogger.Info('MCP ListTools called');
-  Result := TValue.From<TJSONObject>(BuildToolListResponse);
+  CheckCursor(Params);
+  Result := TValue.From<TJSONObject>(BuildToolListResponse(Era));
+end;
+
+function TMCPToolsManager.CallTool(const Params: System.JSON.TJSONObject): TValue;
+begin
+  Result := CallTool(Params, TMCPProtocolEra.Legacy);
+end;
+
+function TMCPToolsManager.CallTool(const Params: TJSONObject; Era: TMCPProtocolEra): TValue;
+var
+  Tool: IMCPTool;
+begin
+  if not Assigned(Params) then
+    raise EMCPError.InvalidParams('params.name is required');
+
+  var NameValue := Params.GetValue('name');
+  if not (NameValue is TJSONString) or (TJSONString(NameValue).Value = '') then
+    raise EMCPError.InvalidParams('params.name is required and must be a non-empty string');
+  var ToolName := TJSONString(NameValue).Value;
+
+  var ArgumentsValue := Params.GetValue('arguments');
+  if Assigned(ArgumentsValue) and not (ArgumentsValue is TJSONObject) and not (ArgumentsValue is TJSONNull) then
+    raise EMCPError.InvalidParams('params.arguments must be an object');
+  var Arguments: TJSONObject := nil;
+  if ArgumentsValue is TJSONObject then
+    Arguments := TJSONObject(ArgumentsValue);
+
+  if not FTools.TryGetValue(ToolName, Tool) then
+    raise EMCPError.UnknownTool(ToolName);
+
+  TLogger.Info('MCP CallTool called for tool: ' + ToolName);
+  Result := TValue.From<TJSONObject>(ExecuteTool(Tool, Arguments, Era));
 end;
 
 end.
