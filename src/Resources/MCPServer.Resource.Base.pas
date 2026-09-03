@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils,
   System.Rtti,
-  System.JSON;
+  System.JSON,
+  MCPServer.Types;
 
 type
   IMCPResource = interface
@@ -15,28 +16,46 @@ type
     function GetDescription: string;
     function GetMimeType: string;
     function Read: string;
-    
+
     property URI: string read GetURI;
     property Name: string read GetName;
     property Description: string read GetDescription;
     property MimeType: string read GetMimeType;
   end;
-  
-  TMCPResourceBase<T: class, constructor> = class(TInterfacedObject, IMCPResource)
+
+  /// Resource whose data is a class T serialised as JSON (mime type
+  /// application/json) or, for other mime types, the string in T's Content
+  /// property.
+  ///
+  /// The protected fields FTitle, FSize (-1 = unknown), FAnnotations (nil),
+  /// FTtlMs (0) and FCacheScope ('private') have safe defaults; set them in
+  /// the constructor of a descendant.
+  TMCPResourceBase<T: class, constructor> = class(TInterfacedObject, IMCPResource,
+    IMCPResourceMetadata, IMCPCacheableResource)
   protected
     FURI: string;
     FName: string;
     FDescription: string;
     FMimeType: string;
+    FTitle: string;
+    FSize: Int64;
+    FAnnotations: TJSONObject;
+    FTtlMs: Integer;
+    FCacheScope: string;
     function GetResourceData: T; virtual; abstract;
   public
     constructor Create; virtual;
     destructor Destroy; override;
-    
+
     function GetURI: string;
     function GetName: string;
     function GetDescription: string;
     function GetMimeType: string;
+    function GetTitle: string;
+    function GetSize: Int64;
+    function GetAnnotations: TJSONObject;
+    function GetTtlMs: Integer;
+    function GetCacheScope: string;
     function Read: string;
   end;
 
@@ -61,10 +80,14 @@ uses
 constructor TMCPResourceBase<T>.Create;
 begin
   inherited;
+  FSize := -1;
+  FTtlMs := 0;
+  FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
 end;
 
 destructor TMCPResourceBase<T>.Destroy;
 begin
+  FAnnotations.Free;
   inherited;
 end;
 
@@ -86,6 +109,31 @@ end;
 function TMCPResourceBase<T>.GetMimeType: string;
 begin
   Result := FMimeType;
+end;
+
+function TMCPResourceBase<T>.GetTitle: string;
+begin
+  Result := FTitle;
+end;
+
+function TMCPResourceBase<T>.GetSize: Int64;
+begin
+  Result := FSize;
+end;
+
+function TMCPResourceBase<T>.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
+end;
+
+function TMCPResourceBase<T>.GetTtlMs: Integer;
+begin
+  Result := FTtlMs;
+end;
+
+function TMCPResourceBase<T>.GetCacheScope: string;
+begin
+  Result := FCacheScope;
 end;
 
 function TMCPResourceBase<T>.Read: string;

@@ -5,7 +5,8 @@ interface
 uses
   System.SysUtils,
   System.Rtti,
-  System.JSON;
+  System.JSON,
+  MCPServer.Types;
 
 type
   IMCPTool = interface
@@ -15,6 +16,9 @@ type
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    /// Returns a string (one text block), a TJSONObject (structured content),
+    /// a TJSONArray (content blocks) or a TMCPToolResult. The tools manager
+    /// takes ownership of objects.
     function Execute(const Arguments: TJSONObject): TValue;
 
     property Name: string read GetName;
@@ -24,72 +28,106 @@ type
     property OutputSchema: TJSONObject read GetOutputSchema;
   end;
 
-  TMCPToolBase = class(TInterfacedObject, IMCPTool)
+  /// Tool with a hand-written schema and raw JSON arguments.
+  ///
+  /// The protected fields FAnnotations and FIcons (nil by default) are
+  /// reported in tools/list when set; the tool owns them.
+  TMCPToolBase = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
+    FAnnotations: TJSONObject;
+    FIcons: TJSONArray;
     function BuildSchema: TJSONObject; virtual; abstract;
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
+    function GetIcons: TJSONArray;
     function Execute(const Arguments: TJSONObject): TValue; virtual; abstract;
   end;
 
-  TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool)
+  /// Tool whose parameters are a class T; the schema comes from T's RTTI.
+  ///
+  /// Override ExecuteWithParams for a text result, or ExecuteWithContext for
+  /// any other result (TMCPToolResult, structured content) and access to the
+  /// request context. The default ExecuteWithContext calls ExecuteWithParams.
+  TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
-    function ExecuteWithParams(const Params: T): string;virtual; abstract;
+    FAnnotations: TJSONObject;
+    FIcons: TJSONArray;
+    function ExecuteWithParams(const Params: T): string; virtual;
+    function ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue; virtual;
     function GetParamsClass: TClass; virtual;
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
+    function GetIcons: TJSONArray;
     function Execute(const Arguments: TJSONObject): TValue;
   end;
 
-  TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool)
+  /// Tool with parameters T and a typed result R that is serialised as
+  /// structured content (with the compact JSON as text for older clients).
+  TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
-    function ExecuteWithParams(const Params: T): R;virtual; abstract;
+    FAnnotations: TJSONObject;
+    FIcons: TJSONArray;
+    function ExecuteWithParams(const Params: T): R; virtual;
+    function ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue; virtual;
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
+    function GetIcons: TJSONArray;
     function Execute(const Arguments: TJSONObject): TValue;
   end;
-
-
-
 
 implementation
 
 uses
   MCPServer.Schema.Generator,
-  MCPServer.Serializer;
+  MCPServer.Serializer,
+  MCPServer.RequestContext,
+  MCPServer.Tool.Result;
 
 { TMCPToolBase }
 
 constructor TMCPToolBase.Create;
 begin
   inherited Create;
+end;
+
+destructor TMCPToolBase.Destroy;
+begin
+  FAnnotations.Free;
+  FIcons.Free;
+  inherited;
 end;
 
 function TMCPToolBase.GetName: string;
@@ -107,7 +145,7 @@ end;
 
 function TMCPToolBase.GetOutputSchema: TJSONObject;
 begin
-  result := nil;
+  Result := nil;
 end;
 
 function TMCPToolBase.GetDescription: string;
@@ -120,11 +158,28 @@ begin
   Result := BuildSchema;
 end;
 
+function TMCPToolBase.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
+end;
+
+function TMCPToolBase.GetIcons: TJSONArray;
+begin
+  Result := FIcons;
+end;
+
 { TMCPToolBase<T> }
 
 constructor TMCPToolBase<T>.Create;
 begin
   inherited Create;
+end;
+
+destructor TMCPToolBase<T>.Destroy;
+begin
+  FAnnotations.Free;
+  FIcons.Free;
+  inherited;
 end;
 
 function TMCPToolBase<T>.GetName: string;
@@ -142,7 +197,7 @@ end;
 
 function TMCPToolBase<T>.GetOutputSchema: TJSONObject;
 begin
-  result := nil;
+  Result := nil;
 end;
 
 function TMCPToolBase<T>.GetDescription: string;
@@ -155,13 +210,33 @@ begin
   Result := TMCPSchemaGenerator.GenerateSchema(T);
 end;
 
+function TMCPToolBase<T>.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
+end;
+
+function TMCPToolBase<T>.GetIcons: TJSONArray;
+begin
+  Result := FIcons;
+end;
+
+function TMCPToolBase<T>.ExecuteWithParams(const Params: T): string;
+begin
+  raise ENotImplemented.CreateFmt('%s overrides neither ExecuteWithParams nor ExecuteWithContext', [ClassName]);
+end;
+
+function TMCPToolBase<T>.ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue;
+begin
+  Result := ExecuteWithParams(Params);
+end;
+
 function TMCPToolBase<T>.Execute(const Arguments: TJSONObject): TValue;
 var
   ParamsInstance: T;
 begin
   ParamsInstance := TMCPSerializer.Deserialize<T>(Arguments);
   try
-    Result := ExecuteWithParams(ParamsInstance);
+    Result := ExecuteWithContext(ParamsInstance, TMCPRequestContext.Current);
   finally
     ParamsInstance.Free;
   end;
@@ -172,7 +247,6 @@ begin
   Result := T;
 end;
 
-
 { TMCPToolBase<T, R> }
 
 constructor TMCPToolBase<T, R>.Create;
@@ -180,22 +254,39 @@ begin
   inherited Create;
 end;
 
+destructor TMCPToolBase<T, R>.Destroy;
+begin
+  FAnnotations.Free;
+  FIcons.Free;
+  inherited;
+end;
+
+function TMCPToolBase<T, R>.ExecuteWithParams(const Params: T): R;
+begin
+  raise ENotImplemented.CreateFmt('%s overrides neither ExecuteWithParams nor ExecuteWithContext', [ClassName]);
+end;
+
+function TMCPToolBase<T, R>.ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue;
+var
+  Response: R;
+begin
+  Response := ExecuteWithParams(Params);
+  try
+    var JsonObj := TJSONObject.Create;
+    TMCPSerializer.Serialize(Response, JsonObj);
+    Result := TValue.From<TJSONObject>(JsonObj);
+  finally
+    Response.Free;
+  end;
+end;
+
 function TMCPToolBase<T, R>.Execute(const Arguments: TJSONObject): TValue;
 var
   ParamsInstance: T;
-  Response : R;
-  JsonObj : TJSONObject;
 begin
   ParamsInstance := TMCPSerializer.Deserialize<T>(Arguments);
   try
-    Response := ExecuteWithParams(ParamsInstance);
-    try
-      JsonObj := TJSONObject.Create;
-      TMCPSerializer.Serialize(Response, JsonObj);
-      result := TValue.From(JsonObj);
-    finally
-      Response.Free;
-    end;
+    Result := ExecuteWithContext(ParamsInstance, TMCPRequestContext.Current);
   finally
     ParamsInstance.Free;
   end;
@@ -203,7 +294,7 @@ end;
 
 function TMCPToolBase<T, R>.GetDescription: string;
 begin
-  result := FDescription;
+  Result := FDescription;
 end;
 
 function TMCPToolBase<T, R>.GetInputSchema: TJSONObject;
@@ -227,6 +318,16 @@ end;
 function TMCPToolBase<T, R>.GetOutputSchema: TJSONObject;
 begin
   Result := TMCPSchemaGenerator.GenerateSchema(R);
+end;
+
+function TMCPToolBase<T, R>.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
+end;
+
+function TMCPToolBase<T, R>.GetIcons: TJSONArray;
+begin
+  Result := FIcons;
 end;
 
 end.
