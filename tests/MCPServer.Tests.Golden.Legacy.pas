@@ -54,6 +54,7 @@ type
     [Test] procedure Resources_Read_ProjectInfo;
     [Test] procedure Resources_Read_ProjectReadme;
     [Test] procedure Resources_Read_LogsRecent;
+    [Test] procedure Resources_Read_ServerStatus;
     [Test] procedure Resources_Read_UnknownUri;
     [Test] procedure Resources_Read_WithoutParams;
     [Test] procedure Resources_Templates_List;
@@ -233,6 +234,11 @@ end;
 procedure TLegacyGoldenTests.Resources_Read_LogsRecent;
 begin
   CheckGolden('resources-read-logs-recent');
+end;
+
+procedure TLegacyGoldenTests.Resources_Read_ServerStatus;
+begin
+  CheckGolden('resources-read-server-status');
 end;
 
 procedure TLegacyGoldenTests.Resources_Read_UnknownUri;

@@ -4,15 +4,17 @@
     "id": 18,
     "method": "resources/read"
   },
-  "mask": [
-    "error.message"
-  ],
   "expected": {
     "jsonrpc": "2.0",
     "id": 18,
-    "error": {
-      "code": -32603,
-      "message": "<masked>"
+    "result": {
+      "contents": [
+        {
+          "uri": "",
+          "mimeType": "text/plain",
+          "text": "Error: Resource not found: "
+        }
+      ]
     }
   }
 }

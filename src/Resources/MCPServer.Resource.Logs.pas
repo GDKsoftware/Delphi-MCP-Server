@@ -74,6 +74,9 @@ uses
   System.Math,
   MCPServer.Registration;
 
+const
+  MAX_RECENT_LOG_ENTRIES = 100;
+
 { TLogEntries }
 
 constructor TLogEntries.Create;
@@ -208,11 +211,14 @@ begin
   // Add access log entry
   TLogBuffer.Instance.AddLog('INFO', 'Resource accessed: logs://recent', 'ACCESS');
   
-  Logs := TLogBuffer.Instance.GetLogs(100);
+  Logs := TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES);
   try
-    Result.Entries.AddRange(Logs.ToArray);
+    Result.Entries.AddRange(Logs);
     Result.TotalCount := Logs.Count;
     Result.FilteredCount := Logs.Count;
+    // GetLogs returns copies in an owning list; Result.Entries owns them
+    // from here on, otherwise they would be freed twice.
+    Logs.OwnsObjects := False;
   finally
     Logs.Free;
   end;

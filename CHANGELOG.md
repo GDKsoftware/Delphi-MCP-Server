@@ -59,3 +59,16 @@ before any protocol change lands. No client-visible protocol change.
 - `TServerStatusResource` request and connection counters and the SSE event-id
   counter are updated atomically; they were plain increments shared by all
   Indy connection threads.
+- `logs://recent` answered "Error reading resource: Invalid pointer operation":
+  the copied log entries were owned by two lists and freed twice.
+- `TMCPSerializer` serialised `TList<T>` and `TObjectList<T>` properties as an
+  object with `count` and `capacity` members. They are JSON arrays now, so
+  `project://info` lists its features and `logs://recent` its entries.
+- `server://status` was declared but never registered by the executable; the
+  unit registers it by default now, and `SetNamePrefix` replaces that
+  registration instead of adding a second URI (`TMCPRegistry.UnregisterResource`
+  is new).
+- `resources/read` without `params` raised an access violation (returned as
+  `-32603`); it is now handled like a missing `uri`.
+- `tools/call` without `arguments` raised an access violation inside the tool
+  (returned as an `isError` result); the tool now receives an empty object.

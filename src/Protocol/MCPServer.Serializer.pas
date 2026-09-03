@@ -23,6 +23,7 @@ type
     class function ConvertJsonToEnum(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function GetEnumValueNames(const EnumType: TRttiEnumerationType): string;
     class function ConvertValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
+    class function TrySerializeList(Obj: TObject; out Json: TJSONValue): Boolean;
     class function CreateInstanceFromType(const RttiType: TRttiType): TObject;
 
     // Array deserialization helpers
@@ -364,7 +365,7 @@ begin
         begin
           Result := TJSONValue(Obj).Clone as TJSONValue;
         end
-        else
+        else if not TrySerializeList(Obj, Result) then
         begin
           ChildJson := TJSONObject.Create;
           Serialize(Obj, ChildJson);
@@ -372,6 +373,54 @@ begin
         end;
       end;
   end;
+end;
+
+// Serialises TList<T> and TObjectList<T> (anything with an integer-indexed
+// Items property and a Count) as a JSON array of their elements. Without
+// this a list came out as an object with count and capacity members.
+class function TMCPSerializer.TrySerializeList(Obj: TObject; out Json: TJSONValue): Boolean;
+var
+  ListType: TRttiType;
+  CountProp: TRttiProperty;
+  ItemsProp: TRttiIndexedProperty;
+  IndexParams: TArray<TRttiParameter>;
+  Items: TJSONArray;
+  Item: TJSONValue;
+  Count: Integer;
+  I: Integer;
+begin
+  Result := False;
+  Json := nil;
+
+  ListType := FContext.GetType(Obj.ClassType);
+  CountProp := ListType.GetProperty('Count');
+  ItemsProp := ListType.GetIndexedProperty('Items');
+  if not Assigned(CountProp) or not Assigned(ItemsProp) or not ItemsProp.IsReadable
+    or not Assigned(ItemsProp.ReadMethod) then
+    Exit;
+
+  // Only integer indexes: TDictionary<TKey, TValue> also has Count and Items.
+  IndexParams := ItemsProp.ReadMethod.GetParameters;
+  if (Length(IndexParams) <> 1) or not (IndexParams[0].ParamType.TypeKind in [tkInteger, tkInt64]) then
+    Exit;
+
+  {$WARN UNSAFE_CAST OFF}
+  Count := Integer(CountProp.GetValue(Obj).AsInt64);
+  {$WARN UNSAFE_CAST ON}
+  Items := TJSONArray.Create;
+  for I := 0 to Count - 1 do
+  begin
+    {$WARN UNSAFE_CAST OFF}
+    Item := ConvertValueToJson(ItemsProp.GetValue(Obj, [I]), ItemsProp.PropertyType);
+    {$WARN UNSAFE_CAST ON}
+    if Assigned(Item) then
+      Items.AddElement(Item)
+    else
+      Items.AddElement(TJSONNull.Create);
+  end;
+
+  Json := Items;
+  Result := True;
 end;
 
 class function TMCPSerializer.DeserializeArray(RttiType: TRttiType; const JsonArray: TJSONArray): TValue;

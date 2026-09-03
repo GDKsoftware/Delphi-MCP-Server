@@ -26,6 +26,12 @@
           "name": "Project Information",
           "description": "Basic information about the Delphi MCP Server project",
           "mimeType": "application/json"
+        },
+        {
+          "uri": "server://status",
+          "name": "server_status",
+          "description": "Current server status and health information",
+          "mimeType": "application/json"
         }
       ]
     }

@@ -13,7 +13,7 @@ type
   public
     [Test] procedure BuiltInTools_AreRegisteredFromInitialization;
     [Test] procedure BuiltInResources_AreRegisteredFromInitialization;
-    [Test] procedure ServerStatus_IsNotRegisteredByDefault;
+    [Test] procedure ServerStatus_IsRegisteredByDefault;
     [Test] procedure CreateTool_UnknownName_Raises;
     [Test] procedure CreateResource_UnknownUri_Raises;
     [Test] procedure CreateTool_ReturnsFreshInstances;
@@ -42,13 +42,16 @@ begin
   Assert.IsTrue(TMCPRegistry.HasResource('project://info'));
   Assert.IsTrue(TMCPRegistry.HasResource('project://readme'));
   Assert.IsTrue(TMCPRegistry.HasResource('logs://recent'));
-  Assert.AreEqual(3, Integer(Length(TMCPRegistry.GetResourceURIs)));
+  Assert.IsTrue(TMCPRegistry.HasResource('server://status'));
+  Assert.AreEqual(4, Integer(Length(TMCPRegistry.GetResourceURIs)));
 end;
 
-procedure TRegistryTests.ServerStatus_IsNotRegisteredByDefault;
+procedure TRegistryTests.ServerStatus_IsRegisteredByDefault;
 begin
-  // Documented in tests\golden\README.md: only SetNamePrefix registers it.
-  Assert.IsFalse(TMCPRegistry.HasResource('server://status'));
+  // Registered by the initialization section of MCPServer.Resource.Server.
+  var Status := TMCPRegistry.CreateResource('server://status');
+  Assert.AreEqual('server://status', Status.URI);
+  Assert.AreEqual('server_status', Status.Name);
 end;
 
 procedure TRegistryTests.CreateTool_UnknownName_Raises;

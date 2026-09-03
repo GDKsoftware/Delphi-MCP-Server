@@ -35,6 +35,7 @@ type
     class var FRequestCount: Int64;
     class var FActiveConnections: Integer;
     class var FNamePrefix: string;
+    class function StatusURI: string;
   protected
     function GetResourceData: TServerStatus; override;
   public
@@ -42,13 +43,13 @@ type
     /// Resets the start time and the counters. Runs from the unit
     /// initialization and again from MCPServer.dpr before a transport starts.
     class procedure Initialize;
-    /// Registers the resource as server://<Prefix>status. The registry is read
-    /// once, when TMCPResourcesManager is created, so call this before the
-    /// managers are built (before TMCPIdHTTPServer.Start or
-    /// TMCPStdioTransport.Run); a later call registers a URI nobody serves.
+    /// Re-registers the resource as server://<Prefix>status and removes the
+    /// URI registered before. The registry is read once, when
+    /// TMCPResourcesManager is created, so call this before the managers are
+    /// built (before TMCPIdHTTPServer.Start or TMCPStdioTransport.Run).
     class procedure SetNamePrefix(const Prefix: string);
-    /// Registers server://status (or the prefixed URI). MCPServer.dpr does not
-    /// call this; the resource is opt-in for library consumers.
+    /// Registers server://status (or the prefixed URI). The unit
+    /// initialization does this once, so the resource is available by default.
     class procedure RegisterServerStatusResource;
     // The counters are updated from every Indy connection thread, so they
     // use atomic operations.
@@ -79,22 +80,21 @@ begin
   FNamePrefix := '';
 end;
 
+class function TServerStatusResource.StatusURI: string;
+begin
+  Result := 'server://' + FNamePrefix + 'status';
+end;
+
 class procedure TServerStatusResource.SetNamePrefix(const Prefix: string);
 begin
+  TMCPRegistry.UnregisterResource(StatusURI);
   FNamePrefix := Prefix;
   RegisterServerStatusResource;
 end;
 
 class procedure TServerStatusResource.RegisterServerStatusResource;
-var
-  URI: string;
 begin
-  if FNamePrefix <> '' then
-    URI := 'server://' + FNamePrefix + 'status'
-  else
-    URI := 'server://status';
-
-  TMCPRegistry.RegisterResource(URI,
+  TMCPRegistry.RegisterResource(StatusURI,
     function: IMCPResource
     begin
       Result := TServerStatusResource.Create;
@@ -128,16 +128,8 @@ end;
 constructor TServerStatusResource.Create;
 begin
   inherited;
-  if FNamePrefix <> '' then
-  begin
-    FURI := 'server://' + FNamePrefix + 'status';
-    FName := FNamePrefix + 'server_status';
-  end
-  else
-  begin
-    FURI := 'server://status';
-    FName := 'server_status';
-  end;
+  FURI := StatusURI;
+  FName := FNamePrefix + 'server_status';
   FDescription := 'Current server status and health information';
   FMimeType := 'application/json';
 end;
@@ -170,5 +162,6 @@ end;
 
 initialization
   TServerStatusResource.Initialize;
+  TServerStatusResource.RegisterServerStatusResource;
 
 end.

@@ -62,17 +62,17 @@ formatted `expected` value, so key order and array order matter.
 
 ## Notes on the recorded behaviour
 
-- `server://status` is declared in `MCPServer.Resource.Server.pas` but the
-  executable never registers it (`SetNamePrefix` is the only caller of
-  `RegisterServerStatusResource`), so `resources/list` returns three resources.
-- `resources/read` without `params` dereferences nil and answers `-32603` with
-  an access-violation message; the message is masked. `tools/call` without
-  `arguments` fails the same way inside the tool and comes back as an `isError`
-  text result; that text is masked too.
-- `logs://recent` answers "Error reading resource: Invalid pointer operation":
-  `TLogsRecentResource.GetResourceData` puts the copied entries into a second
-  owning list, so they are freed twice. The golden pins this current behaviour
-  until the resource is fixed in a later phase.
+- Six cases were re-recorded after defects found during the first recording
+  were fixed in the same branch (see CHANGELOG): `resources-list` and
+  `resources-read-server-status` (`server://status` was never registered by
+  the executable), `resources-read-logs-recent` (the entries were freed twice
+  and the read failed), `resources-read-project-info` and again
+  `resources-read-logs-recent` (lists were serialised as an object with
+  `count` and `capacity`), `resources-read-without-params` and
+  `tools-call-missing-arguments` (nil dereferences). Every other legacy case
+  is byte-identical to the 2025-06-18 code.
+- `server://status` and `logs://recent` contain timestamps, counters and log
+  text, so their `text` field is compared by shape.
 - `tools/call` with `id: null` is treated as a notification and gets no
   response.
 - HTTP responses are normalised: `Date` and `Server` headers are dropped, GUIDs

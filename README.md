@@ -223,7 +223,7 @@ end.
 
 - **Register before you start.** `TMCPToolsManager.Create` and `TMCPResourcesManager.Create` read `TMCPRegistry` once. Register your tools and resources (normally from unit `initialization` sections) before the managers are created, which means before `TMCPIdHTTPServer.Start` or `TMCPStdioTransport.Run`. Later registrations are not picked up.
 - **STDIO: keep stdout clean.** Everything on stdout must be an MCP message. `TMCPStdioTransport.Create` forces `TLogger.UseStdErr := True` and sets `TLogger.StdoutReserved`, so console logging goes to stderr and an attempt to switch it back is refused with a one-time warning. Never `Writeln` from tools, managers or resources; log through `TLogger`.
-- **`server://status` is opt-in.** Call `TServerStatusResource.RegisterServerStatusResource` (or `SetNamePrefix`) before the managers are created if you want it; the shipped executable registers `project://info`, `project://readme` and `logs://recent` only.
+- **`server://status` is registered by default** by the unit initialization of `MCPServer.Resource.Server`. `TServerStatusResource.SetNamePrefix('myapp_')` renames it to `server://myapp_status`; call it before the managers are created.
 - **Error codes and protocol constants** live in `MCPServer.Types` (`JSONRPC_*`, `MCP_ERROR_*`, `MCP_PROTOCOL_VERSION_*`, `MCP_META_*`). The `JSONRPC_*` names in `MCPServer.JsonRpcProcessor` remain as aliases.
 
 ### Creating Custom Tools
@@ -451,14 +451,11 @@ The Inspector provides a web interface to interact with your MCP server, making 
 
 ## Available Example resources
 
-The executable registers three resources:
+The server provides four resources accessible via URIs:
 
 - **project://info** - Project information (JSON metadata with collections)
 - **project://readme** - This README file (markdown content) 
 - **logs://recent** - Recent log entries from all categories (with thread safety)
-
-A fourth one ships with the library and is opt-in (see the library checklist):
-
 - **server://status** - Current server status and health information (request and connection counters)
 
 ## Configuration

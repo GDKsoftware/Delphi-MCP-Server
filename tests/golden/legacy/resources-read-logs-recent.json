@@ -7,6 +7,9 @@
       "uri": "logs://recent"
     }
   },
+  "shape": [
+    "result.contents[0].text"
+  ],
   "expected": {
     "jsonrpc": "2.0",
     "id": 16,
@@ -15,7 +18,54 @@
         {
           "uri": "logs://recent",
           "mimeType": "application/json",
-          "text": "Error reading resource: Invalid pointer operation"
+          "text": {
+            "entries": [
+              {
+                "timestamp": "number",
+                "level": "string",
+                "message": "string",
+                "threadid": "number",
+                "category": "string"
+              },
+              {
+                "timestamp": "number",
+                "level": "string",
+                "message": "string",
+                "threadid": "number",
+                "category": "string"
+              },
+              {
+                "timestamp": "number",
+                "level": "string",
+                "message": "string",
+                "threadid": "number",
+                "category": "string"
+              },
+              {
+                "timestamp": "number",
+                "level": "string",
+                "message": "string",
+                "threadid": "number",
+                "category": "string"
+              },
+              {
+                "timestamp": "number",
+                "level": "string",
+                "message": "string",
+                "threadid": "number",
+                "category": "string"
+              },
+              {
+                "timestamp": "number",
+                "level": "string",
+                "message": "string",
+                "threadid": "number",
+                "category": "string"
+              }
+            ],
+            "totalcount": "number",
+            "filteredcount": "number"
+          }
         }
       ]
     }

@@ -7,9 +7,6 @@
       "name": "echo"
     }
   },
-  "mask": [
-    "result.content[0].text"
-  ],
   "expected": {
     "jsonrpc": "2.0",
     "id": 8,
@@ -17,10 +14,9 @@
       "content": [
         {
           "type": "text",
-          "text": "<masked>"
+          "text": "Echo: "
         }
-      ],
-      "isError": true
+      ]
     }
   }
 }

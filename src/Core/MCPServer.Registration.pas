@@ -33,6 +33,9 @@ type
   public
     class procedure RegisterTool(const Name: string; Factory: TMCPToolFactory);
     class procedure RegisterResource(const URI: string; Factory: TMCPResourceFactory);
+    /// Removes a registration again (no-op for an unknown URI). Like
+    /// registration, only meaningful before the managers are created.
+    class procedure UnregisterResource(const URI: string);
 
     class function CreateTool(const Name: string): IMCPTool;
     class function CreateResource(const URI: string): IMCPResource;
@@ -70,6 +73,15 @@ class procedure TMCPRegistry.RegisterResource(const URI: string; Factory: TMCPRe
 begin
   FResources.AddOrSetValue(URI, Factory);
   TLogger.Info('Registered resource: ' + URI);
+end;
+
+class procedure TMCPRegistry.UnregisterResource(const URI: string);
+begin
+  if FResources.ContainsKey(URI) then
+  begin
+    FResources.Remove(URI);
+    TLogger.Info('Unregistered resource: ' + URI);
+  end;
 end;
 
 class function TMCPRegistry.CreateTool(const Name: string): IMCPTool;

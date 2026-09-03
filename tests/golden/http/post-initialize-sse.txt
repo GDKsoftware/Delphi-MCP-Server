@@ -14,5 +14,3 @@ X-Accel-Buffering: no
 id: <n>
 event: message
 data: {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"supportsProgress":false,"supportsCancellation":false},"resources":{"subscribe":false,"listChanged":false}},"sessionId":"<guid>","serverInfo":{"name":"delphi-mcp-server","version":"1.0.0"}}}
-
-
