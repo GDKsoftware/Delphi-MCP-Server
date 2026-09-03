@@ -1,0 +1,15 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 19,
+    "method": "resources/templates/list"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 19,
+    "result": {
+      "resourceTemplates": [
+      ]
+    }
+  }
+}

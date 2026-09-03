@@ -1,0 +1,27 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "tools/call",
+    "params": {
+      "name": "list_files",
+      "arguments": {
+        "path": "../../.."
+      }
+    }
+  },
+  "workingDirectory": "fixtures",
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Error: Access denied - path outside allowed directory"
+        }
+      ],
+      "isError": true
+    }
+  }
+}

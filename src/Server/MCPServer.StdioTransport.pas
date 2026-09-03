@@ -32,6 +32,11 @@ begin
   FManagerRegistry := ManagerRegistry;
   FCoreManager := CoreManager;
   FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(ManagerRegistry);
+
+  // stdout carries MCP messages only; every log line must go to stderr,
+  // also for library consumers that never set UseStdErr themselves.
+  TLogger.UseStdErr := True;
+  TLogger.StdoutReserved := True;
 end;
 
 destructor TMCPStdioTransport.Destroy;

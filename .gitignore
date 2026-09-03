@@ -91,6 +91,10 @@ backup/
 *.temp
 ~$*
 
-# Claude Code specific
-
 # Dependencies
+node_modules/
+package-lock.json
+
+# Test and conformance output
+tests/results/
+results/

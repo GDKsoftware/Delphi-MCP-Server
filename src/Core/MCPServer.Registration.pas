@@ -11,26 +11,38 @@ uses
 
 type
   TMCPToolClass = class of TMCPToolBase;
-  
+
   TMCPToolFactory = reference to function: IMCPTool;
   TMCPResourceFactory = reference to function: IMCPResource;
 
+  /// Process-wide registry of tool and resource factories.
+  ///
+  /// The dictionaries exist from the class constructor on, so registration
+  /// from unit initialization sections needs no lazy checks. Registration is
+  /// not synchronised: register everything before the managers are created.
+  /// TMCPToolsManager.Create and TMCPResourcesManager.Create read the
+  /// registry once, so in practice that means before TMCPIdHTTPServer.Start
+  /// or TMCPStdioTransport.Run.
   TMCPRegistry = class
   private
     class var FTools: TDictionary<string, TMCPToolFactory>;
     class var FResources: TDictionary<string, TMCPResourceFactory>;
-    
-    class procedure EnsureInitialized;
+
+    class constructor Create;
+    class destructor Destroy;
   public
     class procedure RegisterTool(const Name: string; Factory: TMCPToolFactory);
     class procedure RegisterResource(const URI: string; Factory: TMCPResourceFactory);
-    
+    /// Removes a registration again (no-op for an unknown URI). Like
+    /// registration, only meaningful before the managers are created.
+    class procedure UnregisterResource(const URI: string);
+
     class function CreateTool(const Name: string): IMCPTool;
     class function CreateResource(const URI: string): IMCPResource;
-    
+
     class function GetToolNames: TArray<string>;
     class function GetResourceURIs: TArray<string>;
-    
+
     class function HasTool(const Name: string): Boolean;
     class function HasResource(const URI: string): Boolean;
   end;
@@ -39,37 +51,43 @@ implementation
 
 { TMCPRegistry }
 
-class procedure TMCPRegistry.EnsureInitialized;
+class constructor TMCPRegistry.Create;
 begin
-  if not Assigned(FTools) then
-    FTools := TDictionary<string, TMCPToolFactory>.Create;
+  FTools := TDictionary<string, TMCPToolFactory>.Create;
+  FResources := TDictionary<string, TMCPResourceFactory>.Create;
+end;
 
-  if not Assigned(FResources) then
-    FResources := TDictionary<string, TMCPResourceFactory>.Create;
+class destructor TMCPRegistry.Destroy;
+begin
+  FreeAndNil(FTools);
+  FreeAndNil(FResources);
 end;
 
 class procedure TMCPRegistry.RegisterTool(const Name: string; Factory: TMCPToolFactory);
 begin
-  EnsureInitialized;
-
   FTools.AddOrSetValue(Name, Factory);
   TLogger.Info('Registered tool: ' + Name);
 end;
 
 class procedure TMCPRegistry.RegisterResource(const URI: string; Factory: TMCPResourceFactory);
 begin
-  EnsureInitialized;
-
   FResources.AddOrSetValue(URI, Factory);
   TLogger.Info('Registered resource: ' + URI);
+end;
+
+class procedure TMCPRegistry.UnregisterResource(const URI: string);
+begin
+  if FResources.ContainsKey(URI) then
+  begin
+    FResources.Remove(URI);
+    TLogger.Info('Unregistered resource: ' + URI);
+  end;
 end;
 
 class function TMCPRegistry.CreateTool(const Name: string): IMCPTool;
 var
   Factory: TMCPToolFactory;
 begin
-  EnsureInitialized;
-
   if FTools.TryGetValue(Name, Factory) then
     Result := Factory()
   else
@@ -80,8 +98,6 @@ class function TMCPRegistry.CreateResource(const URI: string): IMCPResource;
 var
   Factory: TMCPResourceFactory;
 begin
-  EnsureInitialized;
-
   if FResources.TryGetValue(URI, Factory) then
     Result := Factory()
   else
@@ -90,38 +106,22 @@ end;
 
 class function TMCPRegistry.GetToolNames: TArray<string>;
 begin
-  EnsureInitialized;
-
   Result := FTools.Keys.ToArray;
 end;
 
 class function TMCPRegistry.GetResourceURIs: TArray<string>;
 begin
-  EnsureInitialized;
-
   Result := FResources.Keys.ToArray;
 end;
 
 class function TMCPRegistry.HasTool(const Name: string): Boolean;
 begin
-  EnsureInitialized;
-
   Result := FTools.ContainsKey(Name);
 end;
 
 class function TMCPRegistry.HasResource(const URI: string): Boolean;
 begin
-  EnsureInitialized;
-
   Result := FResources.ContainsKey(URI);
 end;
-
-initialization
-
-finalization
-  if Assigned(TMCPRegistry.FTools) then
-    TMCPRegistry.FTools.Free;
-  if Assigned(TMCPRegistry.FResources) then
-    TMCPRegistry.FResources.Free;
 
 end.

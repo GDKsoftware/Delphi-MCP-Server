@@ -219,6 +219,13 @@ begin
 end.
 ```
 
+#### Library checklist
+
+- **Register before you start.** `TMCPToolsManager.Create` and `TMCPResourcesManager.Create` read `TMCPRegistry` once. Register your tools and resources (normally from unit `initialization` sections) before the managers are created, which means before `TMCPIdHTTPServer.Start` or `TMCPStdioTransport.Run`. Later registrations are not picked up.
+- **STDIO: keep stdout clean.** Everything on stdout must be an MCP message. `TMCPStdioTransport.Create` forces `TLogger.UseStdErr := True` and sets `TLogger.StdoutReserved`, so console logging goes to stderr and an attempt to switch it back is refused with a one-time warning. Never `Writeln` from tools, managers or resources; log through `TLogger`.
+- **`server://status` is registered by default** by the unit initialization of `MCPServer.Resource.Server`. `TServerStatusResource.SetNamePrefix('myapp_')` renames it to `server://myapp_status`; call it before the managers are created.
+- **Error codes and protocol constants** live in `MCPServer.Types` (`JSONRPC_*`, `MCP_ERROR_*`, `MCP_PROTOCOL_VERSION_*`, `MCP_META_*`). The `JSONRPC_*` names in `MCPServer.JsonRpcProcessor` remain as aliases.
+
 ### Creating Custom Tools
 
 ```pascal
@@ -444,12 +451,12 @@ The Inspector provides a web interface to interact with your MCP server, making 
 
 ## Available Example resources
 
-The server provides four essential resources accessible via URIs:
+The server provides four resources accessible via URIs:
 
 - **project://info** - Project information (JSON metadata with collections)
 - **project://readme** - This README file (markdown content) 
 - **logs://recent** - Recent log entries from all categories (with thread safety)
-- **server://status** - Current server status and health information
+- **server://status** - Current server status and health information (request and connection counters)
 
 ## Configuration
 
@@ -561,6 +568,21 @@ We welcome contributions! Here's how to help:
 - Requires Delphi 12+ 
 - Open `MCPServer.dproj` or build with `build.bat`
 - Test with `npx @modelcontextprotocol/inspector` or Claude Code or similar
+
+### Automated tests
+
+The `tests` folder holds a DUnitX project that drives the JSON-RPC layer in-process and pins the wire behaviour with golden files (`tests\golden`, see the README there). The scripts under `scripts` wrap the build and the external tooling; the Node tools are pinned in `package.json`.
+
+```powershell
+.\scripts\run-tests.ps1                     # build tests\MCPServer.Tests.dpr (Win64 Debug) and run it
+.\scripts\run-tests.ps1 -Platform Win32
+.\scripts\capture-http-goldens.ps1          # replay the HTTP golden cases with curl against Win64\Debug\MCPServer.exe
+.\scripts\run-stdio-smoke.ps1               # drive --stdio and check the framing of stdout/stderr
+.\scripts\run-conformance.ps1               # official conformance CLI, 2026-07-28 and 2025-11-25 requirement sets
+.\scripts\run-inspector-smoke.ps1 -ExpectedFailures delphi-modern   # Inspector CLI tools/list per protocol era and over stdio
+```
+
+Known conformance failures are listed per requirement set in `conformance-baseline-<revision>.yml`; the conformance run fails on new failures and on entries that started to pass. The Inspector smoke run takes the entries that must fail as a parameter (`delphi-modern` as long as the server has no `server/discover`). `build-tests.bat [Config] [Platform]` compiles the test project on its own.
 
 ## About GDK Software
 

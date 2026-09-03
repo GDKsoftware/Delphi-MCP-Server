@@ -1,0 +1,92 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/list"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+      "tools": [
+        {
+          "name": "get_time",
+          "description": "Get the current server time in ISO format",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            }
+          }
+        },
+        {
+          "name": "calculate",
+          "description": "Perform basic arithmetic calculations",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "description": "Operation: add, subtract, multiply, divide",
+                "enum": [
+                  "add",
+                  "subtract",
+                  "multiply",
+                  "divide"
+                ]
+              },
+              "a": {
+                "type": "number",
+                "description": "First number"
+              },
+              "b": {
+                "type": "number",
+                "description": "Second number"
+              }
+            },
+            "required": [
+              "operation",
+              "a",
+              "b"
+            ]
+          }
+        },
+        {
+          "name": "echo",
+          "description": "Echo a message back to the user",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "Message to echo back"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          }
+        },
+        {
+          "name": "list_files",
+          "description": "List files in a directory",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Directory path to list files from"
+              },
+              "includehidden": {
+                "type": "boolean",
+                "description": "Include hidden files in the listing"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -230,6 +230,7 @@ end;
 function TMCPToolsManager.CallTool(const Params: System.JSON.TJSONObject): TValue;
 var
   Arguments: TJSONObject;
+  EmptyArguments: TJSONObject;
   ResultValue: TValue;
   Tool: IMCPTool;
   ToolName: string;
@@ -242,11 +243,21 @@ begin
 
   TLogger.Info('MCP CallTool called for tool: ' + ToolName);
 
-  if FTools.TryGetValue(ToolName, Tool) then
-    resultValue := ExecuteTool(Tool, Arguments)
+  if not FTools.TryGetValue(ToolName, Tool) then
+    ResultValue := TValue.From('Error: Tool not found: ' + ToolName)
+  else if Assigned(Arguments) then
+    ResultValue := ExecuteTool(Tool, Arguments)
   else
-    ResultValue := TValue.From('Error: Tool not found: ' + ToolName);
-    
+  begin
+    // "arguments" is optional on the wire; a tool always receives an object.
+    EmptyArguments := TJSONObject.Create;
+    try
+      ResultValue := ExecuteTool(Tool, EmptyArguments);
+    finally
+      EmptyArguments.Free;
+    end;
+  end;
+
   Result := TValue.From<TJSONObject>(BuildToolCallResponse(ResultValue));
 end;
 

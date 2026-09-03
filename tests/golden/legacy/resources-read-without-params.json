@@ -1,0 +1,20 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 18,
+    "method": "resources/read"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 18,
+    "result": {
+      "contents": [
+        {
+          "uri": "",
+          "mimeType": "text/plain",
+          "text": "Error: Resource not found: "
+        }
+      ]
+    }
+  }
+}

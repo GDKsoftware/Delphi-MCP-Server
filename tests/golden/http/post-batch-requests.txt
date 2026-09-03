@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Connection: keep-alive
+Content-Type: application/json
+Content-Length: 98
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: POST, GET, OPTIONS
+Access-Control-Allow-Headers: Accept, Content-Type, Last-Event-ID, Mcp-Protocol-Version, Mcp-Session-Id
+Access-Control-Expose-Headers: Mcp-Session-Id
+Access-Control-Max-Age: 86400
+Connection: keep-alive
+
+{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"JSON-RPC request must be an object"}}

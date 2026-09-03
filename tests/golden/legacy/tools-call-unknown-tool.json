@@ -1,0 +1,25 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "tools/call",
+    "params": {
+      "name": "no_such_tool",
+      "arguments": {
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Error: Tool not found: no_such_tool"
+        }
+      ],
+      "isError": true
+    }
+  }
+}

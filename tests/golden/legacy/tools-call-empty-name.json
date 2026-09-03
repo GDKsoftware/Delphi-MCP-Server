@@ -1,0 +1,25 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "tools/call",
+    "params": {
+      "name": "",
+      "arguments": {
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Error: Invalid tool parameters"
+        }
+      ],
+      "isError": true
+    }
+  }
+}

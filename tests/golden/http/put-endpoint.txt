@@ -1,0 +1,11 @@
+HTTP/1.1 405 Method Not Allowed
+Connection: keep-alive
+Content-Type: text/html; charset=utf-8
+Content-Length: 55
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: POST, GET, OPTIONS
+Access-Control-Allow-Headers: Accept, Content-Type, Last-Event-ID, Mcp-Protocol-Version, Mcp-Session-Id
+Access-Control-Expose-Headers: Mcp-Session-Id
+Access-Control-Max-Age: 86400
+
+<HTML><BODY><B>405 Method Not Allowed</B></BODY></HTML>

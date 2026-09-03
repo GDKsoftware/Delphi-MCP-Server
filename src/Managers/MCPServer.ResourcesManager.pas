@@ -131,11 +131,15 @@ var
   URI: string;
   URIValue: TJSONValue;
 begin
-  URIValue := Params.GetValue('uri');
-  if Assigned(URIValue) then
-    URI := URIValue.Value
-  else
-    URI := '';
+  // Params is nil when the request carries no params object; treat that
+  // like a missing uri instead of dereferencing nil.
+  URI := '';
+  if Assigned(Params) then
+  begin
+    URIValue := Params.GetValue('uri');
+    if Assigned(URIValue) then
+      URI := URIValue.Value;
+  end;
 
   TLogger.Info('MCP ReadResource called for URI: ' + URI);
 

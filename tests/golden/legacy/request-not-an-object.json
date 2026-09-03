@@ -1,0 +1,11 @@
+{
+  "requestText": "[{\"jsonrpc\":\"2.0\",\"id\":23,\"method\":\"ping\"}]",
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": null,
+    "error": {
+      "code": -32700,
+      "message": "JSON-RPC request must be an object"
+    }
+  }
+}

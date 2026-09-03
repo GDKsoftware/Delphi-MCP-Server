@@ -1,0 +1,6 @@
+HTTP/1.1 403 Forbidden - Origin not allowed
+Connection: keep-alive
+Content-Type: text/html; charset=utf-8
+Content-Length: 67
+
+<HTML><BODY><B>403 Forbidden - Origin not allowed</B></BODY></HTML>

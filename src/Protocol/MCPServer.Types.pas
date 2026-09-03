@@ -8,7 +8,62 @@ uses
   System.Rtti;
 
 const
+  /// Protocol version answered by the initialize handshake. Kept under its
+  /// historic name for library consumers.
   MCP_PROTOCOL_VERSION = '2025-06-18';
+
+  // Protocol revisions
+  MCP_PROTOCOL_VERSION_2025_03_26 = '2025-03-26';
+  MCP_PROTOCOL_VERSION_2025_06_18 = '2025-06-18';
+  MCP_PROTOCOL_VERSION_2025_11_25 = '2025-11-25';
+  MCP_PROTOCOL_VERSION_2026_07_28 = '2026-07-28';
+
+  /// Newest revision this server targets (stateless, per-request _meta).
+  MCP_LATEST_PROTOCOL_VERSION = MCP_PROTOCOL_VERSION_2026_07_28;
+  /// Newest revision served through the initialize handshake.
+  MCP_LATEST_LEGACY_PROTOCOL_VERSION = MCP_PROTOCOL_VERSION_2025_11_25;
+
+  MCP_LEGACY_PROTOCOL_VERSIONS: array[0..1] of string = (
+    MCP_PROTOCOL_VERSION_2025_06_18,
+    MCP_PROTOCOL_VERSION_2025_11_25
+  );
+  MCP_MODERN_PROTOCOL_VERSIONS: array[0..0] of string = (
+    MCP_PROTOCOL_VERSION_2026_07_28
+  );
+
+  // JSON-RPC 2.0 error codes
+  JSONRPC_PARSE_ERROR = -32700;
+  JSONRPC_INVALID_REQUEST = -32600;
+  JSONRPC_METHOD_NOT_FOUND = -32601;
+  JSONRPC_INVALID_PARAMS = -32602;
+  JSONRPC_INTERNAL_ERROR = -32603;
+
+  // MCP error codes reserved by the specification (basic/index.mdx, "Error Codes")
+  MCP_ERROR_HEADER_MISMATCH = -32020;
+  MCP_ERROR_MISSING_REQUIRED_CLIENT_CAPABILITY = -32021;
+  MCP_ERROR_UNSUPPORTED_PROTOCOL_VERSION = -32022;
+  /// Resource not found in 2025-11-25 and earlier; 2026-07-28 uses JSONRPC_INVALID_PARAMS.
+  MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY = -32002;
+
+  // Reserved _meta keys (2026-07-28)
+  MCP_META_PROTOCOL_VERSION = 'io.modelcontextprotocol/protocolVersion';
+  MCP_META_CLIENT_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities';
+  MCP_META_CLIENT_INFO = 'io.modelcontextprotocol/clientInfo';
+  MCP_META_LOG_LEVEL = 'io.modelcontextprotocol/logLevel';
+  MCP_META_SERVER_INFO = 'io.modelcontextprotocol/serverInfo';
+  MCP_META_SUBSCRIPTION_ID = 'io.modelcontextprotocol/subscriptionId';
+  MCP_META_PROGRESS_TOKEN = 'progressToken';
+
+  /// Methods whose complete results must carry ttlMs and cacheScope
+  /// (server/utilities/caching.mdx, "Cacheable Results").
+  MCP_CACHEABLE_METHODS: array[0..5] of string = (
+    'server/discover',
+    'tools/list',
+    'prompts/list',
+    'resources/list',
+    'resources/templates/list',
+    'resources/read'
+  );
 
 type
   OptionalAttribute = class(TCustomAttribute)
