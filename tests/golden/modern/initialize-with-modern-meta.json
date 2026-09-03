@@ -1,0 +1,45 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-11-25",
+      "capabilities": {
+      },
+      "clientInfo": {
+        "name": "golden-client",
+        "version": "1.0.0"
+      },
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {
+        },
+        "io.modelcontextprotocol/clientInfo": {
+          "name": "golden-client",
+          "version": "1.0.0"
+        }
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "result": {
+      "protocolVersion": "2025-11-25",
+      "capabilities": {
+        "tools": {
+          "listChanged": false
+        },
+        "resources": {
+          "subscribe": false,
+          "listChanged": false
+        }
+      },
+      "serverInfo": {
+        "name": "delphi-mcp-server",
+        "version": "1.0.0"
+      }
+    }
+  }
+}

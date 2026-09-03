@@ -7,6 +7,8 @@ uses
   System.Classes,
   System.JSON,
   MCPServer.Types,
+  MCPServer.Settings,
+  MCPServer.RequestContext,
   MCPServer.JsonRpcProcessor,
   MCPServer.Logger;
 
@@ -16,10 +18,16 @@ type
     FManagerRegistry: IMCPManagerRegistry;
     FCoreManager: IMCPCapabilityManager;
     FJsonRpcProcessor: TMCPJsonRpcProcessor;
+    FLegacySession: TMCPLegacySession;
+    function GetSettings: TMCPSettings;
+    procedure SetSettings(const Value: TMCPSettings);
   public
     constructor Create(ManagerRegistry: IMCPManagerRegistry; CoreManager: IMCPCapabilityManager);
     destructor Destroy; override;
     procedure Run;
+    /// Server identity and protocol options; assign before Run. Without it the
+    /// processor uses the defaults (settings.ini next to the executable).
+    property Settings: TMCPSettings read GetSettings write SetSettings;
   end;
 
 implementation
@@ -32,6 +40,7 @@ begin
   FManagerRegistry := ManagerRegistry;
   FCoreManager := CoreManager;
   FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(ManagerRegistry);
+  FLegacySession := TMCPLegacySession.Create;
 
   // stdout carries MCP messages only; every log line must go to stderr,
   // also for library consumers that never set UseStdErr themselves.
@@ -42,7 +51,18 @@ end;
 destructor TMCPStdioTransport.Destroy;
 begin
   FJsonRpcProcessor.Free;
+  FLegacySession.Free;
   inherited;
+end;
+
+function TMCPStdioTransport.GetSettings: TMCPSettings;
+begin
+  Result := FJsonRpcProcessor.Settings;
+end;
+
+procedure TMCPStdioTransport.SetSettings(const Value: TMCPSettings);
+begin
+  FJsonRpcProcessor.Settings := Value;
 end;
 
 procedure TMCPStdioTransport.Run;
@@ -66,7 +86,7 @@ begin
 
       TLogger.Info('Received: ' + InputLine);
 
-      Response := FJsonRpcProcessor.ProcessRequest(InputLine, '');
+      Response := FJsonRpcProcessor.ProcessRequestEx(InputLine, TMCPTransportHints.ForStdio(FLegacySession)).Body;
 
       if Response <> '' then
       begin

@@ -91,29 +91,11 @@ end;
 
 procedure TLegacyGoldenTests.CheckGolden(const CaseName: string);
 begin
-  var GoldenCase := TGoldenCase.Create(TGoldenFiles.CaseFile(TGoldenFiles.LEGACY_SUITE, CaseName));
-  try
-    var Response: string;
-    var SavedDirectory := GetCurrentDir;
-    if GoldenCase.WorkingDirectory <> '' then
-      SetCurrentDir(GoldenCase.WorkingDirectory);
-    try
-      Response := FHarness.Process(GoldenCase.RequestBody);
-    finally
-      SetCurrentDir(SavedDirectory);
-    end;
-
-    if TGoldenFiles.RecordMode then
+  TGoldenRunner.Check(TGoldenFiles.LEGACY_SUITE, CaseName,
+    function(const RequestBody: string): string
     begin
-      GoldenCase.RecordExpected(Response);
-      Exit;
-    end;
-
-    Assert.AreEqual(GoldenCase.ExpectedText, GoldenCase.NormalizeResponse(Response),
-      'Golden mismatch for ' + CaseName);
-  finally
-    GoldenCase.Free;
-  end;
+      Result := FHarness.Process(RequestBody);
+    end);
 end;
 
 procedure TLegacyGoldenTests.Initialize_2025_06_18;

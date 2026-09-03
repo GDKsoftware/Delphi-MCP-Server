@@ -12,6 +12,9 @@ uses
   Posix.Signal,
   {$ENDIF}
   MCPServer.Types in 'Protocol\MCPServer.Types.pas',
+  MCPServer.Errors in 'Protocol\MCPServer.Errors.pas',
+  MCPServer.RequestContext in 'Protocol\MCPServer.RequestContext.pas',
+  MCPServer.Capabilities in 'Protocol\MCPServer.Capabilities.pas',
   MCPServer.Serializer in 'Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in 'Protocol\MCPServer.Schema.Generator.pas',
   MCPServer.Logger in 'Core\MCPServer.Logger.pas',
@@ -133,6 +136,7 @@ begin
 
   StdioTransport := TMCPStdioTransport.Create(ManagerRegistry, CoreManager);
   try
+    StdioTransport.Settings := Settings;
     StdioTransport.Run;
   finally
     StdioTransport.Free;

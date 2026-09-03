@@ -13,7 +13,7 @@ uses
   MCPServer.Tool.Base;
 
 type
-  TMCPToolsManager = class(TInterfacedObject, IMCPCapabilityManager)
+  TMCPToolsManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityProvider)
   strict private
     function ExtractToolNameAndArguments(const Params: System.JSON.TJSONObject; out ToolName: string; out Arguments: TJSONObject): Boolean;
     function ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject): TValue;
@@ -31,7 +31,8 @@ type
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
     function ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;
-    
+    procedure DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+
     function ListTools: TValue;
     function CallTool(const Params: System.JSON.TJSONObject): TValue;
   end;
@@ -64,6 +65,13 @@ end;
 function TMCPToolsManager.HandlesMethod(const Method: string): Boolean;
 begin
   Result := (Method = 'tools/list') or (Method = 'tools/call');
+end;
+
+procedure TMCPToolsManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+begin
+  var Tools := TJSONObject.Create;
+  Tools.AddPair('listChanged', TJSONBool.Create(False));
+  Capabilities.AddPair('tools', Tools);
 end;
 
 function TMCPToolsManager.ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;

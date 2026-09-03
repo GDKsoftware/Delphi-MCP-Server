@@ -8,8 +8,8 @@
     "jsonrpc": "2.0",
     "id": 21,
     "error": {
-      "code": -32601,
-      "message": "Method [server/discover] not found. The method does not exist or is not available."
+      "code": -32602,
+      "message": "server/discover requires params._meta.io.modelcontextprotocol/protocolVersion"
     }
   }
 }

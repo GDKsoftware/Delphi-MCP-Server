@@ -8,15 +8,18 @@ uses
   MCPServer.Types;
 
 type
-  TMCPManagerRegistry = class(TInterfacedObject, IMCPManagerRegistry)
+  /// Registration-ordered list of capability managers. Managers that
+  /// implement IMCPRegistryAware receive a reference to this registry.
+  TMCPManagerRegistry = class(TInterfacedObject, IMCPManagerRegistry, IMCPManagerEnumerator)
   private
     FManagers: TList<IMCPCapabilityManager>;
   public
     constructor Create;
     destructor Destroy; override;
-    
+
     procedure RegisterManager(const Manager: IMCPCapabilityManager);
     function GetManagerForMethod(const Method: string): IMCPCapabilityManager;
+    function GetManagers: TArray<IMCPCapabilityManager>;
   end;
 
 implementation
@@ -37,9 +40,15 @@ begin
 end;
 
 procedure TMCPManagerRegistry.RegisterManager(const Manager: IMCPCapabilityManager);
+var
+  Aware: IMCPRegistryAware;
 begin
-  if not FManagers.Contains(Manager) then
-    FManagers.Add(Manager);
+  if FManagers.Contains(Manager) then
+    Exit;
+
+  FManagers.Add(Manager);
+  if Supports(Manager, IMCPRegistryAware, Aware) then
+    Aware.SetManagerRegistry(Self);
 end;
 
 function TMCPManagerRegistry.GetManagerForMethod(const Method: string): IMCPCapabilityManager;
@@ -55,6 +64,11 @@ begin
       Break;
     end;
   end;
+end;
+
+function TMCPManagerRegistry.GetManagers: TArray<IMCPCapabilityManager>;
+begin
+  Result := FManagers.ToArray;
 end;
 
 end.

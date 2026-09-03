@@ -8,6 +8,22 @@ Host=localhost
 Name=delphi-mcp-server
 Version=1.0.0
 Endpoint=/mcp
+; Optional identity reported to clients (initialize and server/discover)
+Title=
+Description=
+WebsiteUrl=
+; Optional guidance for LLM clients on how to use this server
+Instructions=
+
+[Protocol]
+; Boolean values: use 1 (true) or 0 (false)
+; Answer ping for MCP 2026-07-28 requests although that revision removed it
+LenientModernPing=0
+; Also list the initialize-based revisions (2025-06-18, 2025-11-25) in
+; server/discover and in unsupported-version errors
+DiscoverListsLegacyVersions=0
+; Cache hint (milliseconds) on server/discover results; 0 = immediately stale
+DiscoverTtlMs=0
 
 [CORS]
 ; Cross-Origin Resource Sharing configuration

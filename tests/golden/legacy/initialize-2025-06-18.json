@@ -23,15 +23,13 @@
       "protocolVersion": "2025-06-18",
       "capabilities": {
         "tools": {
-          "supportsProgress": false,
-          "supportsCancellation": false
+          "listChanged": false
         },
         "resources": {
           "subscribe": false,
           "listChanged": false
         }
       },
-      "sessionId": "<masked>",
       "serverInfo": {
         "name": "delphi-mcp-server",
         "version": "1.0.0"

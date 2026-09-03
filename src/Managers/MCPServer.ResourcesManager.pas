@@ -13,7 +13,7 @@ uses
   MCPServer.Resource.Base;
 
 type
-  TMCPResourcesManager = class(TInterfacedObject, IMCPCapabilityManager)
+  TMCPResourcesManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityProvider)
   private
     FResources: TDictionary<string, IMCPResource>;
     procedure RegisterResource(const Resource: IMCPResource);
@@ -25,7 +25,8 @@ type
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
     function ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;
-    
+    procedure DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+
     function ListResources: TValue;
     function ReadResource(const Params: System.JSON.TJSONObject): TValue;
     function ListResourceTemplates: TValue;
@@ -58,9 +59,17 @@ end;
 
 function TMCPResourcesManager.HandlesMethod(const Method: string): Boolean;
 begin
-  Result := (Method = 'resources/list') or 
-            (Method = 'resources/read') or 
+  Result := (Method = 'resources/list') or
+            (Method = 'resources/read') or
             (Method = 'resources/templates/list');
+end;
+
+procedure TMCPResourcesManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+begin
+  var Resources := TJSONObject.Create;
+  Resources.AddPair('subscribe', TJSONBool.Create(False));
+  Resources.AddPair('listChanged', TJSONBool.Create(False));
+  Capabilities.AddPair('resources', Resources);
 end;
 
 function TMCPResourcesManager.ExecuteMethod(const Method: string; const Params: System.JSON.TJSONObject): TValue;

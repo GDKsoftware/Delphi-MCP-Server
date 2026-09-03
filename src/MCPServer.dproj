@@ -129,6 +129,9 @@
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="Protocol\MCPServer.Types.pas"/>
+        <DCCReference Include="Protocol\MCPServer.Errors.pas"/>
+        <DCCReference Include="Protocol\MCPServer.RequestContext.pas"/>
+        <DCCReference Include="Protocol\MCPServer.Capabilities.pas"/>
         <DCCReference Include="Protocol\MCPServer.Serializer.pas"/>
         <DCCReference Include="Protocol\MCPServer.Schema.Generator.pas"/>
         <DCCReference Include="Core\MCPServer.Logger.pas"/>

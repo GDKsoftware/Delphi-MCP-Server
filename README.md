@@ -3,7 +3,7 @@
 ![Delphi](https://img.shields.io/badge/Delphi-12%2B-red)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![MCP](https://img.shields.io/badge/MCP-2025--06--18-green)
+![MCP](https://img.shields.io/badge/MCP-2026--07--28%20(dual--era)-green)
 
 A Model Context Protocol (MCP) server implementation in Delphi, designed to integrate with Claude Code, Codex, and other MCP-compatible clients for AI-powered Delphi development workflows.
 
@@ -13,6 +13,7 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Transport Modes](#transport-modes)
+- [Protocol Versions and Dual-Era Behaviour](#protocol-versions-and-dual-era-behaviour)
 - [Using as a Library](#using-as-a-library)
 - [Integration with Claude Code](#integration-with-claude-code)
 - [Integration with Codex](#integration-with-codex)
@@ -27,7 +28,7 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 
 ## Features
 
-- **Full MCP Protocol Support**: Implements MCP specification 2025-06-18 with Streamable HTTP and SSE
+- **Dual-era MCP**: Serves MCP 2026-07-28 (per-request `_meta`, `server/discover`) and the initialize-based revisions 2025-06-18 and 2025-11-25 on the same endpoint and the same stdio process; see [Protocol versions](#protocol-versions-and-dual-era-behaviour)
 - **Dual Transport Support**: HTTP (Streamable HTTP with SSE) and STDIO (stdin/stdout)
 - **Dual Response Mode**: Supports both JSON-RPC and Server-Sent Events in the same server
 - **Tool System**: Extensible tool system with RTTI-based discovery and execution
@@ -128,6 +129,25 @@ The server will:
 - Automated testing and scripting
 
 **Supported flag variants:** `--stdio`, `-stdio`, `/stdio`
+
+## Protocol Versions and Dual-Era Behaviour
+
+The server decides per request which protocol era it is speaking; nothing is negotiated per connection and no session is minted.
+
+| Request | Era | Served as |
+|---|---|---|
+| `initialize` | legacy | The requested revision when it is `2025-06-18` or `2025-11-25`, otherwise `2025-11-25`. The result carries `capabilities` and `serverInfo` only. |
+| `params._meta` with `io.modelcontextprotocol/protocolVersion` | modern | `2026-07-28`. `clientCapabilities` is required (`-32602`); an unknown revision gets `-32022` with the supported list; `ping`, `logging/setLevel` and `resources/subscribe` do not exist in this era (`-32601`). |
+| `server/discover` without `_meta` | modern, malformed | `-32602` |
+| Anything else | legacy | The revision negotiated by `initialize` on this stdio process, the `MCP-Protocol-Version` header on HTTP, or `2025-11-25` when nothing is known. |
+
+Modern results carry `resultType`, `_meta.io.modelcontextprotocol/serverInfo` and, on `server/discover`, `tools/list`, `resources/list`, `resources/templates/list` and `resources/read`, the cache hints `ttlMs` and `cacheScope`. Legacy results are unchanged. Client responses (`result` or `error` without `method`) are ignored.
+
+Handlers can read the era, the negotiated revision and the client's declared capabilities through `TMCPRequestContext.Current` (`MCPServer.RequestContext`) or by implementing `IMCPCapabilityManagerEx`, and can raise `EMCPError` (`MCPServer.Errors`) to send a specific JSON-RPC error code.
+
+`settings.ini` keys: `[Server] Title`, `Description`, `WebsiteUrl` and `Instructions` fill `serverInfo` and `instructions`; `[Protocol] LenientModernPing` answers `ping` in the modern era anyway, `DiscoverListsLegacyVersions` also lists the legacy revisions in `server/discover`, and `DiscoverTtlMs` is the cache hint on `server/discover`.
+
+`2025-03-26` is accepted on `initialize` but answered with `2025-11-25`; JSON-RPC batch arrays are rejected with `-32600`.
 
 ## Using as a Library
 
@@ -579,10 +599,10 @@ The `tests` folder holds a DUnitX project that drives the JSON-RPC layer in-proc
 .\scripts\capture-http-goldens.ps1          # replay the HTTP golden cases with curl against Win64\Debug\MCPServer.exe
 .\scripts\run-stdio-smoke.ps1               # drive --stdio and check the framing of stdout/stderr
 .\scripts\run-conformance.ps1               # official conformance CLI, 2026-07-28 and 2025-11-25 requirement sets
-.\scripts\run-inspector-smoke.ps1 -ExpectedFailures delphi-modern   # Inspector CLI tools/list per protocol era and over stdio
+.\scripts\run-inspector-smoke.ps1           # Inspector CLI tools/list per protocol era (legacy, auto, modern) and over stdio
 ```
 
-Known conformance failures are listed per requirement set in `conformance-baseline-<revision>.yml`; the conformance run fails on new failures and on entries that started to pass. The Inspector smoke run takes the entries that must fail as a parameter (`delphi-modern` as long as the server has no `server/discover`). `build-tests.bat [Config] [Platform]` compiles the test project on its own.
+Known conformance failures are listed per requirement set in `conformance-baseline-<revision>.yml`; the conformance run fails on new failures and on entries that started to pass. The Inspector smoke run takes entries that are expected to fail as `-ExpectedFailures`. `build-tests.bat [Config] [Platform]` compiles the test project on its own.
 
 ## About GDK Software
 

@@ -5,16 +5,43 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Test harness, golden files and hygiene. No client-visible protocol change.
-
 ### Added
 
+- MCP 2026-07-28 at the JSON-RPC layer, on both transports, next to the
+  initialize-based revisions 2025-06-18 and 2025-11-25. The era is decided per
+  request in `TMCPJsonRpcProcessor.BuildRequestContext`: `initialize` is always
+  legacy, a `params._meta` with `io.modelcontextprotocol/protocolVersion` is
+  modern, everything else is legacy.
+- `server/discover` (`MCPServer.CoreManager`): supported versions,
+  capabilities, `_meta.serverInfo`, optional `instructions`, `ttlMs` and
+  `cacheScope: "public"`.
+- Modern requests: `_meta` validation (`clientCapabilities` required,
+  `logLevel` checked, `-32602`), `-32022` with `data.supported` and
+  `data.requested` for an unknown revision, `-32020` when the HTTP header and
+  the body disagree, `-32601` for the legacy-only methods `ping`,
+  `logging/setLevel`, `resources/subscribe` and `resources/unsubscribe`.
+- Modern results carry `resultType: "complete"`,
+  `_meta.io.modelcontextprotocol/serverInfo` and, for the cacheable methods,
+  `ttlMs` and `cacheScope` when the handler did not set them.
+- `MCPServer.Errors` (`EMCPError` with code, data and HTTP status, plus
+  factories), `MCPServer.RequestContext` (`IMCPRequestContext`, thread-local
+  `TMCPRequestContext.Current`, `TMCPTransportHints`), `MCPServer.Capabilities`
+  (`TMCPCapabilityBuilder` derives the capabilities from the registered
+  managers), and the interfaces `IMCPCapabilityManagerEx`,
+  `IMCPCapabilityProvider`, `IMCPManagerEnumerator` and `IMCPRegistryAware` in
+  `MCPServer.Types`.
+- `TMCPJsonRpcProcessor.ProcessRequestEx` returns body, HTTP status and era;
+  `Create(Registry, Settings)` overload; `TMCPStdioTransport.Settings`.
+- `settings.ini`: `[Server] Title`, `Description`, `WebsiteUrl`,
+  `Instructions`; `[Protocol] LenientModernPing`,
+  `DiscoverListsLegacyVersions`, `DiscoverTtlMs`.
 - DUnitX test project `tests\MCPServer.Tests.dpr` (Win32 and Win64) with an
   in-process harness that builds the same registry as `MCPServer.dpr` and
-  drives `TMCPJsonRpcProcessor.ProcessRequest`.
-- Golden files that pin the wire behaviour: 38 JSON-RPC cases in
-  `tests\golden\legacy` and 26 HTTP transport cases (status line, headers,
-  body) in `tests\golden\http`.
+  drives the JSON-RPC processor; era-detection, processor, capability-builder
+  and concurrency tests.
+- Golden files that pin the wire behaviour: JSON-RPC cases for the legacy and
+  the modern era in `tests\golden\legacy` and `tests\golden\modern`, and HTTP
+  transport cases (status line, headers, body) in `tests\golden\http`.
 - `build-tests.bat` and `scripts\run-tests.ps1` (build and run, `-Record`
   to re-record goldens), `scripts\capture-http-goldens.ps1`.
 - `scripts\run-conformance.ps1` for the official conformance CLI with one
@@ -34,9 +61,25 @@ Test harness, golden files and hygiene. No client-visible protocol change.
   (`MCP_META_*`) and `MCP_CACHEABLE_METHODS`.
 - `TLogger.StdoutReserved`: while set, console logging always goes to stderr
   and `UseStdErr := False` is refused with a one-time warning.
+- README sections "Protocol Versions and Dual-Era Behaviour", the library
+  checklist and "Automated tests".
 
 ### Changed
 
+- `initialize` answers the requested revision when it is `2025-06-18` or
+  `2025-11-25`, otherwise `2025-11-25` (it always answered `2025-06-18`). The
+  result no longer contains the non-standard `sessionId` and the
+  `tools.supportsProgress` / `tools.supportsCancellation` keys;
+  `tools.listChanged: false` is added. No `Mcp-Session-Id` header is minted;
+  `TMCPCoreManager.SessionID` returns an empty string.
+- Message-shape errors use the JSON-RPC codes: `-32600` for batch arrays,
+  `id: null`, a missing or non-string `method` and a missing `jsonrpc`
+  (batch arrays were `-32700`, `id: null` was treated as a notification and
+  a missing `jsonrpc` was accepted); `-32602` for a `params` that is not an
+  object. Client responses (`result` or `error` without `method`) are ignored.
+- The `initialize` capabilities come from the registered managers
+  (`IMCPCapabilityProvider`); a registry with only a tools manager no longer
+  advertises resources.
 - The `JSONRPC_*` error-code constants are defined once in `MCPServer.Types`.
   `MCPServer.JsonRpcProcessor` keeps them as aliases, so existing consumer
   code compiles unchanged; the unused duplicate block in
@@ -49,9 +92,6 @@ Test harness, golden files and hygiene. No client-visible protocol change.
   `TLogger.StdoutReserved`. Library consumers that create the transport with
   console logging enabled and never set `UseStdErr` now get their log lines on
   stderr instead of corrupting the MCP channel on stdout.
-- README: library checklist (register before start, stdout rules for stdio,
-  `server://status` is opt-in), automated-tests section, resource list matches
-  what the executable registers.
 
 ### Fixed
 

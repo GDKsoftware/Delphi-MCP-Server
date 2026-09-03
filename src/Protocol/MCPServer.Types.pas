@@ -65,6 +65,12 @@ const
     'resources/read'
   );
 
+function IsLegacyProtocolVersion(const Version: string): Boolean;
+function IsModernProtocolVersion(const Version: string): Boolean;
+/// The revision answered to an initialize request: the requested one when it
+/// is served, otherwise the newest legacy revision.
+function NegotiateLegacyProtocolVersion(const Requested: string): string;
+
 type
   OptionalAttribute = class(TCustomAttribute)
   end;
@@ -103,7 +109,111 @@ type
     procedure RegisterManager(const Manager: IMCPCapabilityManager);
     function GetManagerForMethod(const Method: string): IMCPCapabilityManager;
   end;
-  
+
+  /// Optional view on a manager registry that can list its managers, used to
+  /// derive the server capabilities. Probed with Supports().
+  IMCPManagerEnumerator = interface
+    ['{6D1F0B2C-3A4E-4F5B-8C7D-9E0F1A2B3C4D}']
+    function GetManagers: TArray<IMCPCapabilityManager>;
+  end;
+
+  /// Implemented by managers that want a reference to the registry they are
+  /// registered in (TMCPManagerRegistry injects it). Keep the reference weak.
+  IMCPRegistryAware = interface
+    ['{2B7C9D1E-4F6A-4B8C-9D0E-1F2A3B4C5D6E}']
+    procedure SetManagerRegistry(const Registry: IMCPManagerRegistry);
+  end;
+
+  {$SCOPEDENUMS ON}
+  /// Legacy: initialize-based revisions (2025-11-25 and earlier).
+  /// Modern: per-request _meta revisions (2026-07-28 and later).
+  TMCPProtocolEra = (Legacy, Modern);
+
+  TMCPRequestIdKind = (None, Null, Text, Number, Invalid);
+  {$SCOPEDENUMS OFF}
+
+  /// The JSON-RPC id of a message. None means the member is absent
+  /// (notification); Invalid covers booleans, objects, arrays and fractions.
+  TMCPRequestId = record
+    Kind: TMCPRequestIdKind;
+    Text: string;
+    Number: Int64;
+    class function FromJson(const Value: TJSONValue): TMCPRequestId; static;
+    class function FromNumber(const Value: Int64): TMCPRequestId; static;
+    class function FromText(const Value: string): TMCPRequestId; static;
+    /// True for a string or integer id (a request that must be answered).
+    function IsPresent: Boolean;
+    /// JSON value for the response; null when the id is absent or invalid.
+    function ToJson: TJSONValue;
+    function AsText: string;
+  end;
+
+  /// Per-process legacy state for stdio: the protocol version negotiated by
+  /// the last initialize. Empty until an initialize has been answered.
+  TMCPLegacySession = class
+  private
+    FProtocolVersion: string;
+  public
+    property ProtocolVersion: string read FProtocolVersion write FProtocolVersion;
+  end;
+
+  /// What a handler may know about the request it is serving. Built once
+  /// per request by the JSON-RPC processor and reachable through
+  /// TMCPRequestContext.Current while the handler runs.
+  IMCPRequestContext = interface
+    ['{7E3A9C1B-5D2F-4A6E-8B0C-3D4E5F6A7B8C}']
+    function GetEra: TMCPProtocolEra;
+    function GetProtocolVersion: string;
+    function GetMethod: string;
+    function GetRequestId: TMCPRequestId;
+    function GetMeta: TJSONObject;
+    function GetClientCapabilities: TJSONObject;
+    function GetClientInfo: TJSONObject;
+    function GetLogLevel: string;
+    function GetProgressToken: TJSONValue;
+    function GetLegacySession: TMCPLegacySession;
+    function GetManagerRegistry: IMCPManagerRegistry;
+
+    /// True when the client declared the capability, given as a dotted path
+    /// such as 'elicitation' or 'elicitation.form'. Always False for legacy
+    /// requests (their capabilities are not carried per request).
+    function HasClientCapability(const Path: string): Boolean;
+    /// Raises EMCPError -32021 when the capability was not declared.
+    procedure RequireClientCapability(const Path: string);
+    function IsCancelled: Boolean;
+    procedure CheckCancelled;
+
+    property Era: TMCPProtocolEra read GetEra;
+    property ProtocolVersion: string read GetProtocolVersion;
+    property Method: string read GetMethod;
+    property RequestId: TMCPRequestId read GetRequestId;
+    /// The request's _meta object (nil when absent). Owned by the context.
+    property Meta: TJSONObject read GetMeta;
+    /// io.modelcontextprotocol/clientCapabilities (never nil for modern
+    /// requests, nil for legacy requests).
+    property ClientCapabilities: TJSONObject read GetClientCapabilities;
+    property ClientInfo: TJSONObject read GetClientInfo;
+    property LogLevel: string read GetLogLevel;
+    property ProgressToken: TJSONValue read GetProgressToken;
+    property LegacySession: TMCPLegacySession read GetLegacySession;
+    property ManagerRegistry: IMCPManagerRegistry read GetManagerRegistry;
+  end;
+
+  /// Managers that want the request context receive it through this
+  /// interface; the processor falls back to IMCPCapabilityManager.ExecuteMethod.
+  IMCPCapabilityManagerEx = interface
+    ['{9F4B2D6A-1C3E-4E5F-A7B8-C9D0E1F2A3B4}']
+    function ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
+      const Context: IMCPRequestContext): TValue;
+  end;
+
+  /// Managers that contribute an entry to the server capabilities
+  /// (for example "tools": {"listChanged": false}).
+  IMCPCapabilityProvider = interface
+    ['{C5D7E9F1-2A4B-4C6D-8E0F-1A2B3C4D5E6F}']
+    procedure DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+  end;
+
   TMCPCapabilities = class
   private
     FTools: TMCPToolsCapability;
@@ -166,6 +276,105 @@ type
   end;
 
 implementation
+
+function IsLegacyProtocolVersion(const Version: string): Boolean;
+begin
+  for var Known in MCP_LEGACY_PROTOCOL_VERSIONS do
+    if Known = Version then
+      Exit(True);
+  Result := False;
+end;
+
+function IsModernProtocolVersion(const Version: string): Boolean;
+begin
+  for var Known in MCP_MODERN_PROTOCOL_VERSIONS do
+    if Known = Version then
+      Exit(True);
+  Result := False;
+end;
+
+function NegotiateLegacyProtocolVersion(const Requested: string): string;
+begin
+  if IsLegacyProtocolVersion(Requested) then
+    Result := Requested
+  else
+    Result := MCP_LATEST_LEGACY_PROTOCOL_VERSION;
+end;
+
+{ TMCPRequestId }
+
+class function TMCPRequestId.FromJson(const Value: TJSONValue): TMCPRequestId;
+begin
+  Result.Text := '';
+  Result.Number := 0;
+
+  if not Assigned(Value) then
+    Result.Kind := TMCPRequestIdKind.None
+  else if Value is TJSONNull then
+    Result.Kind := TMCPRequestIdKind.Null
+  else if Value is TJSONNumber then
+  begin
+    // Only integers are valid ids; a fraction is not.
+    var Number := TJSONNumber(Value);
+    if Frac(Number.AsDouble) = 0 then
+    begin
+      Result.Kind := TMCPRequestIdKind.Number;
+      Result.Number := Number.AsInt64;
+    end
+    else
+      Result.Kind := TMCPRequestIdKind.Invalid;
+  end
+  else if Value is TJSONString then
+  begin
+    Result.Kind := TMCPRequestIdKind.Text;
+    Result.Text := TJSONString(Value).Value;
+  end
+  else
+    Result.Kind := TMCPRequestIdKind.Invalid;
+end;
+
+class function TMCPRequestId.FromNumber(const Value: Int64): TMCPRequestId;
+begin
+  Result.Kind := TMCPRequestIdKind.Number;
+  Result.Number := Value;
+  Result.Text := '';
+end;
+
+class function TMCPRequestId.FromText(const Value: string): TMCPRequestId;
+begin
+  Result.Kind := TMCPRequestIdKind.Text;
+  Result.Number := 0;
+  Result.Text := Value;
+end;
+
+function TMCPRequestId.IsPresent: Boolean;
+begin
+  Result := Kind in [TMCPRequestIdKind.Text, TMCPRequestIdKind.Number];
+end;
+
+function TMCPRequestId.ToJson: TJSONValue;
+begin
+  case Kind of
+    TMCPRequestIdKind.Text:
+      Result := TJSONString.Create(Text);
+    TMCPRequestIdKind.Number:
+      Result := TJSONNumber.Create(Number);
+  else
+    Result := TJSONNull.Create;
+  end;
+end;
+
+function TMCPRequestId.AsText: string;
+begin
+  case Kind of
+    TMCPRequestIdKind.Text:
+      Result := Text;
+    TMCPRequestIdKind.Number:
+      Result := Number.ToString;
+  else
+    Result := '';
+  end;
+end;
 
 { SchemaDescriptionAttribute }
 
