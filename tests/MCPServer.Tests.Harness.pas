@@ -6,17 +6,24 @@ uses
   System.SysUtils,
   MCPServer.Types,
   MCPServer.Settings,
+  MCPServer.ToolsManager,
+  MCPServer.ResourcesManager,
+  MCPServer.PromptsManager,
   MCPServer.JsonRpcProcessor;
 
 type
-  /// Builds the same manager registry as MCPServer.dpr (core, tools and
-  /// resources managers on top of the built-in registrations) and drives the
-  /// transport-independent JSON-RPC processor directly.
+  /// Builds the same manager registry as MCPServer.dpr (core, tools,
+  /// resources, prompts and completion managers on top of the built-in
+  /// registrations) and drives the transport-independent JSON-RPC processor
+  /// directly.
   TMCPTestHarness = class
   private
     FSettings: TMCPSettings;
     FManagerRegistry: IMCPManagerRegistry;
     FCoreManager: IMCPCapabilityManager;
+    FToolsManager: TMCPToolsManager;
+    FResourcesManager: TMCPResourcesManager;
+    FPromptsManager: TMCPPromptsManager;
     FProcessor: TMCPJsonRpcProcessor;
   public
     constructor Create;
@@ -29,6 +36,9 @@ type
     property Settings: TMCPSettings read FSettings;
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry;
     property CoreManager: IMCPCapabilityManager read FCoreManager;
+    property ToolsManager: TMCPToolsManager read FToolsManager;
+    property ResourcesManager: TMCPResourcesManager read FResourcesManager;
+    property PromptsManager: TMCPPromptsManager read FPromptsManager;
   end;
 
 implementation
@@ -36,8 +46,7 @@ implementation
 uses
   MCPServer.ManagerRegistry,
   MCPServer.CoreManager,
-  MCPServer.ToolsManager,
-  MCPServer.ResourcesManager;
+  MCPServer.CompletionManager;
 
 { TMCPTestHarness }
 
@@ -51,10 +60,15 @@ begin
 
   FManagerRegistry := TMCPManagerRegistry.Create;
   FCoreManager := TMCPCoreManager.Create(FSettings);
+  FToolsManager := TMCPToolsManager.Create;
+  FResourcesManager := TMCPResourcesManager.Create;
+  FPromptsManager := TMCPPromptsManager.Create;
 
   FManagerRegistry.RegisterManager(FCoreManager);
-  FManagerRegistry.RegisterManager(TMCPToolsManager.Create);
-  FManagerRegistry.RegisterManager(TMCPResourcesManager.Create);
+  FManagerRegistry.RegisterManager(FToolsManager);
+  FManagerRegistry.RegisterManager(FResourcesManager);
+  FManagerRegistry.RegisterManager(FPromptsManager);
+  FManagerRegistry.RegisterManager(TMCPCompletionManager.Create(FPromptsManager, FResourcesManager));
 
   FProcessor := TMCPJsonRpcProcessor.Create(FManagerRegistry);
 end;

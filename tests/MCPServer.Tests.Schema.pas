@@ -34,6 +34,7 @@ type
     FOrigin: TPoint;
     FCode: string;
     FScore: Integer;
+    FTag: string;
   public
     [SchemaDescription('How many')]
     [SchemaMinimum(1)]
@@ -54,9 +55,31 @@ type
     property Code: string read FCode write FCode;
     [SchemaEnum('one', 'two')]
     property Score: Integer read FScore write FScore;
+    [SchemaMinLength(2)]
+    [SchemaMaxLength(5)]
+    [SchemaPattern('^[a-z]+$')]
+    [SchemaDefault('"blue"')]
+    [SchemaName('colour_tag')]
+    property Tag: string read FTag write FTag;
   end;
 
   TEmptyParams = class
+  end;
+
+  [SchemaAdditionalProperties(False)]
+  [SchemaDialect('https://json-schema.org/draft/2020-12/schema')]
+  TStrictParams = class
+  private
+    FName: string;
+  public
+    property Name: string read FName write FName;
+  end;
+
+  TWrapperParams = class
+  private
+    FStrict: TStrictParams;
+  public
+    property Strict: TStrictParams read FStrict write FStrict;
   end;
 
   [TestFixture]
@@ -71,6 +94,10 @@ type
     [Test] procedure Attributes_AreApplied;
     [Test] procedure Optional_IsNotRequired;
     [Test] procedure NoParameters_ForbidsAdditionalProperties;
+    [Test] procedure StringConstraints_AreApplied;
+    [Test] procedure SchemaName_OverridesPropertyName;
+    [Test] procedure ClassAttributes_AdditionalPropertiesAndDialect;
+    [Test] procedure Dialect_OnlyAppliesAtRoot;
   end;
 
 implementation
@@ -190,6 +217,54 @@ begin
     Assert.AreEqual(0, (Schema.GetValue('properties') as TJSONObject).Count);
     Assert.IsFalse(Schema.GetValue<Boolean>('additionalProperties'));
     Assert.IsNull(Schema.GetValue('required'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaGeneratorTests.StringConstraints_AreApplied;
+begin
+  var Schema := TMCPSchemaGenerator.GenerateSchema(TSchemaParams);
+  try
+    Assert.AreEqual(2, Schema.GetValue<Integer>('properties.colour_tag.minLength'));
+    Assert.AreEqual(5, Schema.GetValue<Integer>('properties.colour_tag.maxLength'));
+    Assert.AreEqual('^[a-z]+$', Schema.GetValue<string>('properties.colour_tag.pattern'));
+    Assert.AreEqual('blue', Schema.GetValue<string>('properties.colour_tag.default'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaGeneratorTests.SchemaName_OverridesPropertyName;
+begin
+  var Schema := TMCPSchemaGenerator.GenerateSchema(TSchemaParams);
+  try
+    Assert.IsNull(Schema.FindValue('properties.tag'), 'the Pascal name is not used on the wire');
+    Assert.IsNotNull(Schema.FindValue('properties.colour_tag'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaGeneratorTests.ClassAttributes_AdditionalPropertiesAndDialect;
+begin
+  var Schema := TMCPSchemaGenerator.GenerateSchema(TStrictParams);
+  try
+    Assert.IsFalse(Schema.GetValue<Boolean>('additionalProperties'));
+    Assert.AreEqual('https://json-schema.org/draft/2020-12/schema', Schema.GetValue<string>('$schema'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaGeneratorTests.Dialect_OnlyAppliesAtRoot;
+begin
+  var Schema := TMCPSchemaGenerator.GenerateSchema(TWrapperParams);
+  try
+    Assert.IsNull(Schema.GetValue('$schema'), 'the wrapper itself has no [SchemaDialect]');
+    Assert.IsFalse(Schema.GetValue<Boolean>('properties.strict.additionalProperties'),
+      'a class attribute applies wherever the class is used');
+    Assert.IsNull(Schema.FindValue('properties.strict.$schema'), '$schema is a root-only keyword');
   finally
     Schema.Free;
   end;

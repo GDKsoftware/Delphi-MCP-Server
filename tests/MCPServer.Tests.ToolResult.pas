@@ -25,6 +25,7 @@ uses
   System.SysUtils,
   System.JSON,
   MCPServer.Types,
+  MCPServer.ContentBlocks,
   MCPServer.Tool.Result;
 
 { TToolResultTests }

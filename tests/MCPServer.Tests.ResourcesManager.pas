@@ -21,6 +21,31 @@ type
     constructor Create; override;
   end;
 
+  TEchoTemplateData = class
+  private
+    FValue: string;
+  public
+    property Value: string read FValue write FValue;
+  end;
+
+  /// A resource matched by TEchoTemplate; echoes the captured variable.
+  TEchoResource = class(TMCPResourceBase<TEchoTemplateData>)
+  private
+    FValue: string;
+  protected
+    function GetResourceData: TEchoTemplateData; override;
+  public
+    constructor CreateForValue(const AUri, AValue: string);
+  end;
+
+  /// echo://{value}, used to test template matching independent of the
+  /// server's own logs://{level} template.
+  TEchoTemplate = class(TMCPResourceTemplateBase)
+  public
+    constructor Create; override;
+    function CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource; override;
+  end;
+
   [TestFixture]
   TResourcesManagerTests = class
   private
@@ -41,13 +66,17 @@ type
     [Test] procedure Read_CacheHints_ModernOnly_FromResource;
     [Test] procedure List_HasMetadata_AndOmitsEmptyFields;
     [Test] procedure List_CacheHints_ModernOnly;
-    [Test] procedure Templates_AreEmpty_WithHints;
+    [Test] procedure Templates_ListsRegisteredTemplates_WithHints;
+    [Test] procedure Templates_Cursor_IsInvalidParams;
+    [Test] procedure Read_ViaTemplate_ResolvesWithActualUri;
+    [Test] procedure Read_TemplateMismatch_IsNotFound;
   end;
 
 implementation
 
 uses
   System.SysUtils,
+  System.Generics.Collections,
   MCPServer.Errors;
 
 { TFailingResource }
@@ -65,12 +94,46 @@ begin
   raise Exception.Create('disk on fire');
 end;
 
+{ TEchoResource }
+
+constructor TEchoResource.CreateForValue(const AUri, AValue: string);
+begin
+  inherited Create;
+  FURI := AUri;
+  FName := 'Echo';
+  FMimeType := 'application/json';
+  FValue := AValue;
+end;
+
+function TEchoResource.GetResourceData: TEchoTemplateData;
+begin
+  Result := TEchoTemplateData.Create;
+  Result.Value := FValue;
+end;
+
+{ TEchoTemplate }
+
+constructor TEchoTemplate.Create;
+begin
+  inherited;
+  FUriTemplate := 'echo://{value}';
+  FName := 'Echo template';
+  FDescription := 'Echoes the captured value';
+  FMimeType := 'application/json';
+end;
+
+function TEchoTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
+begin
+  Result := TEchoResource.CreateForValue(URI, Vars['value']);
+end;
+
 { TResourcesManagerTests }
 
 procedure TResourcesManagerTests.Setup;
 begin
   FManager := TMCPResourcesManager.Create;
   FManager.AddResource(TFailingResource.Create);
+  FManager.AddResourceTemplate(TEchoTemplate.Create);
 end;
 
 procedure TResourcesManagerTests.TearDown;
@@ -221,14 +284,60 @@ begin
   end;
 end;
 
-procedure TResourcesManagerTests.Templates_AreEmpty_WithHints;
+procedure TResourcesManagerTests.Templates_ListsRegisteredTemplates_WithHints;
 begin
   var Modern := FManager.ListResourceTemplates(nil, TMCPProtocolEra.Modern).AsType<TJSONObject>;
   try
-    Assert.AreEqual(0, (Modern.GetValue('resourceTemplates') as TJSONArray).Count);
+    var Templates := Modern.GetValue('resourceTemplates') as TJSONArray;
+    Assert.AreEqual('logs://{level}', Modern.GetValue<string>('resourceTemplates[0].uriTemplate'),
+      'the built-in template is listed first');
+    var LastTemplate := Templates.Items[Templates.Count - 1] as TJSONObject;
+    Assert.AreEqual('echo://{value}', LastTemplate.GetValue<string>('uriTemplate'));
+    Assert.AreEqual('Echo template', LastTemplate.GetValue<string>('name'));
+    Assert.AreEqual('Echoes the captured value', LastTemplate.GetValue<string>('description'));
+    Assert.AreEqual('application/json', LastTemplate.GetValue<string>('mimeType'));
     Assert.AreEqual('private', Modern.GetValue<string>('cacheScope'));
   finally
     Modern.Free;
+  end;
+end;
+
+procedure TResourcesManagerTests.Templates_Cursor_IsInvalidParams;
+begin
+  var Params := TJSONObject.ParseJSONValue('{"cursor":"abc"}') as TJSONObject;
+  try
+    try
+      FManager.ListResourceTemplates(Params, TMCPProtocolEra.Modern).AsType<TJSONObject>.Free;
+      Assert.Fail('expected -32602');
+    except
+      on E: EMCPError do
+        Assert.AreEqual(JSONRPC_INVALID_PARAMS, E.Code);
+    end;
+  finally
+    Params.Free;
+  end;
+end;
+
+procedure TResourcesManagerTests.Read_ViaTemplate_ResolvesWithActualUri;
+begin
+  var Json := Read('echo://hello', TMCPProtocolEra.Modern);
+  try
+    Assert.AreEqual('echo://hello', Json.GetValue<string>('contents[0].uri'));
+    Assert.AreEqual('application/json', Json.GetValue<string>('contents[0].mimeType'));
+    Assert.AreEqual('{"value":"hello"}', Json.GetValue<string>('contents[0].text'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TResourcesManagerTests.Read_TemplateMismatch_IsNotFound;
+begin
+  try
+    Read('echo://a/b', TMCPProtocolEra.Modern).Free;
+    Assert.Fail('expected -32602: {value} does not match a path with a slash');
+  except
+    on E: EMCPError do
+      Assert.AreEqual(JSONRPC_INVALID_PARAMS, E.Code);
   end;
 end;
 

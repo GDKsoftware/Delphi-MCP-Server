@@ -42,6 +42,14 @@ type
     [Optional] property Note: string read FNote write FNote;
   end;
 
+  TRenamedParams = class
+  private
+    FDisplayName: string;
+  public
+    [SchemaName('display_name')]
+    property DisplayName: string read FDisplayName write FDisplayName;
+  end;
+
   TSampleResult = class
   private
     FColour: TColour;
@@ -74,6 +82,7 @@ type
     [Test] procedure Enum_ByName_AndInvalidRaises;
     [Test] procedure Serialize_Enum_Set_Array_DateTime;
     [Test] procedure Serialize_NilObject_IsNull;
+    [Test] procedure SchemaName_UsedForDeserializeAndSerialize;
   end;
 
 implementation
@@ -223,6 +232,27 @@ begin
   finally
     Value.Free;
     Json.Free;
+  end;
+end;
+
+procedure TSerializerTests.SchemaName_UsedForDeserializeAndSerialize;
+begin
+  var Json := TJSONObject.ParseJSONValue('{"display_name":"Ada"}') as TJSONObject;
+  var Params := TMCPSerializer.Deserialize<TRenamedParams>(Json);
+  try
+    Assert.AreEqual('Ada', Params.DisplayName);
+
+    var OutJson := TJSONObject.Create;
+    try
+      TMCPSerializer.Serialize(Params, OutJson);
+      Assert.AreEqual('Ada', OutJson.GetValue<string>('display_name'));
+      Assert.IsNull(OutJson.GetValue('displayname'));
+    finally
+      OutJson.Free;
+    end;
+  finally
+    Json.Free;
+    Params.Free;
   end;
 end;
 

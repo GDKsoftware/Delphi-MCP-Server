@@ -9,7 +9,7 @@ type
   [TestFixture]
   TCapabilityBuilderTests = class
   public
-    [Test] procedure Registry_YieldsToolsAndResourcesInRegistrationOrder;
+    [Test] procedure Registry_YieldsAllManagersInRegistrationOrder;
     [Test] procedure Registry_NeverEmitsLogging;
     [Test] procedure RegistryWithoutEnumeration_YieldsDefaults;
   end;
@@ -43,18 +43,22 @@ end;
 
 { TCapabilityBuilderTests }
 
-procedure TCapabilityBuilderTests.Registry_YieldsToolsAndResourcesInRegistrationOrder;
+procedure TCapabilityBuilderTests.Registry_YieldsAllManagersInRegistrationOrder;
 begin
   var Harness := TMCPTestHarness.Create;
   try
     var Capabilities := TMCPCapabilityBuilder.Build(Harness.ManagerRegistry, TMCPProtocolEra.Modern);
     try
-      Assert.AreEqual(2, Capabilities.Count);
+      Assert.AreEqual(4, Capabilities.Count);
       Assert.AreEqual('tools', Capabilities.Pairs[0].JsonString.Value);
       Assert.AreEqual('resources', Capabilities.Pairs[1].JsonString.Value);
+      Assert.AreEqual('prompts', Capabilities.Pairs[2].JsonString.Value);
+      Assert.AreEqual('completions', Capabilities.Pairs[3].JsonString.Value);
       Assert.IsFalse(Capabilities.GetValue<Boolean>('tools.listChanged'));
       Assert.IsFalse(Capabilities.GetValue<Boolean>('resources.subscribe'));
       Assert.IsFalse(Capabilities.GetValue<Boolean>('resources.listChanged'));
+      Assert.IsFalse(Capabilities.GetValue<Boolean>('prompts.listChanged'));
+      Assert.IsTrue(Capabilities.GetValue('completions') is TJSONObject);
     finally
       Capabilities.Free;
     end;

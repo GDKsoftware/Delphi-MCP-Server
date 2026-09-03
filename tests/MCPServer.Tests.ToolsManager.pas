@@ -33,6 +33,16 @@ type
     constructor Create; override;
   end;
 
+  /// A hand-written schema, to exercise TMCPToolBase's own validation
+  /// (nothing goes through TMCPSerializer for this tool).
+  THandWrittenTool = class(TMCPToolBase)
+  protected
+    function BuildSchema: TJSONObject; override;
+    function DoExecute(const Arguments: TJSONObject): TValue; override;
+  public
+    constructor Create; override;
+  end;
+
   [TestFixture]
   TToolsManagerTests = class
   private
@@ -57,12 +67,16 @@ type
     [Test] procedure List_IsInRegistrationOrder_WithAnnotations;
     [Test] procedure List_CacheHints_ModernOnly;
     [Test] procedure List_Cursor_IsInvalidParams;
+    [Test] procedure HandWrittenTool_ValidArguments_Runs;
+    [Test] procedure HandWrittenTool_MissingRequired_IsErrorResult;
+    [Test] procedure HandWrittenTool_WrongType_IsErrorResult;
   end;
 
 implementation
 
 uses
   System.SysUtils,
+  System.Generics.Collections,
   MCPServer.Errors;
 
 { TDoublingTool }
@@ -80,12 +94,33 @@ begin
   Result.Doubled := Params.Value * 2;
 end;
 
+{ THandWrittenTool }
+
+constructor THandWrittenTool.Create;
+begin
+  inherited;
+  FName := 'hand_written';
+  FDescription := 'A tool with a hand-written schema';
+end;
+
+function THandWrittenTool.BuildSchema: TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(
+    '{"type":"object","required":["count"],"properties":{"count":{"type":"integer"}}}') as TJSONObject;
+end;
+
+function THandWrittenTool.DoExecute(const Arguments: TJSONObject): TValue;
+begin
+  Result := TValue.From<string>('count was ' + Arguments.GetValue<Integer>('count').ToString);
+end;
+
 { TToolsManagerTests }
 
 procedure TToolsManagerTests.Setup;
 begin
   FManager := TMCPToolsManager.Create;
   FManager.AddTool(TDoublingTool.Create);
+  FManager.AddTool(THandWrittenTool.Create);
 end;
 
 procedure TToolsManagerTests.TearDown;
@@ -216,13 +251,16 @@ begin
   try
     var Tools := Json.GetValue('tools') as TJSONArray;
     Assert.AreEqual('echo', Json.GetValue<string>('tools[0].name'), 'registration order starts with echo');
-    Assert.AreEqual('doubling', Tools.Items[Tools.Count - 1].GetValue<string>('name'), 'the added tool comes last');
+    Assert.AreEqual('hand_written', Tools.Items[Tools.Count - 1].GetValue<string>('name'),
+      'the last-added tool comes last');
+    Assert.AreEqual('doubling', Tools.Items[Tools.Count - 2].GetValue<string>('name'));
     var ReadOnly := False;
     for var Tool in Tools do
       if Tool.GetValue<string>('name') = 'test_simple_text' then
         ReadOnly := Tool.GetValue<Boolean>('annotations.readOnlyHint');
     Assert.IsTrue(ReadOnly);
-    Assert.AreEqual('integer', Json.GetValue<string>('tools[' + (Tools.Count - 1).ToString + '].inputSchema.properties.value.type'));
+    Assert.AreEqual('integer',
+      Json.GetValue<string>('tools[' + (Tools.Count - 2).ToString + '].inputSchema.properties.value.type'));
   finally
     Json.Free;
   end;
@@ -258,6 +296,39 @@ begin
     end;
   finally
     Params.Free;
+  end;
+end;
+
+procedure TToolsManagerTests.HandWrittenTool_ValidArguments_Runs;
+begin
+  var Json := Call('{"name":"hand_written","arguments":{"count":3}}', TMCPProtocolEra.Modern);
+  try
+    Assert.IsNull(Json.GetValue('isError'));
+    Assert.AreEqual('count was 3', Json.GetValue<string>('content[0].text'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TToolsManagerTests.HandWrittenTool_MissingRequired_IsErrorResult;
+begin
+  var Json := Call('{"name":"hand_written","arguments":{}}', TMCPProtocolEra.Modern);
+  try
+    Assert.IsTrue(Json.GetValue<Boolean>('isError'));
+    Assert.IsTrue(Json.GetValue<string>('content[0].text').Contains('missing required property "count"'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TToolsManagerTests.HandWrittenTool_WrongType_IsErrorResult;
+begin
+  var Json := Call('{"name":"hand_written","arguments":{"count":"three"}}', TMCPProtocolEra.Modern);
+  try
+    Assert.IsTrue(Json.GetValue<Boolean>('isError'));
+    Assert.IsTrue(Json.GetValue<string>('content[0].text').Contains('expected integer'));
+  finally
+    Json.Free;
   end;
 end;
 
