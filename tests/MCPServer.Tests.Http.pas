@@ -283,15 +283,15 @@ end;
 
 procedure THttpTransportTests.Legacy_UnknownMethod_Is200;
 begin
-  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"prompts/list"}', ['MCP-Protocol-Version: 2025-06-18']);
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"totally/bogus/method"}', ['MCP-Protocol-Version: 2025-06-18']);
   Assert.AreEqual(200, Reply.Status);
   Assert.IsTrue(Reply.Body.Contains('-32601'));
 end;
 
 procedure THttpTransportTests.Modern_UnknownMethod_Is404;
 begin
-  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"prompts/list","params":{' + MODERN_META + '}}',
-    [MODERN_VERSION_HEADER, 'Mcp-Method: prompts/list']);
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"totally/bogus/method","params":{' + MODERN_META + '}}',
+    [MODERN_VERSION_HEADER, 'Mcp-Method: totally/bogus/method']);
   Assert.AreEqual(404, Reply.Status);
   var Json := Reply.Json;
   try
