@@ -8,8 +8,8 @@ uses
   System.Rtti;
 
 const
-  /// Protocol version answered by the legacy initialize handshake today.
-  /// Kept under its historic name for library consumers.
+  /// Protocol version answered by the initialize handshake. Kept under its
+  /// historic name for library consumers.
   MCP_PROTOCOL_VERSION = '2025-06-18';
 
   // Protocol revisions

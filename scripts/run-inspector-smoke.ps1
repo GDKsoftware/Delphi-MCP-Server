@@ -9,10 +9,9 @@
     delphi-stdio over a spawned process. The pinned Inspector version comes
     from package.json.
 
-    Until the 2026-07-28 work lands, the modern entry is expected to fail;
-    pass -ExpectModern once it must succeed. The script exits non-zero when
-    an entry that is expected to work fails, or when the modern entry
-    unexpectedly passes or fails.
+    Every entry is expected to list the tools. Entries named in
+    -ExpectedFailures are expected to fail instead; the script exits non-zero
+    when an entry does not behave as expected in either direction.
 
 .PARAMETER Configuration
     Release (default) or Debug. The stdio entry in ci-servers.json points at
@@ -24,11 +23,13 @@
 .PARAMETER NoBuild
     Use the existing executable.
 
-.PARAMETER ExpectModern
-    Treat a failing modern entry as an error.
+.PARAMETER ExpectedFailures
+    Entry names that must fail (for example delphi-modern while the server
+    does not implement server/discover).
 
 .EXAMPLE
     .\scripts\run-inspector-smoke.ps1
+    .\scripts\run-inspector-smoke.ps1 -ExpectedFailures delphi-modern
 #>
 [CmdletBinding()]
 param(
@@ -40,7 +41,7 @@ param(
 
     [switch]$NoBuild,
 
-    [switch]$ExpectModern
+    [string[]]$ExpectedFailures = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,12 +61,10 @@ Assert-NodeTooling
 New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 $server = Start-McpServer -ServerExe $serverExe -Port $port -LogDir $resultsDir
 
-$entries = @(
-    @{ Name = 'delphi-legacy'; ExpectSuccess = $true }
-    @{ Name = 'delphi-auto';   ExpectSuccess = $true }
-    @{ Name = 'delphi-modern'; ExpectSuccess = [bool]$ExpectModern }
-    @{ Name = 'delphi-stdio';  ExpectSuccess = $true }
-)
+$entries = @()
+foreach ($name in 'delphi-legacy', 'delphi-auto', 'delphi-modern', 'delphi-stdio') {
+    $entries += @{ Name = $name; ExpectSuccess = ($ExpectedFailures -notcontains $name) }
+}
 
 $rows = @()
 try {

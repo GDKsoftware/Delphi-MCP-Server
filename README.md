@@ -579,10 +579,10 @@ The `tests` folder holds a DUnitX project that drives the JSON-RPC layer in-proc
 .\scripts\capture-http-goldens.ps1          # replay the HTTP golden cases with curl against Win64\Debug\MCPServer.exe
 .\scripts\run-stdio-smoke.ps1               # drive --stdio and check the framing of stdout/stderr
 .\scripts\run-conformance.ps1               # official conformance CLI, 2026-07-28 and 2025-11-25 requirement sets
-.\scripts\run-inspector-smoke.ps1           # Inspector CLI tools/list in the legacy, auto and modern eras and over stdio
+.\scripts\run-inspector-smoke.ps1 -ExpectedFailures delphi-modern   # Inspector CLI tools/list per protocol era and over stdio
 ```
 
-Known conformance failures are listed per requirement set in `conformance-baseline-<revision>.yml`; the conformance run fails on new failures and on entries that started to pass. `build-tests.bat [Config] [Platform]` compiles the test project on its own.
+Known conformance failures are listed per requirement set in `conformance-baseline-<revision>.yml`; the conformance run fails on new failures and on entries that started to pass. The Inspector smoke run takes the entries that must fail as a parameter (`delphi-modern` as long as the server has no `server/discover`). `build-tests.bat [Config] [Platform]` compiles the test project on its own.
 
 ## About GDK Software
 

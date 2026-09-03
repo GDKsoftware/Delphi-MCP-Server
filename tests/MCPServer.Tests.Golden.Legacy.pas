@@ -12,8 +12,8 @@ type
   ///
   /// Every test replays one file from tests\golden\legacy through a fresh
   /// harness and compares the normalised response with the recorded one.
-  /// The only differences allowed after the recording are the items in the
-  /// allow-list of docs\mcp-2026-07-28-implementation-plan.md, section 4.3.
+  /// A golden file only changes when the wire behaviour changes on purpose;
+  /// such a change belongs in the CHANGELOG.
   [TestFixture]
   TLegacyGoldenTests = class
   private

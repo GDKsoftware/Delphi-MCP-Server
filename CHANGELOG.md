@@ -5,17 +5,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-Safety net for the MCP 2026-07-28 work: the legacy wire behaviour is pinned
-before any protocol change lands. No client-visible protocol change.
+Test harness, golden files and hygiene. No client-visible protocol change.
 
 ### Added
 
 - DUnitX test project `tests\MCPServer.Tests.dpr` (Win32 and Win64) with an
   in-process harness that builds the same registry as `MCPServer.dpr` and
   drives `TMCPJsonRpcProcessor.ProcessRequest`.
-- Golden files that pin today's responses: 37 JSON-RPC cases in
+- Golden files that pin the wire behaviour: 38 JSON-RPC cases in
   `tests\golden\legacy` and 26 HTTP transport cases (status line, headers,
-  body) in `tests\golden\http`, recorded from the unchanged 2025-06-18 code.
+  body) in `tests\golden\http`.
 - `build-tests.bat` and `scripts\run-tests.ps1` (build and run, `-Record`
   to re-record goldens), `scripts\capture-http-goldens.ps1`.
 - `scripts\run-conformance.ps1` for the official conformance CLI with one

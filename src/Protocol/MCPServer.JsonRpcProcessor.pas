@@ -27,7 +27,7 @@ type
 const
   // The JSON-RPC error codes are defined in MCPServer.Types. These aliases
   // keep consumer code that references MCPServer.JsonRpcProcessor.JSONRPC_*
-  // compiling for one release.
+  // compiling.
   JSONRPC_PARSE_ERROR = MCPServer.Types.JSONRPC_PARSE_ERROR;
   JSONRPC_INVALID_REQUEST = MCPServer.Types.JSONRPC_INVALID_REQUEST;
   JSONRPC_METHOD_NOT_FOUND = MCPServer.Types.JSONRPC_METHOD_NOT_FOUND;

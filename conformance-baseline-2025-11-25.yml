@@ -1,6 +1,6 @@
 # Known conformance failures for --requirements 2025-11-25
 # Scenarios listed here may fail; a listed scenario that passes fails the run (stale entry).
-# Regenerate after each phase with scripts/run-conformance.ps1 -NoBaseline and prune what passes.
+# Regenerate with scripts/run-conformance.ps1 -NoBaseline after a change and prune what passes.
 server:
   - logging-set-level
   - completion-complete

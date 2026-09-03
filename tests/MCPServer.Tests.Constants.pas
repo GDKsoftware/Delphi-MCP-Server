@@ -56,7 +56,7 @@ end;
 
 procedure TProtocolConstantsTests.ProtocolVersions_AreConsistent;
 begin
-  Assert.AreEqual('2025-06-18', MCP_PROTOCOL_VERSION, 'legacy default must not change without the allow-list');
+  Assert.AreEqual('2025-06-18', MCP_PROTOCOL_VERSION, 'the initialize handshake answers this revision');
   Assert.AreEqual('2026-07-28', MCP_LATEST_PROTOCOL_VERSION);
   Assert.AreEqual('2025-11-25', MCP_LATEST_LEGACY_PROTOCOL_VERSION);
 
