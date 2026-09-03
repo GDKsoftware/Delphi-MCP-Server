@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "delphi-legacy": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp",
+      "protocolEra": "legacy"
+    },
+    "delphi-auto": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp",
+      "protocolEra": "auto"
+    },
+    "delphi-modern": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp",
+      "protocolEra": "modern"
+    },
+    "delphi-stdio": {
+      "type": "stdio",
+      "command": "Win64\\Release\\MCPServer.exe",
+      "args": ["--stdio"]
+    }
+  }
+}

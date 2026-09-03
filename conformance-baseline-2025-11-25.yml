@@ -1,0 +1,27 @@
+# Known conformance failures for --requirements 2025-11-25
+# Scenarios listed here may fail; a listed scenario that passes fails the run (stale entry).
+# Regenerate after each phase with scripts/run-conformance.ps1 -NoBaseline and prune what passes.
+server:
+  - logging-set-level
+  - completion-complete
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-with-logging
+  - tools-call-with-progress
+  - tools-call-sampling
+  - tools-call-elicitation
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  - resources-read-binary
+  - resources-subscribe
+  - resources-unsubscribe
+  - prompts-list
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  - dns-rebinding-protection
+  # only a WARNING check (no session id on the SSE path); the runner counts it as not passed
+  - server-sse-multiple-streams
