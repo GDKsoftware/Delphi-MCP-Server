@@ -26,6 +26,7 @@ uses
   IdServerIOHandler,
   MCPServer.Types,
   MCPServer.Settings,
+  MCPServer.RequestContext,
   MCPServer.JsonRpcProcessor;
 
 type
@@ -54,6 +55,7 @@ type
     procedure HandlePostRequestSSE(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
     procedure HandlePostRequestJSON(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
     function GetNextEventID: string;
+    function BuildTransportHints(RequestInfo: TIdHTTPRequestInfo): TMCPTransportHints;
     function AcceptsSSE(const AcceptHeader: string): Boolean;
     function IsRequestOnlyNotificationsOrResponses(JSONRequest: TJSONValue): Boolean;
   public
@@ -134,7 +136,7 @@ begin
   if not Assigned(FManagerRegistry) then
     raise Exception.Create('Manager registry not assigned');
 
-  FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(FManagerRegistry);
+  FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(FManagerRegistry, FSettings);
 
   if Assigned(FSettings) then
   begin
@@ -412,6 +414,16 @@ begin
   Result := IntToStr(AtomicIncrement(FEventIDCounter));
 end;
 
+function TMCPIdHTTPServer.BuildTransportHints(RequestInfo: TIdHTTPRequestInfo): TMCPTransportHints;
+const
+  PROTOCOL_VERSION_HEADER = 'MCP-Protocol-Version';
+begin
+  // Header names are matched case-insensitively by TIdHeaderList.
+  var HasHeader := RequestInfo.RawHeaders.IndexOfName(PROTOCOL_VERSION_HEADER) >= 0;
+  Result := TMCPTransportHints.ForHttp(HasHeader, Trim(RequestInfo.RawHeaders.Values[PROTOCOL_VERSION_HEADER]));
+  Result.RemoteAddress := RequestInfo.RemoteIP;
+end;
+
 function TMCPIdHTTPServer.AcceptsSSE(const AcceptHeader: string): Boolean;
 begin
   Result := Pos('text/event-stream', AcceptHeader) > 0;
@@ -478,7 +490,7 @@ begin
   if SessionID <> '' then
     ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
 
-  JSONResponse := FJsonRpcProcessor.ProcessRequest(RequestBody, SessionID);
+  JSONResponse := FJsonRpcProcessor.ProcessRequestEx(RequestBody, BuildTransportHints(RequestInfo)).Body;
 
   if JSONResponse <> '' then
   begin
@@ -506,13 +518,10 @@ procedure TMCPIdHTTPServer.HandlePostRequestJSON(RequestInfo: TIdHTTPRequestInfo
   ResponseInfo: TIdHTTPResponseInfo; const RequestBody: string; const SessionID: string);
 var
   ResponseBody: string;
-  ResponseJSON: TJSONObject;
-  ResultObj: TJSONObject;
-  SessionValue: TJSONValue;
 begin
   TLogger.Info('Handling POST request with JSON response');
 
-  ResponseBody := FJsonRpcProcessor.ProcessRequest(RequestBody, SessionID);
+  ResponseBody := FJsonRpcProcessor.ProcessRequestEx(RequestBody, BuildTransportHints(RequestInfo)).Body;
 
   if ResponseBody = '' then
   begin
@@ -523,22 +532,8 @@ begin
   ResponseInfo.ContentType := 'application/json';
   ResponseInfo.CustomHeaders.Values['Connection'] := 'keep-alive';
 
-  if (SessionID = '') and (Pos('"sessionId"', ResponseBody) > 0) then
-  begin
-    ResponseJSON := TJSONObject.ParseJSONValue(ResponseBody) as TJSONObject;
-    try
-      ResultObj := ResponseJSON.GetValue('result') as TJSONObject;
-      if Assigned(ResultObj) then
-      begin
-        SessionValue := ResultObj.GetValue('sessionId');
-        if Assigned(SessionValue) then
-          ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionValue.Value;
-      end;
-    finally
-      ResponseJSON.Free;
-    end;
-  end
-  else if SessionID <> '' then
+  // Sessions are never minted; an incoming id is echoed back unchanged.
+  if SessionID <> '' then
     ResponseInfo.CustomHeaders.Values['Mcp-Session-Id'] := SessionID;
 
   ResponseInfo.ContentStream := TStringStream.Create(ResponseBody, TEncoding.UTF8);

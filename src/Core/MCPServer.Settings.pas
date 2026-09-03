@@ -22,8 +22,15 @@ type
     FSSLCertFile: string;
     FSSLKeyFile: string;
     FSSLRootCertFile: string;
+    FServerTitle: string;
+    FServerDescription: string;
+    FServerWebsiteUrl: string;
+    FInstructions: string;
+    FLenientModernPing: Boolean;
+    FDiscoverListsLegacyVersions: Boolean;
+    FDiscoverTtlMs: Integer;
     function GetProtocol: string;
-    
+
     procedure LoadDefaults;
     procedure CreateDefaultSettingsFile;
   public
@@ -46,6 +53,22 @@ type
     property SSLCertFile: string read FSSLCertFile write FSSLCertFile;
     property SSLKeyFile: string read FSSLKeyFile write FSSLKeyFile;
     property SSLRootCertFile: string read FSSLRootCertFile write FSSLRootCertFile;
+
+    // Optional server identity ([Server] Title, Description, WebsiteUrl,
+    // Instructions); reported in initialize and server/discover when set.
+    property ServerTitle: string read FServerTitle write FServerTitle;
+    property ServerDescription: string read FServerDescription write FServerDescription;
+    property ServerWebsiteUrl: string read FServerWebsiteUrl write FServerWebsiteUrl;
+    property Instructions: string read FInstructions write FInstructions;
+
+    /// [Protocol] LenientModernPing: answer ping for 2026-07-28 requests
+    /// although the revision removed it. Default off.
+    property LenientModernPing: Boolean read FLenientModernPing write FLenientModernPing;
+    /// [Protocol] DiscoverListsLegacyVersions: also list the initialize-based
+    /// revisions in server/discover and in unsupported-version errors. Default off.
+    property DiscoverListsLegacyVersions: Boolean read FDiscoverListsLegacyVersions write FDiscoverListsLegacyVersions;
+    /// [Protocol] DiscoverTtlMs: cache hint on server/discover. Default 0.
+    property DiscoverTtlMs: Integer read FDiscoverTtlMs write FDiscoverTtlMs;
   end;
 
 implementation
@@ -93,6 +116,13 @@ begin
   FSSLCertFile := '';
   FSSLKeyFile := '';
   FSSLRootCertFile := '';
+  FServerTitle := '';
+  FServerDescription := '';
+  FServerWebsiteUrl := '';
+  FInstructions := '';
+  FLenientModernPing := False;
+  FDiscoverListsLegacyVersions := False;
+  FDiscoverTtlMs := 0;
 end;
 
 function TMCPSettings.GetProtocol: string;
@@ -115,7 +145,17 @@ begin
     IniFile.WriteString('Server', 'Name', FServerName);
     IniFile.WriteString('Server', 'Version', FServerVersion);
     IniFile.WriteString('Server', 'Endpoint', FEndpoint);
-    
+    IniFile.WriteString('Server', '; Optional identity reported to clients', '');
+    IniFile.WriteString('Server', 'Title', FServerTitle);
+    IniFile.WriteString('Server', 'Description', FServerDescription);
+    IniFile.WriteString('Server', 'WebsiteUrl', FServerWebsiteUrl);
+    IniFile.WriteString('Server', 'Instructions', FInstructions);
+
+    IniFile.WriteString('Protocol', '; Protocol options (1 = on, 0 = off)', '');
+    IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
+    IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
+    IniFile.WriteInteger('Protocol', 'DiscoverTtlMs', FDiscoverTtlMs);
+
     IniFile.WriteString('CORS', '; Cross-Origin Resource Sharing configuration', '');
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', '; Comma-separated list of allowed origins', '');
@@ -145,7 +185,15 @@ begin
     FServerName := IniFile.ReadString('Server', 'Name', FServerName);
     FServerVersion := IniFile.ReadString('Server', 'Version', FServerVersion);
     FEndpoint := IniFile.ReadString('Server', 'Endpoint', FEndpoint);
-    
+    FServerTitle := IniFile.ReadString('Server', 'Title', FServerTitle);
+    FServerDescription := IniFile.ReadString('Server', 'Description', FServerDescription);
+    FServerWebsiteUrl := IniFile.ReadString('Server', 'WebsiteUrl', FServerWebsiteUrl);
+    FInstructions := IniFile.ReadString('Server', 'Instructions', FInstructions);
+
+    FLenientModernPing := IniFile.ReadBool('Protocol', 'LenientModernPing', FLenientModernPing);
+    FDiscoverListsLegacyVersions := IniFile.ReadBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
+    FDiscoverTtlMs := IniFile.ReadInteger('Protocol', 'DiscoverTtlMs', FDiscoverTtlMs);
+
     FCorsEnabled := IniFile.ReadBool('CORS', 'Enabled', FCorsEnabled);
     FCorsAllowedOrigins := IniFile.ReadString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
     
@@ -181,7 +229,15 @@ begin
     IniFile.WriteString('Server', 'Name', FServerName);
     IniFile.WriteString('Server', 'Version', FServerVersion);
     IniFile.WriteString('Server', 'Endpoint', FEndpoint);
-    
+    IniFile.WriteString('Server', 'Title', FServerTitle);
+    IniFile.WriteString('Server', 'Description', FServerDescription);
+    IniFile.WriteString('Server', 'WebsiteUrl', FServerWebsiteUrl);
+    IniFile.WriteString('Server', 'Instructions', FInstructions);
+
+    IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
+    IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
+    IniFile.WriteInteger('Protocol', 'DiscoverTtlMs', FDiscoverTtlMs);
+
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
     
