@@ -33,7 +33,8 @@ uses
   MCPServer.Resource.Project in '..\src\Resources\MCPServer.Resource.Project.pas',
   MCPServer.Tests.Harness in 'MCPServer.Tests.Harness.pas',
   MCPServer.Tests.Golden in 'MCPServer.Tests.Golden.pas',
-  MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas';
+  MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas',
+  MCPServer.Tests.Constants in 'MCPServer.Tests.Constants.pas';
 
 procedure RunTests;
 begin

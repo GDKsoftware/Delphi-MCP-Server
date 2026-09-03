@@ -25,11 +25,14 @@ type
   end;
 
 const
-  JSONRPC_PARSE_ERROR = -32700;
-  JSONRPC_INVALID_REQUEST = -32600;
-  JSONRPC_METHOD_NOT_FOUND = -32601;
-  JSONRPC_INVALID_PARAMS = -32602;
-  JSONRPC_INTERNAL_ERROR = -32603;
+  // The JSON-RPC error codes are defined in MCPServer.Types. These aliases
+  // keep consumer code that references MCPServer.JsonRpcProcessor.JSONRPC_*
+  // compiling for one release.
+  JSONRPC_PARSE_ERROR = MCPServer.Types.JSONRPC_PARSE_ERROR;
+  JSONRPC_INVALID_REQUEST = MCPServer.Types.JSONRPC_INVALID_REQUEST;
+  JSONRPC_METHOD_NOT_FOUND = MCPServer.Types.JSONRPC_METHOD_NOT_FOUND;
+  JSONRPC_INVALID_PARAMS = MCPServer.Types.JSONRPC_INVALID_PARAMS;
+  JSONRPC_INTERNAL_ERROR = MCPServer.Types.JSONRPC_INTERNAL_ERROR;
 
 implementation
 

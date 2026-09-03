@@ -91,13 +91,6 @@ const
   // CORS Max Age (24 hours in seconds)
   CORS_MAX_AGE = 86400;
 
-  // JSON-RPC 2.0 Error Codes
-  JSONRPC_PARSE_ERROR = -32700;
-  JSONRPC_INVALID_REQUEST = -32600;
-  JSONRPC_METHOD_NOT_FOUND = -32601;
-  JSONRPC_INVALID_PARAMS = -32602;
-  JSONRPC_INTERNAL_ERROR = -32603;
-
   // SSE Message Format
   SSE_EVENT_PREFIX = 'event: ';
   SSE_DATA_PREFIX = 'data: ';

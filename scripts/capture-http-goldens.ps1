@@ -181,7 +181,7 @@ try {
         }
 
         $raw = [System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($responseFile))
-        $actual = Normalize-Response $raw
+        $actual = (Normalize-Response $raw).TrimEnd("`n")
         $goldenFile = Join-Path $goldenDir "$($case.Name).txt"
 
         if ($Record) {
