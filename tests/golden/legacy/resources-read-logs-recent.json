@@ -1,0 +1,23 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 16,
+    "method": "resources/read",
+    "params": {
+      "uri": "logs://recent"
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 16,
+    "result": {
+      "contents": [
+        {
+          "uri": "logs://recent",
+          "mimeType": "application/json",
+          "text": "Error reading resource: Invalid pointer operation"
+        }
+      ]
+    }
+  }
+}

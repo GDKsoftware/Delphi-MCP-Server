@@ -94,3 +94,11 @@ backup/
 # Claude Code specific
 
 # Dependencies
+
+# Test and conformance output
+tests/results/
+results/
+
+# Node tooling for conformance and Inspector runs
+node_modules/
+package-lock.json

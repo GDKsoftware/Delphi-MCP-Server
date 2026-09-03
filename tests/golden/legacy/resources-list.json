@@ -1,0 +1,33 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "method": "resources/list"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 13,
+    "result": {
+      "resources": [
+        {
+          "uri": "project://readme",
+          "name": "Project README",
+          "description": "README.md file contents",
+          "mimeType": "text/markdown"
+        },
+        {
+          "uri": "logs://recent",
+          "name": "Recent Logs",
+          "description": "Recent log entries from all categories",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "project://info",
+          "name": "Project Information",
+          "description": "Basic information about the Delphi MCP Server project",
+          "mimeType": "application/json"
+        }
+      ]
+    }
+  }
+}

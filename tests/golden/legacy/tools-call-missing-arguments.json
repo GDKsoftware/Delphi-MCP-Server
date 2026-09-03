@@ -1,0 +1,26 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 8,
+    "method": "tools/call",
+    "params": {
+      "name": "echo"
+    }
+  },
+  "mask": [
+    "result.content[0].text"
+  ],
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 8,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "<masked>"
+        }
+      ],
+      "isError": true
+    }
+  }
+}

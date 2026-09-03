@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Connection: keep-alive
+Content-Type: application/json
+Content-Length: 451
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: POST, GET, OPTIONS
+Access-Control-Allow-Headers: Accept, Content-Type, Last-Event-ID, Mcp-Protocol-Version, Mcp-Session-Id
+Access-Control-Expose-Headers: Mcp-Session-Id
+Access-Control-Max-Age: 86400
+Connection: keep-alive
+
+{"jsonrpc":"2.0","id":4,"result":{"resources":[{"uri":"project://readme","name":"Project README","description":"README.md file contents","mimeType":"text/markdown"},{"uri":"logs://recent","name":"Recent Logs","description":"Recent log entries from all categories","mimeType":"application/json"},{"uri":"project://info","name":"Project Information","description":"Basic information about the Delphi MCP Server project","mimeType":"application/json"}]}}
