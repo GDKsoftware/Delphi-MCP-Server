@@ -184,6 +184,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   request's own stream, only when the request carries
   `_meta.io.modelcontextprotocol/logLevel` and the level is at or above it;
   `TMCPLogLevel` and `MCP_LOG_LEVELS` in `MCPServer.Types`.
+- Authentication (`MCPServer.Authorization`): `IMCPAuthorizer` on
+  `TMCPIdHTTPServer.Authorizer`, `TMCPStaticBearerAuthorizer` (constant-time
+  comparison), the abstract `TMCPOAuthResourceServerAuthorizer` (mandatory
+  audience and expiry checks, `RequiredScopes`) and
+  `TMCPIntrospectionAuthorizer` (RFC 7662). `401`/`403`/`400` with
+  `WWW-Authenticate: Bearer` challenges (`resource_metadata`, `error`,
+  `scope`), the RFC 9728 protected resource metadata document at
+  `/.well-known/oauth-protected-resource[<Endpoint>]`, `[RequiresScope]` on
+  tool classes, `Principal`, `Scopes` and `HasScope` on the request context,
+  and `[Auth] BearerTokens`, `AuthorizationServers`, `ResourceUri` and
+  `ScopesSupported` in `settings.ini`. The stdio transport never
+  authenticates.
 - `subscriptions/listen` (`MCPServer.SubscriptionsManager`): long-lived
   change notification streams with the acknowledgement first, the honoured
   filter, `_meta.io.modelcontextprotocol/subscriptionId` on every message,

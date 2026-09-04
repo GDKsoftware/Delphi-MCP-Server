@@ -162,6 +162,25 @@ at startup. `RequestStateTtlSeconds` bounds the replay window (600 s).
 nine new example tools plus one example prompt ship with the executable;
 they are only registered when their units are in the project.
 
+## Authentication
+
+**Opt-in, and only over HTTP.** Nothing changes until `[Auth] BearerTokens`
+is set or a library assigns `TMCPIdHTTPServer.Authorizer`. From then on every
+request to the endpoint needs `Authorization: Bearer <token>`; `OPTIONS` and
+`GET /.well-known/oauth-protected-resource[<Endpoint>]` stay open. Legacy and
+modern clients get the same `401`/`403`/`400` answers with a
+`WWW-Authenticate: Bearer` challenge and an id-less JSON-RPC error body.
+
+**`[RequiresScope]` tools answer `403` without the scope**, also to legacy
+clients (their JSON-RPC errors otherwise travel in `200`). The response carries
+`WWW-Authenticate: Bearer error="insufficient_scope", scope="..."` and
+`error.data.requiredScope`.
+
+**`TMCPRequestContext.Create` and `TMCPTransportHints` gained `Principal` and
+`Scopes`.** The request state sealer binds `requestState` tokens to the
+principal now, so a token obtained by one authenticated caller is rejected
+when another caller presents it.
+
 ## Subscriptions
 
 **`subscriptions/listen` replaces `resources/subscribe` and the GET stream.**

@@ -802,6 +802,54 @@ The server provides six resources and two resource templates, accessible via URI
 
 The server supports configuration through `settings.ini` files. A default `settings.ini.example` is provided in the repository.
 
+### Authentication
+
+The HTTP endpoint is open by default, which is fine for a loopback-only
+server. A server that other machines can reach should require a token:
+
+- `[Auth] BearerTokens`: comma-separated pre-shared tokens. With this set the
+  executable installs `TMCPStaticBearerAuthorizer`; every request except
+  `OPTIONS` and the protected resource metadata must carry
+  `Authorization: Bearer <token>`. A missing token is `401` with a
+  `WWW-Authenticate: Bearer` challenge, an unknown token `401` with
+  `error="invalid_token"`, another scheme `400` with `error="invalid_request"`.
+  Tokens are compared in constant time and never logged.
+- `[Auth] AuthorizationServers`: issuer URLs of the OAuth 2.1 authorization
+  servers, published in `GET /.well-known/oauth-protected-resource` and
+  `/.well-known/oauth-protected-resource<Endpoint>` (RFC 9728) and referenced
+  by the `resource_metadata` parameter of every challenge, so clients can
+  discover where to obtain a token. `ResourceUri` is the canonical URI of this
+  server that the tokens must name as their audience (default
+  `<Protocol>://<Host>:<Port><Endpoint>`); `ScopesSupported` lists the scopes
+  clients may request (`offline_access` is never advertised).
+
+A library that hosts `TMCPIdHTTPServer` assigns its own `Authorizer`
+(`MCPServer.Authorization`):
+
+- `TMCPStaticBearerAuthorizer.Create(Tokens, Scopes)`: the pre-shared tokens,
+  optionally limited to a set of scopes (all scopes by default).
+- `TMCPOAuthResourceServerAuthorizer`: the base for token validation against
+  an authorization server. Override `ValidateToken(Token, out Claims)`; the
+  base class then requires the `aud` claim to name `ExpectedAudience`, the
+  `exp` claim to lie in the future, and the `RequiredScopes` to be present in
+  `scope` or `scp`, answering `401 invalid_token` or `403 insufficient_scope`
+  otherwise. `TMCPIntrospectionAuthorizer` implements `ValidateToken` with an
+  RFC 7662 token introspection request (client credentials over HTTP basic
+  authentication). Signed-JWT validation is not built in: the RTL has no JOSE
+  library, so a deployment that validates JWTs locally supplies its own
+  `ValidateToken` on top of its JWT library of choice.
+- `[RequiresScope('name')]` on a tool class makes `tools/call` answer `403`
+  with `WWW-Authenticate: Bearer error="insufficient_scope", scope="name"`
+  unless the caller's token grants that scope. On an open server, and over
+  stdio, nobody holds a scope, so such a tool is unusable there.
+
+Tools see the authenticated caller as `Context.Principal` and
+`Context.HasScope`. The inbound token is bound to this server: a tool that
+calls an upstream API must obtain its own credentials and must never forward
+the `Authorization` header it was called with. Authentication is an HTTP
+concern; the stdio transport trusts the process that spawned it and never
+consults an authorizer.
+
 ### Network and Security
 
 - `[Server] BindAddress`: the interface to listen on. Empty (default) derives it from `Host`: a loopback `Host` binds `127.0.0.1` and `::1`, any other `Host` binds every interface. Set `0.0.0.0` to listen everywhere explicitly.
