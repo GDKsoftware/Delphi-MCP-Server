@@ -16,6 +16,7 @@ uses
   MCPServer.RequestContext in 'Protocol\MCPServer.RequestContext.pas',
   MCPServer.Capabilities in 'Protocol\MCPServer.Capabilities.pas',
   MCPServer.HttpHeaders in 'Server\MCPServer.HttpHeaders.pas',
+  MCPServer.HttpStream in 'Server\MCPServer.HttpStream.pas',
   MCPServer.Serializer in 'Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in 'Protocol\MCPServer.Schema.Generator.pas',
   MCPServer.Schema.Validator in 'Protocol\MCPServer.Schema.Validator.pas',

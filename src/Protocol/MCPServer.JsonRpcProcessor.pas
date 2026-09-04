@@ -96,8 +96,6 @@ const
   INPUT_REQUIRED_METHODS: array[0..2] of string = ('tools/call', 'resources/read', 'prompts/get');
   PARAM_INPUT_RESPONSES = 'inputResponses';
   PARAM_REQUEST_STATE = 'requestState';
-  LOG_LEVELS: array[0..7] of string = (
-    'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
 
 function InArray(const Value: string; const Values: array of string): Boolean;
 begin
@@ -277,7 +275,7 @@ begin
       'params._meta.' + MCP_META_CLIENT_INFO + ' must be an object', nil, HTTP_STATUS_BAD_REQUEST);
 
   var LogLevel := Meta.GetValue(MCP_META_LOG_LEVEL);
-  if Assigned(LogLevel) and (not (LogLevel is TJSONString) or not InArray(TJSONString(LogLevel).Value, LOG_LEVELS)) then
+  if Assigned(LogLevel) and (not IsJsonString(LogLevel) or not TMCPLogLevel.IsKnown(TJSONString(LogLevel).Value)) then
     raise EMCPError.Create(JSONRPC_INVALID_PARAMS,
       'params._meta.' + MCP_META_LOG_LEVEL + ' must be one of debug, info, notice, warning, error, critical, alert, emergency',
       nil, HTTP_STATUS_BAD_REQUEST);

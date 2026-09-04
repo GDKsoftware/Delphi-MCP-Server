@@ -42,6 +42,16 @@ accepted). A missing or different header is `400` with error `-32020`.
 
 **SSE responses have no `id:` lines** and no duplicate `Connection` header.
 
+**Responses stream when a tool sends notifications.** A request that accepts
+`text/event-stream` and whose tool reports progress or logs (see
+`IMCPRequestContext.ReportProgress` and `Log`) is answered with a chunked SSE
+stream: the notifications first, the JSON-RPC response as the last event.
+Such a stream is `200` even when the request ends in a JSON-RPC error,
+because the status line has already been sent. Requests that send no
+notification, and requests without `text/event-stream` in `Accept`, are
+answered as before (single JSON object, or one SSE event, with a
+`Content-Length`). Closing the stream cancels the request.
+
 **TLS 1.0 and 1.1 are disabled** on the OpenSSL 1.0.2 handler (the build
 without `USE_TAURUS_TLS`).
 

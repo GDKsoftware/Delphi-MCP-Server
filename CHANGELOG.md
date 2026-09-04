@@ -175,6 +175,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `requestState` tokens bound to the method, a digest of the request
   parameters, the principal and an expiry; `[Security] RequestStateKey` and
   `RequestStateTtlSeconds` in `settings.ini`.
+- Streaming HTTP responses (`MCPServer.HttpStream`): when a request accepts
+  `text/event-stream` and its handler sends a notification, the response is a
+  chunked SSE stream (`X-Accel-Buffering: no`) with the notifications before
+  the final JSON-RPC response; a client that disconnects cancels the request.
+  `notifications/progress` therefore reaches HTTP clients in both eras.
+- `IMCPRequestContext.Log` and `LogJson`: `notifications/message` on the
+  request's own stream, only when the request carries
+  `_meta.io.modelcontextprotocol/logLevel` and the level is at or above it;
+  `TMCPLogLevel` and `MCP_LOG_LEVELS` in `MCPServer.Types`.
+- Example tools `test_logging_tool` (`MCPServer.Tool.ContentSamples`) and
+  `test_streaming_elicitation` (`MCPServer.Tool.InputRequiredSamples`), the
+  diagnostic tools of the conformance suite's stateless scenario.
 - Example tools `test_input_required_result_elicitation`, `_sampling`,
   `_list_roots`, `_request_state`, `_multiple_inputs`, `_multi_round`,
   `_tampered_state`, `_capabilities` and `test_missing_capability`

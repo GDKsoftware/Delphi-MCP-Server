@@ -79,6 +79,8 @@ type
     function HasProgressToken: Boolean;
     procedure ReportProgress(const Progress: Double; const Total: Double = -1; const Message: string = '');
     function TryGetInputResponse(const Key: string; out Response: TJSONObject): Boolean;
+    procedure Log(const Level, Text: string; const Logger: string = '');
+    procedure LogJson(const Level: string; const Data: TJSONValue; const Logger: string = '');
 
     class function Current: IMCPRequestContext;
     class procedure SetCurrent(const Value: IMCPRequestContext);
@@ -339,6 +341,40 @@ begin
       Params.AddPair('total', TJSONNumber.Create(Total));
     if Message <> '' then
       Params.AddPair('message', Message);
+    FSink.Send(Notification.ToJSON);
+  finally
+    Notification.Free;
+  end;
+end;
+
+procedure TMCPRequestContext.Log(const Level, Text: string; const Logger: string);
+begin
+  LogJson(Level, TJSONString.Create(Text), Logger);
+end;
+
+procedure TMCPRequestContext.LogJson(const Level: string; const Data: TJSONValue; const Logger: string);
+const
+  JSON_RPC_VERSION = '2.0';
+begin
+  var Threshold := GetLogLevel;
+  var Wanted := Assigned(FSink) and (Threshold <> '') and not IsCancelled
+    and (TMCPLogLevel.Rank(Level) >= TMCPLogLevel.Rank(Threshold));
+  if not Wanted then
+  begin
+    Data.Free;
+    Exit;
+  end;
+
+  var Notification := TJSONObject.Create;
+  try
+    Notification.AddPair('jsonrpc', JSON_RPC_VERSION);
+    Notification.AddPair('method', MCP_METHOD_NOTIFICATIONS_MESSAGE);
+    var Params := TJSONObject.Create;
+    Notification.AddPair('params', Params);
+    Params.AddPair('level', Level);
+    if Logger <> '' then
+      Params.AddPair('logger', Logger);
+    Params.AddPair('data', Data);
     FSink.Send(Notification.ToJSON);
   finally
     Notification.Free;

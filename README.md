@@ -141,10 +141,19 @@ stdio server never writes `settings.ini` on its own, so this and the other
 from the defaults.
 
 A tool sees the request it is answering through `TMCPRequestContext.Current`:
-`CheckCancelled` raises once the client cancels, and `ReportProgress` sends a
-`notifications/progress` when the request carries a progress token. See
-`test_tool_with_progress` in `MCPServer.Tool.ContentSamples` for a worked
-example.
+`CheckCancelled` raises once the client cancels, `ReportProgress` sends a
+`notifications/progress` when the request carries a progress token, and
+`Log` sends a `notifications/message` when the request carries
+`_meta.io.modelcontextprotocol/logLevel` and the message's level is at or
+above it. See `test_tool_with_progress` and `test_logging_tool` in
+`MCPServer.Tool.ContentSamples` for worked examples.
+
+Over HTTP the same notifications reach the client on the response: when the
+request accepts `text/event-stream` and a tool sends one, the response turns
+into an SSE stream (chunked, `X-Accel-Buffering: no`) that carries the
+notifications first and the JSON-RPC response as its last event. A request
+that sends none is answered as before. A client that closes the stream
+cancels the request.
 
 ## Protocol Versions and Dual-Era Behaviour
 
@@ -716,10 +725,10 @@ The Inspector provides a web interface to interact with your MCP server, making 
 - **calculate**: Perform basic arithmetic calculations
 - **test_simple_text**, **test_image_content**, **test_audio_content**,
   **test_embedded_resource**, **test_multiple_content_types**,
-  **test_error_handling**, **test_tool_with_progress**: one small tool per
-  content type, one that fails, and one that reports progress and honours
-  cancellation, from `MCPServer.Tool.ContentSamples`; the conformance suite
-  calls these by name
+  **test_error_handling**, **test_tool_with_progress**, **test_logging_tool**:
+  one small tool per content type, one that fails, one that reports progress
+  and honours cancellation, and one that logs at every level, from
+  `MCPServer.Tool.ContentSamples`; the conformance suite calls these by name
 - **json_schema_2020_12_tool**: a hand-written schema exercising `$schema`,
   `$defs`, `$anchor`, `$ref`, `allOf`/`anyOf` and `if`/`then`/`else`, for the
   conformance suite's schema-preservation check
@@ -729,7 +738,9 @@ The Inspector provides a web interface to interact with your MCP server, making 
   round-trip requests, one per kind of client input plus signed request
   state across one or two round trips, from
   `MCPServer.Tool.InputRequiredSamples`; **test_missing_capability**
-  requires the `sampling` client capability and answers `-32021` without it
+  requires the `sampling` client capability and answers `-32021` without it,
+  **test_streaming_elicitation** logs to the response stream and then asks
+  for a confirmation
 
 ## Available Example prompts
 

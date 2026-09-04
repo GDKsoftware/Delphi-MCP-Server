@@ -53,7 +53,7 @@ type
     function ValidateOrigin(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
     procedure ApplyCorsHeaders(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     procedure HandleEndpointInfo(ResponseInfo: TIdHTTPResponseInfo);
-    procedure HandlePostRequest(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
+    procedure HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     function BuildTransportHints(RequestInfo: TIdHTTPRequestInfo): TMCPTransportHints;
     procedure EchoLegacySessionId(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     procedure SendEmpty(ResponseInfo: TIdHTTPResponseInfo; Status: Integer);
@@ -82,6 +82,7 @@ uses
   MCPServer.Resource.Server,
   MCPServer.Errors,
   MCPServer.HttpHeaders,
+  MCPServer.HttpStream,
   MCPServer.Logger;
 
 const
@@ -107,10 +108,6 @@ const
 
   MEDIA_TYPE_JSON = 'application/json';
   MEDIA_TYPE_EVENT_STREAM = 'text/event-stream';
-
-  SSE_EVENT_PREFIX = 'event: ';
-  SSE_DATA_PREFIX = 'data: ';
-  SSE_MESSAGE_TERMINATOR = #10#10;
 
   LOOPBACK_IPV4 = '127.0.0.1';
   LOOPBACK_IPV6 = '::1';
@@ -335,7 +332,7 @@ begin
     if RequestInfo.Command = 'OPTIONS' then
       SendEmpty(ResponseInfo, HTTP_NO_CONTENT)
     else if RequestInfo.CommandType = hcPOST then
-      HandlePostRequest(RequestInfo, ResponseInfo)
+      HandlePostRequest(Context, RequestInfo, ResponseInfo)
     else
       SendMethodNotAllowed(ResponseInfo);
   finally
@@ -440,7 +437,8 @@ begin
     ResponseInfo.CustomHeaders.Values[HEADER_SESSION_ID] := SessionId;
 end;
 
-procedure TMCPIdHTTPServer.HandlePostRequest(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
+procedure TMCPIdHTTPServer.HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo;
+  ResponseInfo: TIdHTTPResponseInfo);
 begin
   var MaxBodyBytes: Integer := TMCPSettings.DEFAULT_MAX_REQUEST_BODY_BYTES;
   var MaxDepth: Integer := TMCPSettings.DEFAULT_MAX_JSON_DEPTH;
@@ -473,12 +471,31 @@ begin
     Exit;
   end;
 
+  var AcceptsEventStream := TMCPAcceptHeader.Accepts(HeaderValue(RequestInfo, HEADER_ACCEPT), MEDIA_TYPE_EVENT_STREAM);
+  var Hints := BuildTransportHints(RequestInfo);
+  var Stream: TMCPHttpResponseStream := nil;
+  var StreamRef: IMCPMessageSink := nil;
+  if AcceptsEventStream then
+  begin
+    Stream := TMCPHttpResponseStream.Create(Context, ResponseInfo);
+    StreamRef := Stream;
+    Hints.Sink := Stream;
+    Hints.Tracker := Stream;
+  end;
+
   var Outcome: TMCPProcessResult;
   var Message := TJSONObject.ParseJSONValue(RequestBody);
   try
-    Outcome := FJsonRpcProcessor.ProcessRequestEx(Message, BuildTransportHints(RequestInfo));
+    Outcome := FJsonRpcProcessor.ProcessRequestEx(Message, Hints);
   finally
     Message.Free;
+  end;
+
+  if Assigned(Stream) and Stream.Opened then
+  begin
+    TLogger.Debug('Response (streamed): ' + TLogger.RedactJson(Outcome.Body));
+    Stream.Finish(Outcome.Body);
+    Exit;
   end;
 
   if Outcome.Era = TMCPProtocolEra.Legacy then
@@ -492,8 +509,7 @@ begin
 
   TLogger.Debug('Response: ' + TLogger.RedactJson(Outcome.Body));
 
-  if (Outcome.HttpStatus = HTTP_STATUS_OK)
-    and TMCPAcceptHeader.Accepts(HeaderValue(RequestInfo, HEADER_ACCEPT), MEDIA_TYPE_EVENT_STREAM) then
+  if (Outcome.HttpStatus = HTTP_STATUS_OK) and AcceptsEventStream then
     SendSse(ResponseInfo, Outcome.Body)
   else
     SendJson(ResponseInfo, Outcome.HttpStatus, Outcome.Body);
@@ -521,8 +537,7 @@ begin
   ResponseInfo.CharSet := 'utf-8';
   ResponseInfo.CustomHeaders.Values['Cache-Control'] := 'no-cache';
   ResponseInfo.CustomHeaders.Values['X-Accel-Buffering'] := 'no';
-  ResponseInfo.ContentStream := TStringStream.Create(
-    SSE_EVENT_PREFIX + 'message' + #10 + SSE_DATA_PREFIX + Body + SSE_MESSAGE_TERMINATOR, TEncoding.UTF8);
+  ResponseInfo.ContentStream := TStringStream.Create(TMCPHttpResponseStream.EventText(Body), TEncoding.UTF8);
   ResponseInfo.FreeContentStream := True;
 end;
 
