@@ -130,6 +130,28 @@ Override `DoExecute` instead of `Execute`; the base class validates
 `isError` result) on a mismatch. `TMCPToolBase<T>` and `TMCPToolBase<T, R>`
 tools are unaffected.
 
+## Multi round-trip requests
+
+**Server-initiated requests are replaced by `InputRequiredResult`.** A tool,
+resource or prompt that needs something from the client (`elicitation/create`,
+`sampling/createMessage`, `roots/list`) raises `EMCPInputRequired`
+(`MCPServer.Mrtr`) with the input requests and optional state; the modern
+client retries with `inputResponses` and `requestState`, which the request
+context exposes as `InputResponses`, `TryGetInputResponse` and
+`RequestState`. Nothing changes for tools that never ask the client for
+input. A legacy client (2025-06-18, 2025-11-25) gets `-32603` from such a
+request, because those revisions delivered the same thing as server-to-client
+requests that this server does not send.
+
+**`requestState` is signed.** Set `[Security] RequestStateKey` when more than
+one instance serves the same clients or when tokens must survive a restart;
+without it every process signs with its own random key and logs a warning
+at startup. `RequestStateTtlSeconds` bounds the replay window (600 s).
+
+**Two new settings keys** (`RequestStateKey`, `RequestStateTtlSeconds`) and
+nine new example tools plus one example prompt ship with the executable;
+they are only registered when their units are in the project.
+
 ## Library use
 
 - `TMCPJsonRpcProcessor.ProcessRequest` and the manager interfaces are
