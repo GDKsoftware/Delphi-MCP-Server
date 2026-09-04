@@ -168,6 +168,16 @@
           }
         },
         {
+          "name": "test_logging_tool",
+          "description": "Emits log notifications at every level; the client sees those at or above its requested level",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
           "name": "json_schema_2020_12_tool",
           "description": "Tool with JSON Schema 2020-12 features",
           "inputSchema": {
@@ -330,6 +340,16 @@
         {
           "name": "test_missing_capability",
           "description": "Requires the sampling client capability and fails with -32021 when it is absent",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_streaming_elicitation",
+          "description": "Logs to the response stream, then asks the client for a confirmation",
           "inputSchema": {
             "type": "object",
             "properties": {

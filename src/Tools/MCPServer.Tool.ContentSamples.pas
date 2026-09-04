@@ -81,6 +81,13 @@ type
     constructor Create; override;
   end;
 
+  TLoggingTool = class(TMCPToolBase<TNoParams>)
+  protected
+    function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
+  public
+    constructor Create; override;
+  end;
+
   TJsonSchema202012Tool = class(TMCPToolBase)
   protected
     function BuildSchema: TJSONObject; override;
@@ -262,6 +269,24 @@ begin
   Result := TValue.From<string>('ok');
 end;
 
+{ TLoggingTool }
+
+constructor TLoggingTool.Create;
+begin
+  inherited;
+  FName := 'test_logging_tool';
+  FDescription := 'Emits log notifications at every level; the client sees those at or above its requested level';
+end;
+
+function TLoggingTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
+begin
+  for var Level in MCP_LOG_LEVELS do
+  begin
+    Context.Log(Level, Format('%s message from test_logging_tool', [Level]), 'test_logging_tool');
+  end;
+  Result := TMCPToolResult.Text('Logged a message at every level');
+end;
+
 initialization
   TMCPRegistry.RegisterTool('test_simple_text',
     function: IMCPTool
@@ -297,6 +322,11 @@ initialization
     function: IMCPTool
     begin
       Result := TErrorHandlingTool.Create;
+    end);
+  TMCPRegistry.RegisterTool('test_logging_tool',
+    function: IMCPTool
+    begin
+      Result := TLoggingTool.Create;
     end);
   TMCPRegistry.RegisterTool('json_schema_2020_12_tool',
     function: IMCPTool

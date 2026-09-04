@@ -66,6 +66,11 @@ type
     [Test] procedure Bind_DefaultIsLoopback;
     [Test] procedure Bind_ExplicitAddress;
     [Test] procedure EndpointInfoPath_AnswersJson;
+    [Test] procedure Progress_IsStreamedBeforeTheResponse;
+    [Test] procedure Progress_WithoutEventStreamAccept_IsPlainJson;
+    [Test] procedure Log_OnlyWithLogLevel_InMeta;
+    [Test] procedure InputRequired_StreamsAsFinalEvent;
+    [Test] procedure StreamedError_IsFinalEvent;
   end;
 
 implementation
@@ -462,6 +467,88 @@ begin
     Json.Free;
   end;
   Assert.AreEqual(404, Send('GET', '/nothing', '', []).Status);
+end;
+
+procedure THttpTransportTests.Progress_IsStreamedBeforeTheResponse;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"test_tool_with_progress",'
+    + '"arguments":{"steps":3,"stepMs":10},"_meta":{"progressToken":"p1"}}}',
+    ['Accept: application/json, text/event-stream', 'MCP-Protocol-Version: 2025-11-25']);
+  Assert.AreEqual(200, Reply.Status);
+  Assert.IsTrue(Reply.Header('Content-Type').StartsWith('text/event-stream'), Reply.Header('Content-Type'));
+  Assert.AreEqual('no', Reply.Header('X-Accel-Buffering'));
+
+  var Events := Reply.Body.Split([#10#10], TStringSplitOptions.ExcludeEmpty);
+  Assert.IsTrue(Length(Events) >= 3, Reply.Body);
+  for var I := 0 to High(Events) - 1 do
+  begin
+    Assert.IsTrue(Events[I].Contains('"method":"notifications/progress"'), Events[I]);
+    Assert.IsTrue(Events[I].Contains('"progressToken":"p1"'), Events[I]);
+  end;
+  Assert.IsTrue(Events[High(Events)].Contains('"id":9'), Events[High(Events)]);
+  Assert.IsTrue(Events[High(Events)].Contains('Completed 3 steps'), Events[High(Events)]);
+end;
+
+procedure THttpTransportTests.Progress_WithoutEventStreamAccept_IsPlainJson;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"test_tool_with_progress",'
+    + '"arguments":{"steps":2,"stepMs":10},"_meta":{"progressToken":"p1"}}}', []);
+  Assert.AreEqual(200, Reply.Status);
+  Assert.IsTrue(Reply.Header('Content-Type').StartsWith('application/json'), Reply.Header('Content-Type'));
+  Assert.IsFalse(Reply.Body.Contains('notifications/progress'), Reply.Body);
+  var Json := Reply.Json;
+  try
+    Assert.AreEqual('Completed 2 steps', Json.GetValue<string>('result.content[0].text'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure THttpTransportTests.Log_OnlyWithLogLevel_InMeta;
+const
+  CALL = '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"test_logging_tool","arguments":{},'
+    + '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}%s}}}';
+begin
+  var Silent := Post(Format(CALL, ['']),
+    ['Accept: application/json, text/event-stream', MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_logging_tool']);
+  Assert.AreEqual(200, Silent.Status);
+  Assert.IsFalse(Silent.Body.Contains('notifications/message'), Silent.Body);
+  Assert.IsTrue(Silent.Body.Contains('"resultType":"complete"'), Silent.Body);
+
+  var Verbose := Post(Format(CALL, [',"io.modelcontextprotocol/logLevel":"error"']),
+    ['Accept: application/json, text/event-stream', MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_logging_tool']);
+  Assert.AreEqual(200, Verbose.Status);
+  var Events := Verbose.Body.Split([#10#10], TStringSplitOptions.ExcludeEmpty);
+  Assert.AreEqual(5, Integer(Length(Events)), Verbose.Body);
+  Assert.IsTrue(Events[0].Contains('"level":"error"'), Events[0]);
+  Assert.IsFalse(Verbose.Body.Contains('"level":"warning"'), Verbose.Body);
+  Assert.IsTrue(Events[4].Contains('"id":3'), Events[4]);
+end;
+
+procedure THttpTransportTests.InputRequired_StreamsAsFinalEvent;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"test_streaming_elicitation","arguments":{},'
+    + '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{"elicitation":{}},'
+    + '"io.modelcontextprotocol/logLevel":"info"}}}',
+    ['Accept: application/json, text/event-stream', MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_streaming_elicitation']);
+  Assert.AreEqual(200, Reply.Status);
+  var Events := Reply.Body.Split([#10#10], TStringSplitOptions.ExcludeEmpty);
+  Assert.AreEqual(2, Integer(Length(Events)), Reply.Body);
+  Assert.IsTrue(Events[0].Contains('notifications/message'), Events[0]);
+  Assert.IsTrue(Events[1].Contains('"resultType":"input_required"'), Events[1]);
+  Assert.IsTrue(Events[1].Contains('"confirm"'), Events[1]);
+end;
+
+procedure THttpTransportTests.StreamedError_IsFinalEvent;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"test_streaming_elicitation","arguments":{},'
+    + '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{},'
+    + '"io.modelcontextprotocol/logLevel":"info"}}}',
+    ['Accept: application/json, text/event-stream', MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_streaming_elicitation']);
+  Assert.AreEqual(200, Reply.Status, 'the stream was already open when the -32021 error arose');
+  var Events := Reply.Body.Split([#10#10], TStringSplitOptions.ExcludeEmpty);
+  Assert.AreEqual(2, Integer(Length(Events)), Reply.Body);
+  Assert.IsTrue(Events[1].Contains('"code":-32021'), Events[1]);
 end;
 
 end.

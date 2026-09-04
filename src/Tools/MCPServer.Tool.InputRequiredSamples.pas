@@ -74,6 +74,13 @@ type
     constructor Create; override;
   end;
 
+  TStreamingElicitationTool = class(TMCPToolBase<TNoParams>)
+  protected
+    function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
+  public
+    constructor Create; override;
+  end;
+
   TInputSample = record
     class function DescribeRoots(const Roots: TJSONArray): string; static;
     class function NewState(const Round: Integer): TJSONObject; static;
@@ -394,6 +401,29 @@ begin
   Result := TMCPToolResult.Text('The client declared the sampling capability');
 end;
 
+{ TStreamingElicitationTool }
+
+constructor TStreamingElicitationTool.Create;
+begin
+  inherited;
+  FName := 'test_streaming_elicitation';
+  FDescription := 'Logs to the response stream, then asks the client for a confirmation';
+end;
+
+function TStreamingElicitationTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
+var
+  Response: TJSONObject;
+begin
+  Context.Log('info', 'Asking the client to confirm', 'test_streaming_elicitation');
+  var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response)
+    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = 'true');
+  if not Confirmed then
+    raise EMCPInputRequired.Create(TMCPInputRequests.Create
+      .AddElicitation(KEY_CONFIRM, 'Please confirm', TMCPInputRequests.FieldSchema(FIELD_OK, 'boolean')));
+
+  Result := TMCPToolResult.Text('Confirmed');
+end;
+
 initialization
   TMCPRegistry.RegisterTool('test_input_required_result_elicitation',
     function: IMCPTool
@@ -439,6 +469,11 @@ initialization
     function: IMCPTool
     begin
       Result := TMissingCapabilityTool.Create;
+    end);
+  TMCPRegistry.RegisterTool('test_streaming_elicitation',
+    function: IMCPTool
+    begin
+      Result := TStreamingElicitationTool.Create;
     end);
 
 end.

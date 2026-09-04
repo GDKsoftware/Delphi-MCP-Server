@@ -13,6 +13,7 @@ uses
   MCPServer.RequestContext in '..\src\Protocol\MCPServer.RequestContext.pas',
   MCPServer.Capabilities in '..\src\Protocol\MCPServer.Capabilities.pas',
   MCPServer.HttpHeaders in '..\src\Server\MCPServer.HttpHeaders.pas',
+  MCPServer.HttpStream in '..\src\Server\MCPServer.HttpStream.pas',
   MCPServer.IdHTTPServer in '..\src\Server\MCPServer.IdHTTPServer.pas',
   MCPServer.Serializer in '..\src\Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in '..\src\Protocol\MCPServer.Schema.Generator.pas',

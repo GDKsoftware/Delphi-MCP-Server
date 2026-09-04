@@ -51,6 +51,9 @@ type
     [Test] procedure Progress_Monotonic_And_Throttled;
     [Test] procedure Progress_AfterCancel_SendsNothing;
     [Test] procedure Progress_WithoutSink_IsNoOp;
+    [Test] procedure Log_WithoutLogLevel_SendsNothing;
+    [Test] procedure Log_AtOrAboveLevel_HasNotificationShape;
+    [Test] procedure Log_AfterCancel_SendsNothing;
     [Test] procedure Processor_CancelledRequest_HasNoResponse;
     [Test] procedure Processor_CancelledNotification_ReachesTracker;
   end;
@@ -215,6 +218,50 @@ begin
   finally
     Meta.Free;
   end;
+end;
+
+procedure TCancellationTests.Log_WithoutLogLevel_SendsNothing;
+begin
+  var Context := NewContext('{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}');
+  Context.Log('error', 'nobody asked');
+  Assert.AreEqual(0, FMessages.Count);
+end;
+
+procedure TCancellationTests.Log_AtOrAboveLevel_HasNotificationShape;
+begin
+  var Context := NewContext('{"io.modelcontextprotocol/logLevel":"warning"}');
+  Context.Log('info', 'below the threshold');
+  Context.Log('warning', 'at the threshold', 'db');
+  Context.LogJson('error', TJSONObject.ParseJSONValue('{"code":7}'));
+  Context.Log('bogus', 'unknown level');
+  Assert.AreEqual(2, FMessages.Count);
+
+  var Json := TJSONObject.ParseJSONValue(FMessages[0]) as TJSONObject;
+  try
+    Assert.AreEqual('notifications/message', Json.GetValue<string>('method'));
+    Assert.AreEqual('warning', Json.GetValue<string>('params.level'));
+    Assert.AreEqual('db', Json.GetValue<string>('params.logger'));
+    Assert.AreEqual('at the threshold', Json.GetValue<string>('params.data'));
+    Assert.IsNull(Json.GetValue('id'));
+  finally
+    Json.Free;
+  end;
+
+  var Structured := TJSONObject.ParseJSONValue(FMessages[1]) as TJSONObject;
+  try
+    Assert.AreEqual(7, Structured.GetValue<Integer>('params.data.code'));
+    Assert.IsNull(Structured.FindValue('params.logger'));
+  finally
+    Structured.Free;
+  end;
+end;
+
+procedure TCancellationTests.Log_AfterCancel_SendsNothing;
+begin
+  var Context := NewContext('{"io.modelcontextprotocol/logLevel":"debug"}');
+  Context.Cancel;
+  Context.Log('error', 'too late');
+  Assert.AreEqual(0, FMessages.Count);
 end;
 
 procedure TCancellationTests.Processor_CancelledRequest_HasNoResponse;
