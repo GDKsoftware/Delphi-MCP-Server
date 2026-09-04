@@ -1,9 +1,5 @@
 unit MCPServer.Prompt.ContentSamples;
 
-/// One prompt per content type, matching the fixtures the official
-/// conformance suite calls by name (test_simple_prompt and friends), the
-/// same role MCPServer.Tool.ContentSamples plays for tools.
-
 interface
 
 uses

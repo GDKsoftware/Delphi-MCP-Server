@@ -9,14 +9,10 @@ uses
   MCPServer.Types;
 
 const
-  /// Progress notifications for one request are sent at most this often,
-  /// except for the one that reaches the total.
   PROGRESS_MIN_INTERVAL_MS = 50;
 
 type
-  /// What the transport knows about a request before the processor sees it.
   TMCPTransportHints = record
-    /// True when the transport carries HTTP headers (Streamable HTTP).
     HasHeaderLayer: Boolean;
     HasProtocolVersionHeader: Boolean;
     ProtocolVersionHeader: string;
@@ -25,27 +21,17 @@ type
     HasNameHeader: Boolean;
     NameHeader: string;
     RemoteAddress: string;
-    /// Per-process legacy state (stdio); nil for stateless transports.
     LegacySession: TMCPLegacySession;
-    /// Channel for request-scoped notifications (progress); nil when the
-    /// transport cannot deliver them before the response.
     Sink: IMCPMessageSink;
-    /// In-flight bookkeeping for notifications/cancelled; nil when the
-    /// transport signals cancellation another way.
     Tracker: IMCPRequestTracker;
 
-    /// No headers, no session: the plain JSON-RPC layer.
     class function None: TMCPTransportHints; static;
-    /// stdio: no headers, one session slot per process.
     class function ForStdio(const Session: TMCPLegacySession): TMCPTransportHints; overload; static;
-    /// stdio with a channel for progress notifications and cancellation.
     class function ForStdio(const Session: TMCPLegacySession; const Sink: IMCPMessageSink;
       const Tracker: IMCPRequestTracker): TMCPTransportHints; overload; static;
-    /// HTTP: the MCP-Protocol-Version header, empty and HasHeader False when absent.
     class function ForHttp(const HasVersionHeader: Boolean; const VersionHeader: string): TMCPTransportHints; static;
   end;
 
-  /// Default IMCPRequestContext implementation and the thread-local Current.
   TMCPRequestContext = class(TInterfacedObject, IMCPRequestContext)
   private
     FEra: TMCPProtocolEra;
@@ -62,12 +48,10 @@ type
     FLastProgressTick: UInt64;
     function MetaObject(const Key: string): TJSONObject;
   public
-    /// Meta is cloned; the context owns its copy. Sink is where progress
-    /// notifications go; nil disables them.
-    constructor Create(AEra: TMCPProtocolEra; const AProtocolVersion, AMethod: string;
-      const ARequestId: TMCPRequestId; const AMeta: TJSONObject;
-      const ALegacySession: TMCPLegacySession; const AManagerRegistry: IMCPManagerRegistry;
-      const ASink: IMCPMessageSink = nil);
+    constructor Create(Era: TMCPProtocolEra; const ProtocolVersion, Method: string;
+      const RequestId: TMCPRequestId; const Meta: TJSONObject;
+      const LegacySession: TMCPLegacySession; const ManagerRegistry: IMCPManagerRegistry;
+      const Sink: IMCPMessageSink = nil);
     destructor Destroy; override;
 
     function GetEra: TMCPProtocolEra;
@@ -89,9 +73,7 @@ type
     function HasProgressToken: Boolean;
     procedure ReportProgress(const Progress: Double; const Total: Double = -1; const Message: string = '');
 
-    /// The context of the request the calling thread is serving, or nil.
     class function Current: IMCPRequestContext;
-    /// Set by the processor around a handler call; nil clears it.
     class procedure SetCurrent(const Value: IMCPRequestContext);
   end;
 
@@ -101,8 +83,6 @@ uses
   MCPServer.Errors;
 
 threadvar
-  // Raw pointer with manual reference counting: a managed threadvar is not
-  // finalised when a thread ends.
   CurrentContextPointer: Pointer;
 
 { TMCPTransportHints }
@@ -136,20 +116,20 @@ end;
 
 { TMCPRequestContext }
 
-constructor TMCPRequestContext.Create(AEra: TMCPProtocolEra; const AProtocolVersion, AMethod: string;
-  const ARequestId: TMCPRequestId; const AMeta: TJSONObject; const ALegacySession: TMCPLegacySession;
-  const AManagerRegistry: IMCPManagerRegistry; const ASink: IMCPMessageSink);
+constructor TMCPRequestContext.Create(Era: TMCPProtocolEra; const ProtocolVersion, Method: string;
+  const RequestId: TMCPRequestId; const Meta: TJSONObject; const LegacySession: TMCPLegacySession;
+  const ManagerRegistry: IMCPManagerRegistry; const Sink: IMCPMessageSink);
 begin
   inherited Create;
-  FEra := AEra;
-  FProtocolVersion := AProtocolVersion;
-  FMethod := AMethod;
-  FRequestId := ARequestId;
-  if Assigned(AMeta) then
-    FMeta := TJSONObject(AMeta.Clone);
-  FLegacySession := ALegacySession;
-  FManagerRegistry := AManagerRegistry;
-  FSink := ASink;
+  FEra := Era;
+  FProtocolVersion := ProtocolVersion;
+  FMethod := Method;
+  FRequestId := RequestId;
+  if Assigned(Meta) then
+    FMeta := TJSONObject(Meta.Clone);
+  FLegacySession := LegacySession;
+  FManagerRegistry := ManagerRegistry;
+  FSink := Sink;
 end;
 
 destructor TMCPRequestContext.Destroy;
@@ -211,7 +191,7 @@ begin
     Exit;
 
   var Value := FMeta.GetValue(MCP_META_LOG_LEVEL);
-  if Value is TJSONString then
+  if IsJsonString(Value) then
     Result := TJSONString(Value).Value;
 end;
 
@@ -255,8 +235,6 @@ begin
   if HasClientCapability(Path) then
     Exit;
 
-  // Rebuild the dotted path as nested objects: 'elicitation.form' becomes
-  // {"elicitation": {"form": {}}}.
   var Required := TJSONObject.Create;
   var Node := Required;
   for var Segment in Path.Split(['.']) do
@@ -276,7 +254,7 @@ end;
 procedure TMCPRequestContext.CheckCancelled;
 begin
   if IsCancelled then
-    raise EMCPRequestCancelled.Create('Request ' + FRequestId.AsText + ' was cancelled by the client');
+    raise EMCPRequestCancelled.CreateFmt('Request %s was cancelled by the client', [FRequestId.AsText]);
 end;
 
 procedure TMCPRequestContext.Cancel;
@@ -287,8 +265,6 @@ end;
 function TMCPRequestContext.HasProgressToken: Boolean;
 begin
   var Token := GetProgressToken;
-  // A whole-valued number or a string; TJSONNumber must be checked first
-  // since it descends from TJSONString.
   if not Assigned(Token) then
     Exit(False);
   if Token is TJSONNumber then
@@ -300,8 +276,6 @@ procedure TMCPRequestContext.ReportProgress(const Progress, Total: Double; const
 const
   JSON_RPC_VERSION = '2.0';
 begin
-  // Nothing to deliver without a token or a channel, and nothing more for a
-  // request the client cancelled.
   if not Assigned(FSink) or not HasProgressToken or IsCancelled then
     Exit;
 

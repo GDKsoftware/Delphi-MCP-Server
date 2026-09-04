@@ -18,10 +18,6 @@ type
     property Level: string read FLevel write FLevel;
   end;
 
-  /// Asks the model to summarize the server's recent log entries, embedding
-  /// logs://recent (or a level-filtered view of it) as a resource. The
-  /// level argument completes against the levels actually present in the
-  /// log buffer.
   TSummarizeLogsPrompt = class(TMCPPromptBase<TSummarizeLogsParams>, IMCPCompletable)
   protected
     function ExecuteWithParams(const Params: TSummarizeLogsParams; Messages: TMCPPromptMessages): string; override;

@@ -20,6 +20,8 @@ type
     [Test] procedure Reader_DecodesUtf8;
     [Test] procedure Reader_ReportsOverlongLine_AndContinues;
     [Test] procedure Reader_ReportsInvalidUtf8_AndContinues;
+    [Test] procedure Reader_OverlongLineWithoutNewline_EndsStream;
+    [Test] procedure Reader_OverlongLineBeyondChunk_IsSkippedUpToNewline;
     [Test] procedure Reader_EmptyStream_HasNoLines;
     [Test] procedure Writer_OneLinePerMessage_Utf8_NoBom;
     [Test] procedure Writer_ReplacesEmbeddedNewlines;
@@ -102,6 +104,33 @@ begin
   Assert.AreEqual('short', Lines[1]);
 end;
 
+procedure TStdioChannelTests.Reader_OverlongLineWithoutNewline_EndsStream;
+var
+  Statuses: TArray<TMCPLineStatus>;
+begin
+  var Lines := ReadAll(TEncoding.UTF8.GetBytes(StringOfChar('x', 100)), 50, Statuses);
+  Assert.AreEqual(1, Integer(Length(Lines)));
+  Assert.IsTrue(Statuses[0] = TMCPLineStatus.TooLong);
+  Assert.AreEqual('', Lines[0]);
+end;
+
+procedure TStdioChannelTests.Reader_OverlongLineBeyondChunk_IsSkippedUpToNewline;
+const
+  BEYOND_ONE_CHUNK = 70 * 1024;
+  LIMIT = 1024;
+var
+  Statuses: TArray<TMCPLineStatus>;
+begin
+  var Long := StringOfChar('y', BEYOND_ONE_CHUNK);
+  var Lines := ReadAll(TEncoding.UTF8.GetBytes(Long + #10'after'#10'last'), LIMIT, Statuses);
+  Assert.AreEqual(3, Integer(Length(Lines)));
+  Assert.IsTrue(Statuses[0] = TMCPLineStatus.TooLong);
+  Assert.IsTrue(Statuses[1] = TMCPLineStatus.Ok);
+  Assert.AreEqual('after', Lines[1]);
+  Assert.IsTrue(Statuses[2] = TMCPLineStatus.Ok);
+  Assert.AreEqual('last', Lines[2]);
+end;
+
 procedure TStdioChannelTests.Reader_ReportsInvalidUtf8_AndContinues;
 var
   Statuses: TArray<TMCPLineStatus>;
@@ -131,7 +160,7 @@ begin
 
     var Bytes: TBytes;
     SetLength(Bytes, Stream.Size);
-    Move(Stream.Memory^, Bytes[0], Stream.Size);
+    Move(Stream.Memory^, Bytes[0], Length(Bytes));
     Assert.AreEqual($7B, Integer(Bytes[0]), 'no byte-order mark');
     var Text := TEncoding.UTF8.GetString(Bytes);
     Assert.AreEqual('{"a":"' + Char($00E9) + '"}'#10'{"b":2}'#10, Text);
@@ -149,7 +178,7 @@ begin
     SinkIntf.Send('a'#13#10'b');
     var Bytes: TBytes;
     SetLength(Bytes, Stream.Size);
-    Move(Stream.Memory^, Bytes[0], Stream.Size);
+    Move(Stream.Memory^, Bytes[0], Length(Bytes));
     Assert.AreEqual('a  b'#10, TEncoding.UTF8.GetString(Bytes));
   finally
     Stream.Free;
@@ -183,7 +212,7 @@ begin
 
     var Bytes: TBytes;
     SetLength(Bytes, Stream.Size);
-    Move(Stream.Memory^, Bytes[0], Stream.Size);
+    Move(Stream.Memory^, Bytes[0], Length(Bytes));
     var Lines := TEncoding.UTF8.GetString(Bytes).Split([#10]);
     var Count := 0;
     for var Line in Lines do
@@ -200,8 +229,5 @@ begin
     Stream.Free;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TStdioChannelTests);
 
 end.

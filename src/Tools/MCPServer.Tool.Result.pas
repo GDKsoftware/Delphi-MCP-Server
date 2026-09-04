@@ -11,10 +11,6 @@ uses
   MCPServer.ContentBlocks;
 
 type
-  /// Builds a tools/call result: content blocks of every kind, optional
-  /// structured content, the error flag and result metadata. A tool returns
-  /// the instance from Execute (as a TValue); the tools manager serialises it
-  /// for the era of the request and frees it.
   TMCPToolResult = class
   private
     FContent: TJSONArray;
@@ -27,7 +23,6 @@ type
     destructor Destroy; override;
 
     function AddText(const Text: string): TMCPToolResult;
-    /// Data is the raw content; it is Base64-encoded here.
     function AddImage(const Data: TBytes; const MimeType: string): TMCPToolResult; overload;
     function AddImage(const Base64Data, MimeType: string): TMCPToolResult; overload;
     function AddAudio(const Data: TBytes; const MimeType: string): TMCPToolResult; overload;
@@ -36,20 +31,14 @@ type
       const MimeType: string = ''): TMCPToolResult;
     function AddEmbeddedText(const Uri, MimeType, Text: string): TMCPToolResult;
     function AddEmbeddedBlob(const Uri, MimeType: string; const Data: TBytes): TMCPToolResult;
-    /// Annotations for the block added last (audience, priority, lastModified).
     function WithAnnotations(const Annotations: TJSONObject): TMCPToolResult;
-    /// Takes ownership. Any JSON value; the initialize-based revisions only
-    /// carry it when it is an object, and a text block with the compact JSON
-    /// is added when no other content exists.
     function SetStructuredContent(const Value: TJSONValue): TMCPToolResult;
-    /// Takes ownership of the result-level _meta object.
     function SetMeta(const Meta: TJSONObject): TMCPToolResult;
     function SetError(const Message: string): TMCPToolResult;
 
     class function Text(const Text: string): TMCPToolResult;
     class function Error(const Message: string): TMCPToolResult;
 
-    /// The CallToolResult object for the era; the caller owns it.
     function ToJson(Era: TMCPProtocolEra): TJSONObject;
 
     property IsError: Boolean read FIsError write FIsError;
@@ -166,7 +155,6 @@ end;
 function TMCPToolResult.BuildContent(Era: TMCPProtocolEra): TJSONArray;
 begin
   Result := TJSONArray(FContent.Clone);
-  // The schema requires content; structured-only results get the JSON as text.
   if (Result.Count = 0) and Assigned(FStructuredContent) then
   begin
     var Block := TJSONObject.Create;
@@ -182,7 +170,6 @@ begin
   try
     Result.AddPair('content', BuildContent(Era));
 
-    // 2025-06-18 and 2025-11-25 define structuredContent as an object only.
     if Assigned(FStructuredContent)
       and ((Era = TMCPProtocolEra.Modern) or (FStructuredContent is TJSONObject)) then
       Result.AddPair('structuredContent', FStructuredContent.Clone as TJSONValue);

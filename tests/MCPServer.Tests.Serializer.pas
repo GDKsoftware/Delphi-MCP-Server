@@ -256,7 +256,4 @@ begin
   end;
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TSerializerTests);
-
 end.

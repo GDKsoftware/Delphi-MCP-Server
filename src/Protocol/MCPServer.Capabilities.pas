@@ -7,11 +7,6 @@ uses
   MCPServer.Types;
 
 type
-  /// Derives the server capabilities from the registered managers.
-  ///
-  /// Every manager that implements IMCPCapabilityProvider adds its own entry.
-  /// A registry that cannot enumerate its managers yields the built-in
-  /// defaults (tools and resources). The logging capability is never emitted.
   TMCPCapabilityBuilder = class
   public
     class function Build(const Registry: IMCPManagerRegistry; Era: TMCPProtocolEra): TJSONObject;

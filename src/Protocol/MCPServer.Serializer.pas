@@ -18,7 +18,6 @@ type
     class procedure DeserializeObject(Instance: TObject; const Json: TJSONObject);
     class function DeserializeArray(RttiType: TRttiType; const JsonArray: TJSONArray): TValue;
 
-    // Extracted type conversion methods
     class function ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function ConvertJsonToEnum(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function GetEnumValueNames(const EnumType: TRttiEnumerationType): string;
@@ -26,23 +25,19 @@ type
     class function TrySerializeList(Obj: TObject; out Json: TJSONValue): Boolean;
     class function CreateInstanceFromType(const RttiType: TRttiType): TObject;
 
-    // Array deserialization helpers
     class function DeserializeDynamicArray(const DynArrayType: TRttiDynamicArrayType; const JsonArray: TJSONArray): TValue;
     class function DeserializeGenericList(const ListType: TRttiInstanceType; const JsonArray: TJSONArray): TValue;
     class function FindAddMethod(const ListType: TRttiInstanceType): TRttiMethod;
 
-    // Case-insensitive JSON value lookup
     class function GetJsonValueCaseInsensitive(const Json: TJSONObject; const PropName: string): TJSONValue;
 
-    // Single normalization rule shared by lookup and validation
     class function NormalizeKey(const Name: string): string; inline;
     class function IsRequiredProperty(const Prop: TRttiProperty): Boolean;
-    /// The wire name: [SchemaName] when present, otherwise the lowercased
-    /// property name, matching the schema generator.
-    class function GetWireName(const Prop: TRttiProperty): string;
   public
     class constructor Create;
     class destructor Destroy;
+
+    class function GetWireName(const Prop: TRttiProperty): string;
 
     class function Deserialize<T: class, constructor>(const Json: TJSONObject): T;
     class procedure Serialize(Obj: TObject; Json: TJSONObject);
@@ -137,7 +132,6 @@ begin
 
     JsonValue := GetJsonValueCaseInsensitive(Json, GetWireName(RttiProp));
 
-    // Absent and null both mean "not given"; a required parameter must be given.
     if not Assigned(JsonValue) or (JsonValue is TJSONNull) then
     begin
       if IsRequiredProperty(RttiProp) then
@@ -196,9 +190,9 @@ begin
     {$WARN UNSAFE_CAST OFF}
     PropValue := RttiProp.GetValue(Obj);
     {$WARN UNSAFE_CAST ON}
-    
+
     JsonValue := ConvertValueToJson(PropValue, RttiProp.PropertyType);
-    
+
     if Assigned(JsonValue) then
       Json.AddPair(PropName, JsonValue);
   end;
@@ -222,12 +216,10 @@ var
   NestedInstance: TObject;
 begin
   Result := TValue.Empty;
-  
+
   if not Assigned(JsonValue) then
     Exit;
-    
-  // Values must have the JSON type the schema advertises; a mismatch is an
-  // argument error the tool reports as isError, so the model can correct it.
+
   case RttiType.TypeKind of
     tkInteger, tkInt64:
       begin
@@ -357,12 +349,12 @@ var
   MetaClass: TClass;
 begin
   Result := nil;
-  
+
   if RttiType is TRttiInstanceType then
   begin
     InstanceType := TRttiInstanceType(RttiType);
     MetaClass := InstanceType.MetaclassType;
-    
+
     if Assigned(MetaClass) then
       Result := MetaClass.Create;
   end;
@@ -375,8 +367,6 @@ var
 begin
   Result := nil;
 
-  // Empty means nil for objects and [] for dynamic arrays; both are worth
-  // writing so the JSON has the property the schema advertises.
   if Value.IsEmpty then
   begin
     case RttiType.TypeKind of
@@ -408,14 +398,12 @@ begin
       if RttiType.Handle = TypeInfo(Boolean) then
         Result := TJSONBool.Create(Value.AsBoolean)
       else
-        Result := TJSONString.Create(GetEnumName(RttiType.Handle, Value.AsOrdinal));
+        Result := TJSONString.Create(GetEnumName(RttiType.Handle, Integer(Value.AsOrdinal)));
 
     tkSet:
       begin
-        // Every included element by its enum name.
         var Names := TJSONArray.Create;
         var ElementType := TRttiEnumerationType(TRttiSetType(RttiType).ElementType);
-        // A set is stored from the byte that holds its lowest element.
         var SetBits: Int64 := 0;
         Move(Value.GetReferenceToRawData^, SetBits, Min(Value.DataSize, SizeOf(SetBits)));
         var FirstBit := ElementType.MinValue and not 7;
@@ -461,9 +449,6 @@ begin
   end;
 end;
 
-// Serialises TList<T> and TObjectList<T> (anything with an integer-indexed
-// Items property and a Count) as a JSON array of their elements. Without
-// this a list came out as an object with count and capacity members.
 class function TMCPSerializer.TrySerializeList(Obj: TObject; out Json: TJSONValue): Boolean;
 var
   ListType: TRttiType;
@@ -485,7 +470,6 @@ begin
     or not Assigned(ItemsProp.ReadMethod) then
     Exit;
 
-  // Only integer indexes: TDictionary<TKey, TValue> also has Count and Items.
   IndexParams := ItemsProp.ReadMethod.GetParameters;
   if (Length(IndexParams) <> 1) or not (IndexParams[0].ParamType.TypeKind in [tkInteger, tkInt64]) then
     Exit;
@@ -512,10 +496,10 @@ end;
 class function TMCPSerializer.DeserializeArray(RttiType: TRttiType; const JsonArray: TJSONArray): TValue;
 begin
   Result := TValue.Empty;
-  
+
   if RttiType is TRttiDynamicArrayType then
     Result := DeserializeDynamicArray(TRttiDynamicArrayType(RttiType), JsonArray)
-  else if (RttiType is TRttiInstanceType) and 
+  else if (RttiType is TRttiInstanceType) and
           (TRttiInstanceType(RttiType).MetaclassType.InheritsFrom(TList)) then
     Result := DeserializeGenericList(TRttiInstanceType(RttiType), JsonArray);
 end;
@@ -534,12 +518,12 @@ begin
   Result := TValue.Empty;
   TValue.Make(nil, DynArrayType.Handle, Result);
   DynArraySetLength(PPointer(Result.GetReferenceToRawData)^, Result.TypeInfo, 1, @ArrayLength);
-  
+
   for I := 0 to ArrayLength - 1 do
   begin
     JsonElement := JsonArray.Items[Integer(I)];
     ElementValue := ConvertJsonToValue(JsonElement, ElementType);
-    
+
     if not ElementValue.IsEmpty then
       Result.SetArrayElement(I, ElementValue);
   end;
@@ -555,25 +539,25 @@ var
   ParamType: TRttiType;
 begin
   ListInstance := ListType.MetaclassType.Create;
-  
+
   AddMethod := FindAddMethod(ListType);
   if not Assigned(AddMethod) then
   begin
     ListInstance.Free;
     Exit(TValue.Empty);
   end;
-  
+
   ParamType := AddMethod.GetParameters[0].ParamType;
-  
+
   for I := 0 to JsonArray.Count - 1 do
   begin
     JsonElement := JsonArray.Items[I];
     ElementValue := ConvertJsonToValue(JsonElement, ParamType);
-    
+
     if not ElementValue.IsEmpty then
       AddMethod.Invoke(ListInstance, [ElementValue]);
   end;
-  
+
   Result := ListInstance;
 end;
 
@@ -582,7 +566,7 @@ var
   Method: TRttiMethod;
 begin
   Result := nil;
-  
+
   for Method in ListType.GetMethods do
   begin
     if SameText(Method.Name, 'Add') and (Length(Method.GetParameters) = 1) then

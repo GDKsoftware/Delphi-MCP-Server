@@ -6,8 +6,6 @@ uses
   DUnitX.TestFramework;
 
 type
-  /// The stdout guard: while a stdio transport runs, console logging must
-  /// never reach stdout, whatever a consumer sets on TLogger.
   [TestFixture]
   TLoggerStdoutGuardTests = class
   private
@@ -108,8 +106,5 @@ begin
     Harness.Free;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TLoggerStdoutGuardTests);
 
 end.

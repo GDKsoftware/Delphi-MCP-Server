@@ -13,7 +13,6 @@ type
   TFailingData = class
   end;
 
-  /// A resource whose read raises.
   TFailingResource = class(TMCPResourceBase<TFailingData>)
   protected
     function GetResourceData: TFailingData; override;
@@ -28,7 +27,6 @@ type
     property Value: string read FValue write FValue;
   end;
 
-  /// A resource matched by TEchoTemplate; echoes the captured variable.
   TEchoResource = class(TMCPResourceBase<TEchoTemplateData>)
   private
     FValue: string;
@@ -38,8 +36,6 @@ type
     constructor CreateForValue(const AUri, AValue: string);
   end;
 
-  /// echo://{value}, used to test template matching independent of the
-  /// server's own logs://{level} template.
   TEchoTemplate = class(TMCPResourceTemplateBase)
   public
     constructor Create; override;
@@ -70,12 +66,15 @@ type
     [Test] procedure Templates_Cursor_IsInvalidParams;
     [Test] procedure Read_ViaTemplate_ResolvesWithActualUri;
     [Test] procedure Read_TemplateMismatch_IsNotFound;
+    [Test] procedure Read_ViaTemplate_PercentDecodes_KeepsPlusLiteral;
+    [Test] procedure Read_ViaTemplate_ConcurrentReads_Succeed;
   end;
 
 implementation
 
 uses
   System.SysUtils,
+  System.Threading,
   System.Generics.Collections,
   MCPServer.Errors;
 
@@ -330,6 +329,32 @@ begin
   end;
 end;
 
+procedure TResourcesManagerTests.Read_ViaTemplate_PercentDecodes_KeepsPlusLiteral;
+begin
+  var Json := Read('echo://a%20b+c%2Fd', TMCPProtocolEra.Modern);
+  try
+    Assert.AreEqual('{"value":"a b+c/d"}', Json.GetValue<string>('contents[0].text'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TResourcesManagerTests.Read_ViaTemplate_ConcurrentReads_Succeed;
+const
+  READS = 400;
+begin
+  TParallel.For(1, READS,
+    procedure(Index: Integer)
+    begin
+      var Json := Read(Format('echo://item%d', [Index]), TMCPProtocolEra.Modern);
+      try
+        Assert.AreEqual(Format('{"value":"item%d"}', [Index]), Json.GetValue<string>('contents[0].text'));
+      finally
+        Json.Free;
+      end;
+    end);
+end;
+
 procedure TResourcesManagerTests.Read_TemplateMismatch_IsNotFound;
 begin
   try
@@ -340,8 +365,5 @@ begin
       Assert.AreEqual(JSONRPC_INVALID_PARAMS, E.Code);
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TResourcesManagerTests);
 
 end.

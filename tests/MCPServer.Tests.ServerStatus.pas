@@ -6,8 +6,6 @@ uses
   DUnitX.TestFramework;
 
 type
-  /// The counters behind server://status are updated from every Indy
-  /// connection thread; these tests guard the atomic implementation.
   [TestFixture]
   TServerStatusResourceTests = class
   private
@@ -122,8 +120,5 @@ begin
     Status.Free;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TServerStatusResourceTests);
 
 end.

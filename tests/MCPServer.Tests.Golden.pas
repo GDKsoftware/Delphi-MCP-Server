@@ -11,12 +11,6 @@ uses
 type
   EGoldenError = class(Exception);
 
-  /// Locates the golden directory and exposes the record switch.
-  ///
-  /// The golden root is the "golden" folder under "tests". It is found by
-  /// walking up from the test executable, or taken from the environment
-  /// variable MCP_GOLDEN_DIR. Setting MCP_GOLDEN_RECORD=1 makes the golden
-  /// tests overwrite the expected sections instead of comparing.
   TGoldenFiles = class
   public
     const RECORD_ENVIRONMENT_VARIABLE = 'MCP_GOLDEN_RECORD';
@@ -31,15 +25,6 @@ type
     class function RecordMode: Boolean;
   end;
 
-  /// Replaces known-volatile values in a parsed JSON response so that two
-  /// runs can be compared byte for byte.
-  ///
-  /// A path is a dotted member path with array indexes, for example
-  /// "result.content[0].text". A pattern may use [*] to match any index.
-  /// Mask paths are replaced by the placeholder string; shape paths are
-  /// replaced by their shape (every leaf becomes its JSON type name, and a
-  /// string that itself contains a JSON document is parsed first). Paths must
-  /// end at an object member.
   TGoldenNormalizer = class
   private
     class function ReplaceIndexes(const Segment: string): string;
@@ -58,15 +43,6 @@ type
     class procedure Normalize(const Root: TJSONValue; const MaskPaths, ShapePaths: TArray<string>);
   end;
 
-  /// One golden case file. Fields:
-  ///   request          JSON value sent as the request body, or
-  ///   requestText      raw request body for non-JSON input
-  ///   mask             optional list of paths replaced by "<masked>"
-  ///   shape            optional list of paths replaced by their shape
-  ///   workingDirectory optional directory (relative to "tests") made
-  ///                    current while the request runs
-  ///   expected         normalised JSON response, or
-  ///   expectedText     raw response when it is empty or not JSON
   TGoldenCase = class
   private
     FFileName: string;
@@ -83,13 +59,8 @@ type
     constructor Create(const AFileName: string);
     destructor Destroy; override;
 
-    /// Applies mask and shape rules to an actual response and returns the
-    /// formatted text used for comparison. Empty or non-JSON responses are
-    /// returned unchanged.
     function NormalizeResponse(const ResponseBody: string): string;
-    /// The recorded expectation in the same formatted form.
     function ExpectedText: string;
-    /// Stores the normalised response as the new expectation and saves the file.
     procedure RecordExpected(const ResponseBody: string);
 
     property FileName: string read FFileName;
@@ -100,8 +71,6 @@ type
 
   TGoldenProcessFunc = reference to function(const RequestBody: string): string;
 
-  /// Replays one golden case through the given processing function and
-  /// compares (or records) the response.
   TGoldenRunner = class
   public
     class procedure Check(const Suite, CaseName: string; const Process: TGoldenProcessFunc);

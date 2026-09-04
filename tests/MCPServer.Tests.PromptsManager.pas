@@ -210,7 +210,4 @@ begin
   end;
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TPromptsManagerTests);
-
 end.

@@ -8,11 +8,6 @@ uses
   MCPServer.Types;
 
 type
-  /// A JSON-RPC error a handler or the processor wants to send back.
-  ///
-  /// Code and Message become the error object; Data (owned, optional) becomes
-  /// error.data. HttpStatus is the status a modern HTTP response must carry;
-  /// 0 leaves the decision to the processor's status policy.
   EMCPError = class(Exception)
   private
     FCode: Integer;
@@ -23,7 +18,6 @@ type
       AHttpStatus: Integer = 0); reintroduce;
     destructor Destroy; override;
 
-    /// Hands the data object to the caller; the exception no longer owns it.
     function DetachData: TJSONValue;
 
     class function ParseError(const AMessage: string): EMCPError;
@@ -31,17 +25,11 @@ type
     class function MethodNotFound(const Method: string): EMCPError;
     class function InvalidParams(const AMessage: string; AData: TJSONValue = nil): EMCPError;
     class function InternalError(const AMessage: string): EMCPError;
-    /// -32020 (HTTP 400): headers missing or different from the body.
     class function HeaderMismatch(const AMessage: string): EMCPError;
-    /// -32021 (HTTP 400): the client did not declare a capability the request needs.
     class function MissingRequiredClientCapability(const RequiredCapabilities: TJSONObject): EMCPError;
-    /// -32022 (HTTP 400): the requested revision is not served.
     class function UnsupportedProtocolVersion(const Requested: string; const Supported: TArray<string>): EMCPError;
-    /// -32602 with data.name: tools/call names a tool the server does not have.
     class function UnknownTool(const Name: string): EMCPError;
     class function UnknownPrompt(const Name: string): EMCPError;
-    /// Resource not found with data.uri: -32602 in the modern era, -32002 in
-    /// the initialize-based revisions.
     class function ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
 
     property Code: Integer read FCode;
@@ -49,12 +37,8 @@ type
     property HttpStatus: Integer read FHttpStatus write FHttpStatus;
   end;
 
-  /// Raised by a tool to report a tool execution error: the message becomes
-  /// an isError result that the model can act on, not a protocol error.
   EMCPToolError = class(Exception);
 
-  /// Raised by IMCPRequestContext.CheckCancelled once the client cancelled
-  /// the request. The processor sends no response for it.
   EMCPRequestCancelled = class(Exception);
 
 const

@@ -28,7 +28,6 @@ type
     property ActiveConnections: Integer read FActiveConnections write FActiveConnections;
   end;
 
-
   TServerStatusResource = class(TMCPResourceBase<TServerStatus>)
   private
     class var FServerStartTime: TDateTime;
@@ -40,24 +39,13 @@ type
     function GetResourceData: TServerStatus; override;
   public
     constructor Create; override;
-    /// Resets the start time and the counters. Runs from the unit
-    /// initialization and again from MCPServer.dpr before a transport starts.
     class procedure Initialize;
-    /// Re-registers the resource as server://<Prefix>status and removes the
-    /// URI registered before. The registry is read once, when
-    /// TMCPResourcesManager is created, so call this before the managers are
-    /// built (before TMCPIdHTTPServer.Start or TMCPStdioTransport.Run).
     class procedure SetNamePrefix(const Prefix: string);
-    /// Registers server://status (or the prefixed URI). The unit
-    /// initialization does this once, so the resource is available by default.
     class procedure RegisterServerStatusResource;
-    // The counters are updated from every Indy connection thread, so they
-    // use atomic operations.
     class procedure IncrementRequestCount;
     class procedure ConnectionOpened;
     class procedure ConnectionClosed;
   end;
-
 
 implementation
 
@@ -68,7 +56,6 @@ uses
   {$ENDIF}
   System.Classes,
   MCPServer.Registration;
-
 
 { TServerStatusResource }
 
@@ -114,7 +101,6 @@ end;
 
 class procedure TServerStatusResource.ConnectionClosed;
 begin
-  // Never below zero, and without a moment in which a reader can see -1.
   var Current := AtomicCmpExchange(FActiveConnections, 0, 0);
   while Current > 0 do
   begin
@@ -147,7 +133,7 @@ begin
   Result.Uptime := SecondsBetween(Now, FServerStartTime);
   Result.RequestCount := AtomicCmpExchange(FRequestCount, 0, 0);
   Result.ActiveConnections := AtomicCmpExchange(FActiveConnections, 0, 0);
-  
+
   {$IFDEF MSWINDOWS}
   ProcessMemoryCounters.cb := SizeOf(ProcessMemoryCounters);
   if GetProcessMemoryInfo(GetCurrentProcess, @ProcessMemoryCounters, SizeOf(ProcessMemoryCounters)) then
@@ -155,10 +141,9 @@ begin
   else
     Result.MemoryUsed := 0;
   {$ELSE}
-  Result.MemoryUsed := 0; // Not implemented for other platforms
+  Result.MemoryUsed := 0;
   {$ENDIF}
 end;
-
 
 initialization
   TServerStatusResource.Initialize;

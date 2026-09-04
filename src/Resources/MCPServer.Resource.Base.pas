@@ -8,6 +8,7 @@ uses
   System.JSON,
   System.Generics.Collections,
   System.RegularExpressions,
+  System.SyncObjs,
   MCPServer.Types;
 
 type
@@ -25,13 +26,6 @@ type
     property MimeType: string read GetMimeType;
   end;
 
-  /// Resource whose data is a class T serialised as JSON (mime type
-  /// application/json) or, for other mime types, the string in T's Content
-  /// property.
-  ///
-  /// The protected fields FTitle, FSize (-1 = unknown), FAnnotations (nil),
-  /// FTtlMs (0) and FCacheScope ('private') have safe defaults; set them in
-  /// the constructor of a descendant.
   TMCPResourceBase<T: class, constructor> = class(TInterfacedObject, IMCPResource,
     IMCPResourceMetadata, IMCPCacheableResource)
   protected
@@ -72,7 +66,6 @@ type
     property Text: string read FText write FText;
   end;
 
-  /// Variables captured from a URI matched against a template.
   TMCPTemplateVars = TDictionary<string, string>;
 
   IMCPResourceTemplate = interface
@@ -82,11 +75,7 @@ type
     function GetTitle: string;
     function GetDescription: string;
     function GetMimeType: string;
-    /// True when URI matches the template; the captured variables
-    /// (percent-decoded) are added to Vars.
     function Matches(const URI: string; Vars: TMCPTemplateVars): Boolean;
-    /// Builds the resource for a URI already confirmed to match, with its
-    /// captured variables.
     function CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
 
     property UriTemplate: string read GetUriTemplate;
@@ -96,19 +85,14 @@ type
     property MimeType: string read GetMimeType;
   end;
 
-  /// Resource template matched by URI, RFC 6570 level 1 (simple string
-  /// expansion, "{var}", one path segment) and a level 2 subset (reserved
-  /// expansion, "{+var}", matches the rest of the URI including "/").
-  /// "{/var}" and "{?var}" are not supported.
-  ///
-  /// Set FUriTemplate, FName and the optional FTitle/FDescription/FMimeType
-  /// in the constructor of a descendant, as with TMCPResourceBase<T>.
   TMCPResourceTemplateBase = class(TInterfacedObject, IMCPResourceTemplate)
   strict private
-    FRegex: TRegEx;
+    FPattern: string;
     FVariableNames: TArray<string>;
     FCompiled: Boolean;
+    FCompileLock: TCriticalSection;
     procedure EnsureCompiled;
+    class function PercentDecode(const Text: string): string; static;
     class function CompilePattern(const UriTemplate: string; out VariableNames: TArray<string>): string; static;
   protected
     FUriTemplate: string;
@@ -118,6 +102,7 @@ type
     FMimeType: string;
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetUriTemplate: string;
     function GetName: string;
@@ -131,7 +116,6 @@ type
 implementation
 
 uses
-  System.NetEncoding,
   MCPServer.Serializer;
 
 { TMCPResourceBase<T> }
@@ -246,6 +230,37 @@ constructor TMCPResourceTemplateBase.Create;
 begin
   inherited Create;
   FMimeType := '';
+  FCompileLock := TCriticalSection.Create;
+end;
+
+destructor TMCPResourceTemplateBase.Destroy;
+begin
+  FCompileLock.Free;
+  inherited;
+end;
+
+class function TMCPResourceTemplateBase.PercentDecode(const Text: string): string;
+begin
+  var Bytes: TBytes := nil;
+  var Utf8 := TEncoding.UTF8.GetBytes(Text);
+  var I := 0;
+  while I < Length(Utf8) do
+  begin
+    if (Utf8[I] = Ord('%')) and (I + 2 < Length(Utf8)) then
+    begin
+      var Hex := Char(Utf8[I + 1]) + Char(Utf8[I + 2]);
+      var Value := StrToIntDef('$' + Hex, -1);
+      if Value >= 0 then
+      begin
+        Bytes := Bytes + [Byte(Value)];
+        Inc(I, 3);
+        Continue;
+      end;
+    end;
+    Bytes := Bytes + [Utf8[I]];
+    Inc(I);
+  end;
+  Result := TEncoding.UTF8.GetString(Bytes);
 end;
 
 class function TMCPResourceTemplateBase.CompilePattern(const UriTemplate: string;
@@ -281,6 +296,10 @@ begin
         end;
         if VarName = '' then
           raise EArgumentException.CreateFmt('Empty variable name in URI template "%s"', [UriTemplate]);
+        for var C in VarName do
+          if not CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then
+            raise EArgumentException.CreateFmt('Variable name "%s" in URI template "%s" may only contain letters, digits and underscores',
+              [VarName, UriTemplate]);
 
         Names.Add(VarName);
         Position := CloseBrace + 1;
@@ -303,10 +322,16 @@ end;
 
 procedure TMCPResourceTemplateBase.EnsureCompiled;
 begin
-  if FCompiled then
-    Exit;
-  FRegex := TRegEx.Create(CompilePattern(FUriTemplate, FVariableNames));
-  FCompiled := True;
+  FCompileLock.Enter;
+  try
+    if not FCompiled then
+    begin
+      FPattern := CompilePattern(FUriTemplate, FVariableNames);
+      FCompiled := True;
+    end;
+  finally
+    FCompileLock.Leave;
+  end;
 end;
 
 function TMCPResourceTemplateBase.GetUriTemplate: string;
@@ -337,11 +362,11 @@ end;
 function TMCPResourceTemplateBase.Matches(const URI: string; Vars: TMCPTemplateVars): Boolean;
 begin
   EnsureCompiled;
-  var Match := FRegex.Match(URI);
+  var Match := TRegEx.Match(URI, FPattern);
   Result := Match.Success;
   if Result then
     for var VarName in FVariableNames do
-      Vars.AddOrSetValue(VarName, TNetEncoding.URL.Decode(Match.Groups[VarName].Value));
+      Vars.AddOrSetValue(VarName, PercentDecode(Match.Groups[VarName].Value));
 end;
 
 end.

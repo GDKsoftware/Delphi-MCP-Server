@@ -30,10 +30,6 @@ uses
   MCPServer.JsonRpcProcessor;
 
 type
-  /// Streamable HTTP transport on Indy. The request pipeline is:
-  /// Origin check (403), CORS headers, endpoint check (404), OPTIONS (204),
-  /// any verb but POST (405), then the JSON-RPC processor decides body and
-  /// status. Notifications are answered with 202 and an empty body.
   TMCPIdHTTPServer = class(TComponent)
   private
     FHTTPServer: TIdHTTPServer;
@@ -72,9 +68,7 @@ type
     destructor Destroy; override;
     procedure Start;
     procedure Stop;
-    /// Addresses the server listens on after Start ("ip:port").
     function BoundAddresses: TArray<string>;
-    /// Port after Start; a Settings port of 0 lets the system choose one.
     property Port: Word read FPort write FPort;
     property Active: Boolean read FActive;
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry write FManagerRegistry;
@@ -236,8 +230,6 @@ begin
     Exit;
   end;
 
-  // No BindAddress: a loopback Host means a local server, anything else is
-  // reachable at the address the host name resolves to.
   if SameText(Host, 'localhost') or (Host = LOOPBACK_IPV4) or (Host = LOOPBACK_IPV6) then
   begin
     AddBinding(LOOPBACK_IPV4, Id_IPv4);
@@ -268,12 +260,10 @@ begin
   end;
 
   {$IFDEF USE_TAURUS_TLS}
-  // TaurusTLS with OpenSSL 3.x/4.x support
   FSSLHandler := TTaurusTLSServerIOHandler.Create(Self);
   FSSLHandler.DefaultCert.PublicKey := FSettings.SSLCertFile;
   FSSLHandler.DefaultCert.PrivateKey := FSettings.SSLKeyFile;
   {$ELSE}
-  // Standard Indy SSL with OpenSSL 1.0.2; TLS 1.2 is the only version offered.
   FSSLHandler := TIdServerIOHandlerSSLOpenSSL.Create(Self);
   FSSLHandler.SSLOptions.CertFile := FSettings.SSLCertFile;
   FSSLHandler.SSLOptions.KeyFile := FSettings.SSLKeyFile;
@@ -302,7 +292,6 @@ end;
 
 function TMCPIdHTTPServer.HeaderPresent(RequestInfo: TIdHTTPRequestInfo; const Name: string): Boolean;
 begin
-  // TIdHeaderList matches names case-insensitively.
   Result := RequestInfo.RawHeaders.IndexOfName(Name) >= 0;
 end;
 
@@ -402,7 +391,6 @@ begin
     ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Origin'] := Origin;
 
   var AllowHeaders := CORS_ALLOW_HEADERS;
-  // Reflect what a preflight asks for, so Mcp-Param-* headers pass as well.
   for var Requested in HeaderValue(RequestInfo, 'Access-Control-Request-Headers').Split([',']) do
   begin
     var Name := Requested.Trim;
@@ -422,8 +410,12 @@ begin
   try
     Info.AddPair('url', FSettings.Protocol + '://' + FSettings.Host + ':' + IntToStr(FPort) + FSettings.Endpoint);
     Info.AddPair('transport', 'streamable-http');
-    Info.AddPair('protocolVersions', TJSONArray.Create
-      .Add(MCP_LATEST_PROTOCOL_VERSION).Add(MCP_PROTOCOL_VERSION_2025_11_25).Add(MCP_PROTOCOL_VERSION_2025_06_18));
+    var Versions := TJSONArray.Create;
+    Info.AddPair('protocolVersions', Versions);
+    for var Version in MCP_MODERN_PROTOCOL_VERSIONS do
+      Versions.Add(Version);
+    for var Version in MCP_LEGACY_PROTOCOL_VERSIONS do
+      Versions.Add(Version);
     SendJson(ResponseInfo, HTTP_STATUS_OK, Info.ToJSON);
   finally
     Info.Free;
@@ -443,8 +435,6 @@ end;
 
 procedure TMCPIdHTTPServer.EchoLegacySessionId(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
 begin
-  // Never minted; an incoming id is handed back unchanged when it is a
-  // plausible header value.
   var SessionId := HeaderValue(RequestInfo, HEADER_SESSION_ID);
   if (SessionId <> '') and TMCPHeaderValue.IsHeaderSafe(SessionId) and not SessionId.Contains(' ') then
     ResponseInfo.CustomHeaders.Values[HEADER_SESSION_ID] := SessionId;
@@ -511,7 +501,6 @@ end;
 
 procedure TMCPIdHTTPServer.SendEmpty(ResponseInfo: TIdHTTPResponseInfo; Status: Integer);
 begin
-  // An assigned, empty stream keeps Indy from writing its default HTML body.
   ResponseInfo.ResponseNo := Status;
   ResponseInfo.ContentStream := TMemoryStream.Create;
   ResponseInfo.FreeContentStream := True;
@@ -539,7 +528,6 @@ end;
 
 procedure TMCPIdHTTPServer.SendJsonRpcError(ResponseInfo: TIdHTTPResponseInfo; Status, Code: Integer; const Message: string);
 begin
-  // Transport-level rejections carry an error body without an id.
   var Response := TJSONObject.Create;
   try
     Response.AddPair('jsonrpc', '2.0');

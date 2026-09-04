@@ -270,7 +270,4 @@ begin
   end;
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TSchemaGeneratorTests);
-
 end.

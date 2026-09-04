@@ -8,12 +8,6 @@ uses
   MCPServer.Tests.Golden;
 
 type
-  /// Pins the legacy (initialize-based) wire behaviour of the JSON-RPC layer.
-  ///
-  /// Every test replays one file from tests\golden\legacy through a fresh
-  /// harness and compares the normalised response with the recorded one.
-  /// A golden file only changes when the wire behaviour changes on purpose;
-  /// such a change belongs in the CHANGELOG.
   [TestFixture]
   TLegacyGoldenTests = class
   private
@@ -25,7 +19,6 @@ type
     [TearDown]
     procedure TearDown;
 
-    // Lifecycle
     [Test] procedure Initialize_2025_06_18;
     [Test] procedure Initialize_2025_11_25;
     [Test] procedure Initialize_2025_03_26;
@@ -34,7 +27,6 @@ type
     [Test] procedure Notifications_Initialized;
     [Test] procedure Ping;
 
-    // Tools
     [Test] procedure Tools_List;
     [Test] procedure Tools_Call_Echo;
     [Test] procedure Tools_Call_Echo_Unicode;
@@ -49,7 +41,6 @@ type
     [Test] procedure Tools_Call_WithoutParams;
     [Test] procedure Tools_Call_EmptyName;
 
-    // Resources
     [Test] procedure Resources_List;
     [Test] procedure Resources_Read_ProjectInfo;
     [Test] procedure Resources_Read_ProjectReadme;
@@ -59,7 +50,6 @@ type
     [Test] procedure Resources_Read_WithoutParams;
     [Test] procedure Resources_Templates_List;
 
-    // Method and message shape
     [Test] procedure UnknownMethod;
     [Test] procedure ServerDiscover_WithoutMeta;
     [Test] procedure ParseError;
@@ -287,8 +277,5 @@ procedure TLegacyGoldenTests.ParamsNotAnObject;
 begin
   CheckGolden('params-not-an-object');
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TLegacyGoldenTests);
 
 end.

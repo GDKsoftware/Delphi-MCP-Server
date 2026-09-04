@@ -13,13 +13,6 @@ uses
   MCPServer.Tool.Base;
 
 type
-  /// tools/list and tools/call over the tools registered in TMCPRegistry,
-  /// listed in registration order.
-  ///
-  /// Protocol errors (-32602) are raised for a missing or unknown tool name
-  /// and malformed params; everything a tool itself reports (EMCPToolError,
-  /// argument validation, unexpected exceptions) becomes an isError result
-  /// the model can act on.
   TMCPToolsManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPCapabilityProvider)
   strict private
     FTools: TDictionary<string, IMCPTool>;
@@ -41,7 +34,6 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    /// Adds a tool to this manager only (next to the ones from TMCPRegistry).
     procedure AddTool(const Tool: IMCPTool);
 
     function GetCapabilityName: string;
@@ -56,7 +48,6 @@ type
     function CallTool(const Params: System.JSON.TJSONObject): TValue; overload;
     function CallTool(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
 
-    /// Cache hints on tools/list for modern clients; 0 and 'private' unless set.
     property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
     property ListCacheScope: string read FListCacheScope write FListCacheScope;
   end;
@@ -78,14 +69,18 @@ const
 procedure WarnIfStructuredContentMismatchesSchema(const Tool: IMCPTool; const Result: TJSONObject);
 begin
   var OutputSchema := Tool.OutputSchema;
-  var StructuredContent := Result.GetValue('structuredContent');
-  if not Assigned(OutputSchema) or not Assigned(StructuredContent) then
-    Exit;
+  try
+    var StructuredContent := Result.GetValue('structuredContent');
+    if not Assigned(OutputSchema) or not Assigned(StructuredContent) then
+      Exit;
 
-  var Errors: TArray<string>;
-  if not TMCPSchemaValidator.Validate(OutputSchema, StructuredContent, Errors) then
-    TLogger.Warning(Format('Tool "%s" structuredContent does not match its outputSchema: %s',
-      [Tool.Name, string.Join('; ', Errors)]));
+    var Errors: TArray<string>;
+    if not TMCPSchemaValidator.Validate(OutputSchema, StructuredContent, Errors) then
+      TLogger.Warning(Format('Tool "%s" structuredContent does not match its outputSchema: %s',
+        [Tool.Name, string.Join('; ', Errors)]));
+  finally
+    OutputSchema.Free;
+  end;
 end;
 {$ENDIF}
 
@@ -176,7 +171,6 @@ end;
 
 procedure TMCPToolsManager.CheckCursor(const Params: TJSONObject);
 begin
-  // Every list fits in one page; a cursor is never one this server issued.
   if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
     raise EMCPError.InvalidParams('Invalid cursor');
 end;
@@ -205,7 +199,6 @@ begin
 
   if ResultValue.IsType<TJSONArray> then
   begin
-    // A ready-made content array is passed through as is.
     Result := TJSONObject.Create;
     Result.AddPair('content', ResultValue.AsType<TJSONArray>);
     Exit;
@@ -217,7 +210,6 @@ begin
     begin
       var Text := ResultValue.AsString;
       ToolResult.AddText(Text);
-      // Text results keep signalling failure with an "Error:" prefix.
       ToolResult.IsError := Text.StartsWith('Error:') or Text.StartsWith('Error executing tool:');
     end
     else if ResultValue.IsType<TJSONObject> then
@@ -241,7 +233,6 @@ function TMCPToolsManager.ExecuteTool(const Tool: IMCPTool; const Arguments: TJS
 var
   ResultValue: TValue;
 begin
-  // "arguments" is optional on the wire; a tool always receives an object.
   var OwnedArguments: TJSONObject := nil;
   var EffectiveArguments := Arguments;
   if not Assigned(EffectiveArguments) then

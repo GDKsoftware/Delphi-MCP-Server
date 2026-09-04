@@ -34,7 +34,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    
+
     property Entries: TObjectList<TLogEntry> read FEntries write FEntries;
     property TotalCount: NativeInt read FTotalCount write FTotalCount;
     property FilteredCount: NativeInt read FFilteredCount write FFilteredCount;
@@ -49,10 +49,10 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    
+
     class function Instance: TLogBuffer;
     class procedure Finalize;
-    
+
     procedure AddLog(const ALevel, AMessage, ACategory: string);
     function GetLogs(AMaxCount: NativeInt = 100; const ALevel: string = ''): TObjectList<TLogEntry>;
   end;
@@ -64,7 +64,6 @@ type
     constructor Create; override;
   end;
 
-  /// A single log level, e.g. "logs://INFO"; matched by TLogsByLevelTemplate.
   TLogsByLevelResource = class(TMCPResourceBase<TLogEntries>)
   private
     FLevel: string;
@@ -74,9 +73,6 @@ type
     constructor CreateForLevel(const AUri, ALevel: string); reintroduce;
   end;
 
-  /// logs://{level}: the same recent-log data as logs://recent, filtered to
-  /// one level. Completes the level argument against the levels actually
-  /// present in the buffer.
   TLogsByLevelTemplate = class(TMCPResourceTemplateBase, IMCPCompletable)
   public
     constructor Create; override;
@@ -167,10 +163,9 @@ begin
     {$ELSE}
     Entry.ThreadID := TThread.CurrentThread.ThreadID;
     {$ENDIF}
-    
+
     FLogs.Add(Entry);
-    
-    // Remove earliest entries if buffer exceeds maximum capacity
+
     while FLogs.Count > FMaxEntries do
     begin
       FLogs[0].Free;
@@ -188,11 +183,11 @@ var
   StartIndex: NativeInt;
 begin
   Result := TObjectList<TLogEntry>.Create(True);
-  
+
   FLock.Acquire;
   try
     StartIndex := Max(0, FLogs.Count - AMaxCount);
-    
+
     for i := StartIndex to FLogs.Count - 1 do
     begin
       Entry := FLogs[i];
@@ -221,7 +216,6 @@ begin
   FName := 'Recent Logs';
   FDescription := 'Recent log entries from all categories';
   FMimeType := 'application/json';
-  // Live data: never cache, never share between callers.
   FTtlMs := 0;
   FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
 end;
@@ -237,14 +231,11 @@ begin
     Result.Entries.AddRange(Logs);
     Result.TotalCount := Logs.Count;
     Result.FilteredCount := Logs.Count;
-    // GetLogs returns copies in an owning list; Result.Entries owns them
-    // from here on, otherwise they would be freed twice.
     Logs.OwnsObjects := False;
   finally
     Logs.Free;
   end;
 end;
-
 
 { TLogsByLevelResource }
 
@@ -319,15 +310,13 @@ end;
 
 initialization
   TLogBuffer.FLock := TCriticalSection.Create;
-  
-  // Example initialization logs
+
   TLogBuffer.Instance.AddLog('INFO', 'MCP Server started', 'SYSTEM');
   TLogBuffer.Instance.AddLog('INFO', 'Resources manager initialized', 'SYSTEM');
   TLogBuffer.Instance.AddLog('INFO', 'Tools manager initialized', 'SYSTEM');
   TLogBuffer.Instance.AddLog('WARNING', 'Debug mode is enabled', 'CONFIG');
   TLogBuffer.Instance.AddLog('INFO', 'Server listening on port 8080', 'SERVER');
-  
-  // Register Logs resources
+
   TMCPRegistry.RegisterResource('logs://recent',
     function: IMCPResource
     begin
@@ -341,7 +330,7 @@ initialization
       Result := TLogsByLevelTemplate.Create;
     end
   );
-  
+
 
 finalization
   TLogBuffer.Finalize;

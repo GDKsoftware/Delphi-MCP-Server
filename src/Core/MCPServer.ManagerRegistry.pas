@@ -8,8 +8,6 @@ uses
   MCPServer.Types;
 
 type
-  /// Registration-ordered list of capability managers. Managers that
-  /// implement IMCPRegistryAware receive a reference to this registry.
   TMCPManagerRegistry = class(TInterfacedObject, IMCPManagerRegistry, IMCPManagerEnumerator)
   private
     FManagers: TList<IMCPCapabilityManager>;

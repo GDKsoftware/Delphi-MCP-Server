@@ -14,7 +14,6 @@ uses
   MCPServer.Tests.Harness;
 
 type
-  /// A manager that records the context it was called with.
   TProbeManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx)
   public
     SeenContext: IMCPRequestContext;
@@ -26,7 +25,6 @@ type
       const Context: IMCPRequestContext): TValue;
   end;
 
-  /// Status policy, result envelope and dispatch through ProcessRequestEx.
   [TestFixture]
   TProcessorTests = class
   private
@@ -102,7 +100,6 @@ end;
 procedure TProcessorTests.Setup;
 begin
   FHarness := TMCPTestHarness.Create;
-  // One settings instance for the managers and the processor.
   FSettings := FHarness.Settings;
   FProcessor := TMCPJsonRpcProcessor.Create(FHarness.ManagerRegistry, FSettings);
 end;
@@ -165,7 +162,6 @@ end;
 
 procedure TProcessorTests.Modern_ApplicationInvalidParams_Is200;
 begin
-  // An error a manager raises without an explicit status stays application level.
   var Probe := TProbeManager.Create;
   var Registry: IMCPManagerRegistry := TMCPManagerRegistry.Create;
   Registry.RegisterManager(Probe);
@@ -362,8 +358,5 @@ begin
 
   Assert.AreEqual(0, Failures);
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TProcessorTests);
 
 end.

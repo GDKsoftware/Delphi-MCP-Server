@@ -1,17 +1,5 @@
 unit MCPServer.Schema.Validator;
 
-/// A JSON Schema (2020-12) subset validator for hand-written schemas and for
-/// checking a tool's structuredContent against its outputSchema.
-///
-/// Covers: type (string or array, including "null"), enum, const, required,
-/// properties (recursive), additionalProperties (boolean), items
-/// (recursive), minimum/maximum, minLength/maxLength, pattern. A same-
-/// document "$ref" ("#/$defs/Name" or "#/definitions/Name") is resolved;
-/// anything else (a network reference, "#/properties/..." and similar) is a
-/// validation error rather than a crash or a silent no-op, since the
-/// specification forbids network references. Nesting deeper than
-/// MAX_DEPTH is a validation error, not a stack overflow.
-
 interface
 
 uses
@@ -24,8 +12,6 @@ type
   public
     const MAX_DEPTH = 32;
 
-    /// True when Instance satisfies Schema; Errors lists every violation
-    /// found (empty when Result is True).
     class function Validate(const Schema: TJSONObject; const Instance: TJSONValue;
       out Errors: TArray<string>): Boolean;
   private
@@ -58,8 +44,6 @@ end;
 
 class function TMCPSchemaValidator.MatchesType(const Instance: TJSONValue; const TypeName: string): Boolean;
 begin
-  // TJSONNumber descends from TJSONString, so "string" must exclude it
-  // explicitly and "integer"/"number" must be checked before it.
   if TypeName = 'null' then
     Result := not Assigned(Instance) or (Instance is TJSONNull)
   else if TypeName = 'boolean' then
@@ -126,8 +110,6 @@ begin
     Exit((A is TJSONNumber) and (B is TJSONNumber) and (TJSONNumber(A).AsDouble = TJSONNumber(B).AsDouble));
   if (A is TJSONString) or (B is TJSONString) then
     Exit((A is TJSONString) and (B is TJSONString) and (TJSONString(A).Value = TJSONString(B).Value));
-  // Objects and arrays: canonical text is good enough for the schemas this
-  // server generates or ships with.
   Result := A.ToJSON = B.ToJSON;
 end;
 
@@ -213,7 +195,6 @@ begin
   if not CheckType(ResolvedSchema, Instance, TypeError) then
   begin
     AddError(Errors, Path, TypeError);
-    // The wrong JSON kind makes structural checks below meaningless.
     Exit(False);
   end;
 

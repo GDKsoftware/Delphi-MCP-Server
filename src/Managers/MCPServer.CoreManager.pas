@@ -11,8 +11,6 @@ uses
   MCPServer.Logger;
 
 type
-  /// Lifecycle methods: server/discover for modern clients, initialize and
-  /// ping for legacy clients. Holds no per-client state.
   TMCPCoreManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPRegistryAware)
   private
     FSettings: TMCPSettings;
@@ -37,7 +35,6 @@ type
     function Discover(const Context: IMCPRequestContext): TValue;
     function Ping: TValue;
 
-    /// Sessions are no longer minted; always empty. Kept for consumers.
     property SessionID: string read GetSessionID;
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry;
   end;
@@ -164,7 +161,6 @@ begin
     Negotiated := Context.ProtocolVersion
   else
   begin
-    // Called outside the processor: negotiate from the params directly.
     var Requested := '';
     if Assigned(Params) then
     begin
@@ -189,7 +185,6 @@ begin
     if FSettings.Instructions <> '' then
       ResultJSON.AddPair('instructions', FSettings.Instructions);
 
-    // stdio remembers the negotiated revision for later legacy requests.
     if Assigned(Context) and Assigned(Context.LegacySession) then
       Context.LegacySession.ProtocolVersion := Negotiated;
 

@@ -6,46 +6,29 @@ uses
   System.SysUtils;
 
 type
-  /// Values of the headers the Streamable HTTP transport mirrors from the
-  /// body (Mcp-Name, Mcp-Param-*). Header values are visible ASCII; anything
-  /// else travels Base64-encoded between the sentinels =?base64? and ?=.
   TMCPHeaderValue = record
     const SENTINEL_PREFIX = '=?base64?';
     const SENTINEL_SUFFIX = '?=';
 
-    /// Visible ASCII (0x21 to 0x7E), space and horizontal tab only.
     class function IsHeaderSafe(const Value: string): Boolean; static;
     class function IsSentinel(const Value: string): Boolean; static;
-    /// Strict Base64: alphabet, length a multiple of four, padding only at
-    /// the end. Returns False on any deviation.
     class function TryDecodeBase64(const Text: string; out Bytes: TBytes): Boolean; static;
-    /// Decodes a header value to the string it stands for. A sentinel value
-    /// is Base64-decoded as UTF-8; a plain value must be header-safe.
     class function TryDecode(const Value: string; out Decoded: string): Boolean; static;
   end;
 
   TMCPAcceptHeader = record
-    /// True when one of the comma-separated entries names the media type
-    /// (parameters ignored, case-insensitive).
     class function Accepts(const AcceptHeader, MediaType: string): Boolean; static;
   end;
 
-  /// Origin validation for DNS-rebinding protection.
   TMCPOriginPolicy = record
     const ALLOW_ALL = '*';
 
-    /// An origin whose host is localhost, 127.0.0.1 or [::1], any port.
     class function IsLoopback(const Origin: string): Boolean; static;
-    /// Absent origins and loopback origins pass. Otherwise the origin must be
-    /// in the allow-list: scheme://host[:port], compared case-insensitively;
-    /// a ':*' port allows any port; '*' allows everything. 'null' never passes.
     class function IsAllowed(const Origin: string; const AllowList: TArray<string>): Boolean; static;
     class function Matches(const Origin, Pattern: string): Boolean; static;
   end;
 
   TMCPJsonLimits = record
-    /// Nesting depth of objects and arrays in a JSON text, ignoring the
-    /// contents of strings. Zero for a scalar.
     class function NestingDepth(const Json: string): Integer; static;
   end;
 
@@ -66,7 +49,6 @@ end;
 
 class function TMCPHeaderValue.IsSentinel(const Value: string): Boolean;
 begin
-  // The markers are case-sensitive and must appear exactly as shown.
   Result := (Length(Value) >= Length(SENTINEL_PREFIX) + Length(SENTINEL_SUFFIX))
     and Value.StartsWith(SENTINEL_PREFIX, False) and Value.EndsWith(SENTINEL_SUFFIX, False);
 end;
@@ -137,6 +119,16 @@ end;
 
 { TMCPOriginPolicy }
 
+function DefaultPortOf(const Scheme: string): string;
+begin
+  if Scheme = 'https' then
+    Result := '443'
+  else if Scheme = 'http' then
+    Result := '80'
+  else
+    Result := '';
+end;
+
 procedure SplitOrigin(const Origin: string; out Scheme, Host, Port: string);
 begin
   Scheme := '';
@@ -150,7 +142,6 @@ begin
   Scheme := Rest.Substring(0, SchemeEnd).ToLower;
   Rest := Rest.Substring(SchemeEnd + 3);
 
-  // IPv6 hosts are bracketed; the port follows the closing bracket.
   var PortStart: Integer;
   if Rest.StartsWith('[') then
   begin
@@ -194,6 +185,11 @@ begin
   SplitOrigin(Pattern, PatternScheme, PatternHost, PatternPort);
   if (OriginScheme = '') or (PatternScheme = '') then
     Exit(False);
+
+  if (OriginPort = '') then
+    OriginPort := DefaultPortOf(OriginScheme);
+  if (PatternPort = '') then
+    PatternPort := DefaultPortOf(PatternScheme);
 
   Result := (OriginScheme = PatternScheme) and (OriginHost = PatternHost)
     and ((PatternPort = '*') or (OriginPort = PatternPort));

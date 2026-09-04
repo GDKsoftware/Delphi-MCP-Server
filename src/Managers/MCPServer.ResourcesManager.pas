@@ -13,12 +13,6 @@ uses
   MCPServer.Resource.Base;
 
 type
-  /// resources/list, resources/read and resources/templates/list over the
-  /// resources registered in TMCPRegistry, listed in registration order.
-  ///
-  /// An unknown resource is a JSON-RPC error: -32602 with data.uri in the
-  /// modern era, -32002 in the initialize-based revisions. A failing read is
-  /// -32603. Resources that implement IMCPBinaryResource are read as blobs.
   TMCPResourcesManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPCapabilityProvider)
   private
     FResources: TDictionary<string, IMCPResource>;
@@ -34,18 +28,14 @@ type
     function CreateResourceJSON(const Resource: IMCPResource): TJSONObject;
     function CreateResourceTemplateJSON(const Template: IMCPResourceTemplate): TJSONObject;
     function CreateContentsItem(const Resource: IMCPResource): TJSONObject;
-    /// Exact match first, then the first matching template; nil when neither.
     function FindResource(const URI: string): IMCPResource;
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
   public
     constructor Create;
     destructor Destroy; override;
 
-    /// Adds a resource to this manager only (next to the ones from TMCPRegistry).
     procedure AddResource(const Resource: IMCPResource);
-    /// Adds a resource template to this manager only.
     procedure AddResourceTemplate(const Template: IMCPResourceTemplate);
-    /// Exact registration lookups, for completion/complete.
     function TryGetResource(const URI: string; out Resource: IMCPResource): Boolean;
     function TryGetResourceTemplate(const UriTemplate: string; out Template: IMCPResourceTemplate): Boolean;
 
@@ -63,7 +53,6 @@ type
     function ListResourceTemplates: TValue; overload;
     function ListResourceTemplates(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
 
-    /// Cache hints on the list results for modern clients; 0 and 'private' unless set.
     property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
     property ListCacheScope: string read FListCacheScope write FListCacheScope;
   end;
@@ -209,7 +198,6 @@ end;
 
 procedure TMCPResourcesManager.CheckCursor(const Params: TJSONObject);
 begin
-  // Every list fits in one page; a cursor is never one this server issued.
   if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
     raise EMCPError.InvalidParams('Invalid cursor');
 end;

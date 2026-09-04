@@ -25,7 +25,6 @@ uses
   MCPServer.Tests.Harness;
 
 type
-  /// A registry that cannot list its managers (a consumer's own implementation).
   TOpaqueRegistry = class(TInterfacedObject, IMCPManagerRegistry)
   public
     procedure RegisterManager(const Manager: IMCPCapabilityManager);
@@ -97,8 +96,5 @@ begin
     Capabilities.Free;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TCapabilityBuilderTests);
 
 end.

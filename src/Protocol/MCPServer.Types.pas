@@ -9,44 +9,35 @@ uses
   System.Generics.Collections;
 
 const
-  /// Protocol version answered by the initialize handshake. Kept under its
-  /// historic name for library consumers.
   MCP_PROTOCOL_VERSION = '2025-06-18';
 
-  // Protocol revisions
   MCP_PROTOCOL_VERSION_2025_03_26 = '2025-03-26';
   MCP_PROTOCOL_VERSION_2025_06_18 = '2025-06-18';
   MCP_PROTOCOL_VERSION_2025_11_25 = '2025-11-25';
   MCP_PROTOCOL_VERSION_2026_07_28 = '2026-07-28';
 
-  /// Newest revision this server targets (stateless, per-request _meta).
   MCP_LATEST_PROTOCOL_VERSION = MCP_PROTOCOL_VERSION_2026_07_28;
-  /// Newest revision served through the initialize handshake.
   MCP_LATEST_LEGACY_PROTOCOL_VERSION = MCP_PROTOCOL_VERSION_2025_11_25;
 
   MCP_LEGACY_PROTOCOL_VERSIONS: array[0..1] of string = (
-    MCP_PROTOCOL_VERSION_2025_06_18,
-    MCP_PROTOCOL_VERSION_2025_11_25
+    MCP_PROTOCOL_VERSION_2025_11_25,
+    MCP_PROTOCOL_VERSION_2025_06_18
   );
   MCP_MODERN_PROTOCOL_VERSIONS: array[0..0] of string = (
     MCP_PROTOCOL_VERSION_2026_07_28
   );
 
-  // JSON-RPC 2.0 error codes
   JSONRPC_PARSE_ERROR = -32700;
   JSONRPC_INVALID_REQUEST = -32600;
   JSONRPC_METHOD_NOT_FOUND = -32601;
   JSONRPC_INVALID_PARAMS = -32602;
   JSONRPC_INTERNAL_ERROR = -32603;
 
-  // MCP error codes reserved by the specification (basic/index.mdx, "Error Codes")
   MCP_ERROR_HEADER_MISMATCH = -32020;
   MCP_ERROR_MISSING_REQUIRED_CLIENT_CAPABILITY = -32021;
   MCP_ERROR_UNSUPPORTED_PROTOCOL_VERSION = -32022;
-  /// Resource not found in 2025-11-25 and earlier; 2026-07-28 uses JSONRPC_INVALID_PARAMS.
   MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY = -32002;
 
-  // Reserved _meta keys (2026-07-28)
   MCP_META_PROTOCOL_VERSION = 'io.modelcontextprotocol/protocolVersion';
   MCP_META_CLIENT_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities';
   MCP_META_CLIENT_INFO = 'io.modelcontextprotocol/clientInfo';
@@ -58,12 +49,9 @@ const
   MCP_METHOD_NOTIFICATIONS_CANCELLED = 'notifications/cancelled';
   MCP_METHOD_NOTIFICATIONS_PROGRESS = 'notifications/progress';
 
-  // Cache scopes (server/utilities/caching.mdx)
   MCP_CACHE_SCOPE_PUBLIC = 'public';
   MCP_CACHE_SCOPE_PRIVATE = 'private';
 
-  /// Methods whose complete results must carry ttlMs and cacheScope
-  /// (server/utilities/caching.mdx, "Cacheable Results").
   MCP_CACHEABLE_METHODS: array[0..5] of string = (
     'server/discover',
     'tools/list',
@@ -75,8 +63,6 @@ const
 
 function IsLegacyProtocolVersion(const Version: string): Boolean;
 function IsModernProtocolVersion(const Version: string): Boolean;
-/// The revision answered to an initialize request: the requested one when it
-/// is served, otherwise the newest legacy revision.
 function NegotiateLegacyProtocolVersion(const Requested: string): string;
 
 type
@@ -91,7 +77,6 @@ type
     property Description: string read FDescription;
   end;
 
-  /// Human-readable title of a parameter (JSON Schema "title").
   SchemaTitleAttribute = class(TCustomAttribute)
   private
     FTitle: string;
@@ -100,7 +85,6 @@ type
     property Title: string read FTitle;
   end;
 
-  /// JSON Schema "format" of a string parameter, for example 'date-time' or 'uri'.
   SchemaFormatAttribute = class(TCustomAttribute)
   private
     FFormat: string;
@@ -109,7 +93,6 @@ type
     property Format: string read FFormat;
   end;
 
-  /// JSON Schema "minimum" of a numeric parameter.
   SchemaMinimumAttribute = class(TCustomAttribute)
   private
     FMinimum: Double;
@@ -118,7 +101,6 @@ type
     property Minimum: Double read FMinimum;
   end;
 
-  /// JSON Schema "maximum" of a numeric parameter.
   SchemaMaximumAttribute = class(TCustomAttribute)
   private
     FMaximum: Double;
@@ -139,7 +121,6 @@ type
     property Values: TArray<string> read FValues;
   end;
 
-  /// JSON Schema "minLength" of a string parameter.
   SchemaMinLengthAttribute = class(TCustomAttribute)
   private
     FMinLength: Integer;
@@ -148,7 +129,6 @@ type
     property MinLength: Integer read FMinLength;
   end;
 
-  /// JSON Schema "maxLength" of a string parameter.
   SchemaMaxLengthAttribute = class(TCustomAttribute)
   private
     FMaxLength: Integer;
@@ -157,7 +137,6 @@ type
     property MaxLength: Integer read FMaxLength;
   end;
 
-  /// JSON Schema "pattern" of a string parameter (an ECMA-262 regex).
   SchemaPatternAttribute = class(TCustomAttribute)
   private
     FPattern: string;
@@ -166,8 +145,6 @@ type
     property Pattern: string read FPattern;
   end;
 
-  /// JSON Schema "default" of a parameter, given as its JSON text
-  /// (for example '"red"', '0', 'true').
   SchemaDefaultAttribute = class(TCustomAttribute)
   private
     FJson: string;
@@ -176,8 +153,6 @@ type
     property Json: string read FJson;
   end;
 
-  /// Explicit JSON property name, overriding the default (lowercased
-  /// property name) the generator and the serializer otherwise use.
   SchemaNameAttribute = class(TCustomAttribute)
   private
     FName: string;
@@ -186,8 +161,6 @@ type
     property Name: string read FName;
   end;
 
-  /// Class-level: forbids properties the schema does not list. Applies to a
-  /// tool's or prompt's parameter class; default is to allow them.
   SchemaAdditionalPropertiesAttribute = class(TCustomAttribute)
   private
     FAllowed: Boolean;
@@ -196,7 +169,6 @@ type
     property Allowed: Boolean read FAllowed;
   end;
 
-  /// Class-level: the JSON Schema dialect ($schema) of a generated schema.
   SchemaDialectAttribute = class(TCustomAttribute)
   private
     FUri: string;
@@ -206,44 +178,36 @@ type
   end;
 
   TMCPToolsCapability = class;
-  
+
   IMCPCapabilityManager = interface
     ['{E5F7C3A1-8B4D-4F6E-9C2A-1D3E5F7A9B8C}']
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
     function ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
   end;
-  
+
   IMCPManagerRegistry = interface
     ['{A2B4C6D8-1E3F-5A7B-9C8D-2F4E6A8C0B2D}']
     procedure RegisterManager(const Manager: IMCPCapabilityManager);
     function GetManagerForMethod(const Method: string): IMCPCapabilityManager;
   end;
 
-  /// Optional view on a manager registry that can list its managers, used to
-  /// derive the server capabilities. Probed with Supports().
   IMCPManagerEnumerator = interface
     ['{6D1F0B2C-3A4E-4F5B-8C7D-9E0F1A2B3C4D}']
     function GetManagers: TArray<IMCPCapabilityManager>;
   end;
 
-  /// Implemented by managers that want a reference to the registry they are
-  /// registered in (TMCPManagerRegistry injects it). Keep the reference weak.
   IMCPRegistryAware = interface
     ['{2B7C9D1E-4F6A-4B8C-9D0E-1F2A3B4C5D6E}']
     procedure SetManagerRegistry(const Registry: IMCPManagerRegistry);
   end;
 
   {$SCOPEDENUMS ON}
-  /// Legacy: initialize-based revisions (2025-11-25 and earlier).
-  /// Modern: per-request _meta revisions (2026-07-28 and later).
   TMCPProtocolEra = (Legacy, Modern);
 
   TMCPRequestIdKind = (None, Null, Text, Number, Invalid);
   {$SCOPEDENUMS OFF}
 
-  /// The JSON-RPC id of a message. None means the member is absent
-  /// (notification); Invalid covers booleans, objects, arrays and fractions.
   TMCPRequestId = record
     Kind: TMCPRequestIdKind;
     Text: string;
@@ -251,33 +215,28 @@ type
     class function FromJson(const Value: TJSONValue): TMCPRequestId; static;
     class function FromNumber(const Value: Int64): TMCPRequestId; static;
     class function FromText(const Value: string): TMCPRequestId; static;
-    /// True for a string or integer id (a request that must be answered).
     function IsPresent: Boolean;
-    /// JSON value for the response; null when the id is absent or invalid.
     function ToJson: TJSONValue;
     function AsText: string;
   end;
 
-  /// Per-process legacy state for stdio: the protocol version negotiated by
-  /// the last initialize. Empty until an initialize has been answered.
   TMCPLegacySession = class
   private
     FProtocolVersion: string;
+    FLock: TObject;
+    function GetProtocolVersion: string;
+    procedure SetProtocolVersion(const Value: string);
   public
-    property ProtocolVersion: string read FProtocolVersion write FProtocolVersion;
+    constructor Create;
+    destructor Destroy; override;
+    property ProtocolVersion: string read GetProtocolVersion write SetProtocolVersion;
   end;
 
-  /// Where a transport delivers the server-to-client messages that belong to
-  /// a request in flight (notifications/progress). The stdio transport
-  /// writes them to stdout; a transport without such a channel passes nil.
   IMCPMessageSink = interface
     ['{2B7D4E90-6C1A-4F3B-9E8D-5A0C1B2D3E4F}']
     procedure Send(const Json: string);
   end;
 
-  /// What a handler may know about the request it is serving. Built once
-  /// per request by the JSON-RPC processor and reachable through
-  /// TMCPRequestContext.Current while the handler runs.
   IMCPRequestContext = interface
     ['{7E3A9C1B-5D2F-4A6E-8B0C-3D4E5F6A7B8C}']
     function GetEra: TMCPProtocolEra;
@@ -292,38 +251,19 @@ type
     function GetLegacySession: TMCPLegacySession;
     function GetManagerRegistry: IMCPManagerRegistry;
 
-    /// True when the client declared the capability, given as a dotted path
-    /// such as 'elicitation' or 'elicitation.form'. Always False for legacy
-    /// requests (their capabilities are not carried per request).
     function HasClientCapability(const Path: string): Boolean;
-    /// Raises EMCPError -32021 when the capability was not declared.
     procedure RequireClientCapability(const Path: string);
-    /// True once the client cancelled the request (notifications/cancelled
-    /// on stdio).
     function IsCancelled: Boolean;
-    /// Raises EMCPRequestCancelled when the request was cancelled; the
-    /// processor then sends no response. Long-running handlers call this
-    /// between steps.
     procedure CheckCancelled;
-    /// Marks the request cancelled. Called by the transport.
     procedure Cancel;
-    /// True when the request carries _meta.progressToken.
     function HasProgressToken: Boolean;
-    /// Sends notifications/progress for this request when it carries a
-    /// progress token and the transport can deliver it; otherwise nothing
-    /// happens. Progress must increase: a value at or below the last one is
-    /// dropped, and so is a notification within PROGRESS_MIN_INTERVAL_MS of
-    /// the previous one unless it reaches Total. Total < 0 means unknown.
     procedure ReportProgress(const Progress: Double; const Total: Double = -1; const Message: string = '');
 
     property Era: TMCPProtocolEra read GetEra;
     property ProtocolVersion: string read GetProtocolVersion;
     property Method: string read GetMethod;
     property RequestId: TMCPRequestId read GetRequestId;
-    /// The request's _meta object (nil when absent). Owned by the context.
     property Meta: TJSONObject read GetMeta;
-    /// io.modelcontextprotocol/clientCapabilities (never nil for modern
-    /// requests, nil for legacy requests).
     property ClientCapabilities: TJSONObject read GetClientCapabilities;
     property ClientInfo: TJSONObject read GetClientInfo;
     property LogLevel: string read GetLogLevel;
@@ -332,36 +272,24 @@ type
     property ManagerRegistry: IMCPManagerRegistry read GetManagerRegistry;
   end;
 
-  /// In-flight bookkeeping a transport keeps so notifications/cancelled can
-  /// reach the request it names. The processor binds every request context
-  /// while its handler runs.
   IMCPRequestTracker = interface
     ['{8C5E1F2A-3B4D-4E6F-A1B2-C3D4E5F6A7B8}']
-    /// Binds the context to its request id for the duration of the handler.
-    /// A request cancelled before its handler started begins cancelled.
     procedure Track(const Context: IMCPRequestContext);
     procedure Untrack(const Context: IMCPRequestContext);
-    /// Cancels the request with that id; False when it is unknown or done.
     function TryCancel(const RequestId: TMCPRequestId; const Reason: string): Boolean;
   end;
 
-  /// Managers that want the request context receive it through this
-  /// interface; the processor falls back to IMCPCapabilityManager.ExecuteMethod.
   IMCPCapabilityManagerEx = interface
     ['{9F4B2D6A-1C3E-4E5F-A7B8-C9D0E1F2A3B4}']
     function ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
       const Context: IMCPRequestContext): TValue;
   end;
 
-  /// Managers that contribute an entry to the server capabilities
-  /// (for example "tools": {"listChanged": false}).
   IMCPCapabilityProvider = interface
     ['{C5D7E9F1-2A4B-4C6D-8E0F-1A2B3C4D5E6F}']
     procedure DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
   end;
 
-  /// Optional tool metadata for tools/list: annotations (readOnlyHint and
-  /// friends) and icons. Both may be nil. The tool keeps ownership.
   IMCPToolMetadata = interface
     ['{D2E4F6A8-1B3C-4D5E-9F0A-2B3C4D5E6F70}']
     function GetAnnotations: TJSONObject;
@@ -370,15 +298,11 @@ type
     property Icons: TJSONArray read GetIcons;
   end;
 
-  /// Resources whose contents are bytes rather than text; resources/read
-  /// answers with a Base64 "blob" instead of "text".
   IMCPBinaryResource = interface
     ['{E3F5A7B9-2C4D-4E6F-A0B1-3C4D5E6F7081}']
     function ReadBinary: TBytes;
   end;
 
-  /// Optional resource metadata for resources/list: title, size in bytes
-  /// (-1 when unknown) and annotations (may be nil, the resource keeps ownership).
   IMCPResourceMetadata = interface
     ['{F4A6B8CA-3D5E-4F70-B1C2-4D5E6F708192}']
     function GetTitle: string;
@@ -389,9 +313,6 @@ type
     property Annotations: TJSONObject read GetAnnotations;
   end;
 
-  /// Cache hints a resource attaches to its resources/read result in the
-  /// modern era: ttlMs (milliseconds, 0 = immediately stale) and cacheScope
-  /// ('public' or 'private').
   IMCPCacheableResource = interface
     ['{05B7C9DB-4E6F-4081-C2D3-5E6F708192A3}']
     function GetTtlMs: Integer;
@@ -400,15 +321,12 @@ type
     property CacheScope: string read GetCacheScope;
   end;
 
-  /// Optional icons for prompts/list. May be nil; the prompt keeps ownership.
   IMCPPromptMetadata = interface
     ['{16C8DAEC-5F70-4192-D3E4-6F708192A3B4}']
     function GetIcons: TJSONArray;
     property Icons: TJSONArray read GetIcons;
   end;
 
-  /// One suggestion set from completion/complete: at most 100 values, an
-  /// optional total (-1 when unknown) and whether more exist beyond Values.
   TMCPCompletion = record
     Values: TArray<string>;
     Total: Integer;
@@ -416,8 +334,6 @@ type
     class function Create(const Values: TArray<string>; Total: Integer = -1): TMCPCompletion; static;
   end;
 
-  /// Implemented by a prompt or resource template that offers argument
-  /// completion; checked with Supports before completion/complete calls it.
   IMCPCompletable = interface
     ['{27D9EBFD-6081-42A3-E4F5-708192A3B4C5}']
     function Complete(const ArgumentName, Value: string;
@@ -485,7 +401,48 @@ type
     property Tools: TArray<TMCPTool> read FTools write FTools;
   end;
 
+function IsJsonString(const Value: TJSONValue): Boolean;
+
 implementation
+
+function IsJsonString(const Value: TJSONValue): Boolean;
+begin
+  Result := (Value is TJSONString) and not (Value is TJSONNumber);
+end;
+
+{ TMCPLegacySession }
+
+constructor TMCPLegacySession.Create;
+begin
+  inherited Create;
+  FLock := TObject.Create;
+end;
+
+destructor TMCPLegacySession.Destroy;
+begin
+  FLock.Free;
+  inherited;
+end;
+
+function TMCPLegacySession.GetProtocolVersion: string;
+begin
+  TMonitor.Enter(FLock);
+  try
+    Result := FProtocolVersion;
+  finally
+    TMonitor.Exit(FLock);
+  end;
+end;
+
+procedure TMCPLegacySession.SetProtocolVersion(const Value: string);
+begin
+  TMonitor.Enter(FLock);
+  try
+    FProtocolVersion := Value;
+  finally
+    TMonitor.Exit(FLock);
+  end;
+end;
 
 function IsLegacyProtocolVersion(const Version: string): Boolean;
 begin
@@ -524,7 +481,6 @@ begin
     Result.Kind := TMCPRequestIdKind.Null
   else if Value is TJSONNumber then
   begin
-    // Only integers are valid ids; a fraction is not.
     var Number := TJSONNumber(Value);
     if Frac(Number.AsDouble) = 0 then
     begin
