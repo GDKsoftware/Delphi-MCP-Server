@@ -362,6 +362,59 @@ JSON. Set `FAnnotations` (for example `readOnlyHint`) or `FIcons` in the
 constructor to publish them in `tools/list`. `MCPServer.Tool.ContentSamples`
 has one small example per content type.
 
+### Asking the client for input (multi round-trip requests)
+
+MCP 2026-07-28 replaced server-initiated requests (`elicitation/create`,
+`sampling/createMessage`, `roots/list`) with multi round-trip requests: the
+server answers `tools/call`, `resources/read` or `prompts/get` with an
+`InputRequiredResult` that lists what it needs, the client gathers the
+answers and retries the same request with `inputResponses` (and the
+server's opaque `requestState`). A tool, resource or prompt that needs input
+raises `EMCPInputRequired` (`MCPServer.Mrtr`); the request context carries
+the answers on the retry:
+
+```pascal
+function TGreetTool.ExecuteWithContext(const Params: TNoParams;
+  const Context: IMCPRequestContext): TValue;
+var
+  Response: TJSONObject;
+begin
+  var Name := '';
+  if Context.TryGetInputResponse('user_name', Response) then
+    Name := TMCPInputResponse.ElicitationField(Response, 'name');
+  if Name = '' then
+    raise EMCPInputRequired.Create(TMCPInputRequests.Create
+      .AddElicitation('user_name', 'What is your name?', TMCPInputRequests.FieldSchema('name')));
+
+  Result := TMCPToolResult.Text(Format('Hello, %s!', [Name]));
+end;
+```
+
+`TMCPInputRequests` builds the `inputRequests` map (`AddElicitation`,
+`AddSampling`, `AddListRoots`); `TMCPInputResponse` reads the answers
+(`ElicitationContent`, `ElicitationField`, `SamplingText`, `Roots`). The
+processor only sends input requests the client declared a capability for
+(`elicitation`, `sampling`, `roots`) and answers `-32021` otherwise, so a
+tool can check `Context.HasClientCapability` first and ask for what the
+client can deliver. Missing or wrong answers are handled by raising again:
+the client gets a fresh `InputRequiredResult`.
+
+State that must survive the round trip goes into the second constructor
+argument: `EMCPInputRequired.Create(Requests, State)` with a `TJSONObject`.
+The processor seals it into `requestState` (HMAC-SHA256 over the state, the
+method, a digest of the request parameters, the principal and an expiry)
+and opens it on the retry into `Context.RequestState`; a tampered, expired
+or foreign token is `-32602`. `[Security] RequestStateKey` in `settings.ini`
+is the signing secret (set the same value on every instance behind a load
+balancer; empty means a random key per process) and
+`RequestStateTtlSeconds` the token lifetime (600 by default).
+
+Clients on the 2025 revisions cannot answer input requests, so a request
+that raises `EMCPInputRequired` in the legacy era is answered with
+`-32603`. `MCPServer.Tool.InputRequiredSamples` and
+`test_input_required_result_prompt` are the examples the conformance suite
+exercises.
+
 ### Creating Custom Resources
 
 ```pascal
@@ -670,6 +723,13 @@ The Inspector provides a web interface to interact with your MCP server, making 
 - **json_schema_2020_12_tool**: a hand-written schema exercising `$schema`,
   `$defs`, `$anchor`, `$ref`, `allOf`/`anyOf` and `if`/`then`/`else`, for the
   conformance suite's schema-preservation check
+- **test_input_required_result_elicitation**, **..._sampling**,
+  **..._list_roots**, **..._request_state**, **..._multiple_inputs**,
+  **..._multi_round**, **..._tampered_state**, **..._capabilities**: multi
+  round-trip requests, one per kind of client input plus signed request
+  state across one or two round trips, from
+  `MCPServer.Tool.InputRequiredSamples`; **test_missing_capability**
+  requires the `sampling` client capability and answers `-32021` without it
 
 ## Available Example prompts
 
@@ -680,6 +740,8 @@ The Inspector provides a web interface to interact with your MCP server, making 
   **test_prompt_with_embedded_resource**, **test_prompt_with_image**: one
   prompt per content type, from `MCPServer.Prompt.ContentSamples`; the
   conformance suite calls these by name
+- **test_input_required_result_prompt**: asks the client for a context
+  through an elicitation input request before it renders
 
 ## Available Example resources
 

@@ -162,6 +162,25 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MCP_CACHE_SCOPE_PUBLIC` and `MCP_CACHE_SCOPE_PRIVATE`.
 - Tests for the tool result builder, the serializer, the schema generator and
   the tools and resources managers in both eras.
+- Multi round-trip requests (MCP 2026-07-28): `EMCPInputRequired`,
+  `TMCPInputRequests` and `TMCPInputResponse` in `MCPServer.Mrtr`; the
+  processor answers `tools/call`, `resources/read` and `prompts/get` with an
+  `InputRequiredResult` (`resultType: input_required`, `inputRequests`,
+  `requestState`), validates `inputResponses` on the retry (`-32602` when
+  not an object of objects), only sends input requests the client declared
+  a capability for (`-32021` otherwise) and answers `-32603` to legacy
+  clients. `IMCPRequestContext` gains `InputResponses`, `RequestState` and
+  `TryGetInputResponse`.
+- `TMCPRequestStateSealer` (`MCPServer.RequestState`): HMAC-SHA256 sealed
+  `requestState` tokens bound to the method, a digest of the request
+  parameters, the principal and an expiry; `[Security] RequestStateKey` and
+  `RequestStateTtlSeconds` in `settings.ini`.
+- Example tools `test_input_required_result_elicitation`, `_sampling`,
+  `_list_roots`, `_request_state`, `_multiple_inputs`, `_multi_round`,
+  `_tampered_state`, `_capabilities` and `test_missing_capability`
+  (`MCPServer.Tool.InputRequiredSamples`) and the prompt
+  `test_input_required_result_prompt`: the multi round-trip fixtures of the
+  conformance suite.
 
 ### Changed
 

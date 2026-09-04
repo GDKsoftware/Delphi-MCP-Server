@@ -36,6 +36,8 @@ type
     FMaxConnections: Integer;
     FMaxConcurrentRequests: Integer;
     FSecurityAllowedOrigins: string;
+    FRequestStateKey: string;
+    FRequestStateTtlSeconds: Integer;
     function GetProtocol: string;
     function GetAllowedOrigins: string;
 
@@ -79,10 +81,13 @@ type
     property MaxConcurrentRequests: Integer read FMaxConcurrentRequests write FMaxConcurrentRequests;
     property SecurityAllowedOrigins: string read FSecurityAllowedOrigins write FSecurityAllowedOrigins;
     property AllowedOrigins: string read GetAllowedOrigins;
+    property RequestStateKey: string read FRequestStateKey write FRequestStateKey;
+    property RequestStateTtlSeconds: Integer read FRequestStateTtlSeconds write FRequestStateTtlSeconds;
 
     const DEFAULT_MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
     const DEFAULT_MAX_JSON_DEPTH = 64;
     const DEFAULT_MAX_CONCURRENT_REQUESTS = 1;
+    const DEFAULT_REQUEST_STATE_TTL_SECONDS = 600;
   end;
 
 implementation
@@ -144,6 +149,8 @@ begin
   FMaxConcurrentRequests := DEFAULT_MAX_CONCURRENT_REQUESTS;
   FMaxConnections := 0;
   FSecurityAllowedOrigins := '';
+  FRequestStateKey := '';
+  FRequestStateTtlSeconds := DEFAULT_REQUEST_STATE_TTL_SECONDS;
 end;
 
 function TMCPSettings.GetAllowedOrigins: string;
@@ -189,6 +196,9 @@ begin
 
     IniFile.WriteString('Security', '; Origins allowed next to the loopback origins (empty = [CORS] AllowedOrigins)', '');
     IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
+    IniFile.WriteString('Security', '; Secret that signs requestState tokens (empty = random per process)', '');
+    IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
+    IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
     IniFile.WriteString('Protocol', '; Protocol options (1 = on, 0 = off)', '');
     IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
@@ -236,6 +246,8 @@ begin
     FMaxConnections := IniFile.ReadInteger('Server', 'MaxConnections', FMaxConnections);
 
     FSecurityAllowedOrigins := IniFile.ReadString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
+    FRequestStateKey := IniFile.ReadString('Security', 'RequestStateKey', FRequestStateKey);
+    FRequestStateTtlSeconds := IniFile.ReadInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
     FLenientModernPing := IniFile.ReadBool('Protocol', 'LenientModernPing', FLenientModernPing);
     FDiscoverListsLegacyVersions := IniFile.ReadBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
@@ -288,6 +300,8 @@ begin
     IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
 
     IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
+    IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
+    IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
     IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
     IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);

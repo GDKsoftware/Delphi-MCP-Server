@@ -59,6 +59,7 @@ uses
   MCPServer.Registration,
   MCPServer.RequestContext,
   MCPServer.Errors,
+  MCPServer.Mrtr,
   MCPServer.Tool.Result,
   MCPServer.Schema.Validator;
 
@@ -252,6 +253,8 @@ begin
       on E: EMCPError do
         raise;
       on E: EMCPRequestCancelled do
+        raise;
+      on E: EMCPInputRequired do
         raise;
       on E: Exception do
         Exit(ErrorResult('Error executing tool: ' + E.Message, Era));

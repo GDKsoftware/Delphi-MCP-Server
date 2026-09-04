@@ -250,6 +250,8 @@ type
     function GetProgressToken: TJSONValue;
     function GetLegacySession: TMCPLegacySession;
     function GetManagerRegistry: IMCPManagerRegistry;
+    function GetInputResponses: TJSONObject;
+    function GetRequestState: TJSONObject;
 
     function HasClientCapability(const Path: string): Boolean;
     procedure RequireClientCapability(const Path: string);
@@ -258,6 +260,7 @@ type
     procedure Cancel;
     function HasProgressToken: Boolean;
     procedure ReportProgress(const Progress: Double; const Total: Double = -1; const Message: string = '');
+    function TryGetInputResponse(const Key: string; out Response: TJSONObject): Boolean;
 
     property Era: TMCPProtocolEra read GetEra;
     property ProtocolVersion: string read GetProtocolVersion;
@@ -270,6 +273,8 @@ type
     property ProgressToken: TJSONValue read GetProgressToken;
     property LegacySession: TMCPLegacySession read GetLegacySession;
     property ManagerRegistry: IMCPManagerRegistry read GetManagerRegistry;
+    property InputResponses: TJSONObject read GetInputResponses;
+    property RequestState: TJSONObject read GetRequestState;
   end;
 
   IMCPRequestTracker = interface

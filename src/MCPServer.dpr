@@ -45,6 +45,7 @@ uses
   MCPServer.Resource.Logs in 'Resources\MCPServer.Resource.Logs.pas',
   MCPServer.Resource.Project in 'Resources\MCPServer.Resource.Project.pas',
   MCPServer.Tool.ContentSamples in 'Tools\MCPServer.Tool.ContentSamples.pas',
+  MCPServer.Tool.InputRequiredSamples in 'Tools\MCPServer.Tool.InputRequiredSamples.pas',
   MCPServer.Resource.Samples in 'Resources\MCPServer.Resource.Samples.pas',
   MCPServer.Prompt.SummarizeLogs in 'Prompts\MCPServer.Prompt.SummarizeLogs.pas',
   MCPServer.Prompt.ContentSamples in 'Prompts\MCPServer.Prompt.ContentSamples.pas';

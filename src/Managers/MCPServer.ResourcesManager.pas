@@ -63,6 +63,7 @@ uses
   MCPServer.Registration,
   MCPServer.RequestContext,
   MCPServer.Errors,
+  MCPServer.Mrtr,
   MCPServer.ContentBlocks;
 
 { TMCPResourcesManager }
@@ -328,6 +329,8 @@ begin
       on E: EMCPError do
         raise;
       on E: EMCPRequestCancelled do
+        raise;
+      on E: EMCPInputRequired do
         raise;
       on E: Exception do
         raise EMCPError.InternalError('Error reading resource: ' + E.Message);

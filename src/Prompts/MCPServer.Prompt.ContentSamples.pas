@@ -57,10 +57,24 @@ type
     constructor Create; override;
   end;
 
+  TInputRequiredPrompt = class(TMCPPromptBase<TNoParams>)
+  protected
+    function ExecuteWithParams(const Params: TNoParams; Messages: TMCPPromptMessages): string; override;
+  public
+    constructor Create; override;
+  end;
+
 implementation
 
 uses
+  System.JSON,
+  MCPServer.Mrtr,
+  MCPServer.RequestContext,
   MCPServer.Registration;
+
+const
+  KEY_USER_CONTEXT = 'user_context';
+  FIELD_CONTEXT = 'context';
 
 { TSimplePrompt }
 
@@ -126,6 +140,31 @@ begin
   Result := 'Prompt with image';
 end;
 
+{ TInputRequiredPrompt }
+
+constructor TInputRequiredPrompt.Create;
+begin
+  inherited;
+  FName := 'test_input_required_result_prompt';
+  FDescription := 'Asks the client which context to use before it renders';
+end;
+
+function TInputRequiredPrompt.ExecuteWithParams(const Params: TNoParams; Messages: TMCPPromptMessages): string;
+var
+  Response: TJSONObject;
+begin
+  var UserContext := '';
+  var Context := TMCPRequestContext.Current;
+  if Assigned(Context) and Context.TryGetInputResponse(KEY_USER_CONTEXT, Response) then
+    UserContext := TMCPInputResponse.ElicitationField(Response, FIELD_CONTEXT);
+  if UserContext = '' then
+    raise EMCPInputRequired.Create(TMCPInputRequests.Create.AddElicitation(KEY_USER_CONTEXT,
+      'What context should the prompt use?', TMCPInputRequests.FieldSchema(FIELD_CONTEXT)));
+
+  Messages.AddText('user', Format('Use this context: %s', [UserContext]));
+  Result := 'Prompt with client-provided context';
+end;
+
 initialization
   TMCPRegistry.RegisterPrompt('test_simple_prompt',
     function: IMCPPrompt
@@ -146,6 +185,11 @@ initialization
     function: IMCPPrompt
     begin
       Result := TImagePrompt.Create;
+    end);
+  TMCPRegistry.RegisterPrompt('test_input_required_result_prompt',
+    function: IMCPPrompt
+    begin
+      Result := TInputRequiredPrompt.Create;
     end);
 
 end.

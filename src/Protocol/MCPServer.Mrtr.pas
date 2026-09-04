@@ -4,7 +4,8 @@ interface
 
 uses
   System.SysUtils,
-  System.JSON;
+  System.JSON,
+  MCPServer.Types;
 
 const
   RESULT_TYPE_INPUT_REQUIRED = 'input_required';
@@ -33,6 +34,13 @@ type
     class function RequiredCapability(const Method: string): string; static;
     class function FieldSchema(const Field: string; const FieldType: string = 'string'): TJSONObject; static;
     function ToJson: TJSONObject;
+  end;
+
+  TMCPInputResponse = record
+    class function ElicitationContent(const Response: TJSONObject): TJSONObject; static;
+    class function ElicitationField(const Response: TJSONObject; const Field: string): string; static;
+    class function SamplingText(const Response: TJSONObject): string; static;
+    class function Roots(const Response: TJSONObject): TJSONArray; static;
   end;
 
   EMCPInputRequired = class(Exception)
@@ -146,6 +154,60 @@ end;
 function TMCPInputRequests.ToJson: TJSONObject;
 begin
   Result := TJSONObject(FRequests.Clone);
+end;
+
+{ TMCPInputResponse }
+
+class function TMCPInputResponse.ElicitationContent(const Response: TJSONObject): TJSONObject;
+begin
+  Result := nil;
+  if not Assigned(Response) then
+    Exit;
+
+  var Action := Response.GetValue('action');
+  var Content := Response.GetValue('content');
+  var Accepted := IsJsonString(Action) and (TJSONString(Action).Value = ELICITATION_ACTION_ACCEPT);
+  if Accepted and (Content is TJSONObject) then
+    Result := TJSONObject(Content);
+end;
+
+class function TMCPInputResponse.ElicitationField(const Response: TJSONObject; const Field: string): string;
+begin
+  Result := '';
+  var Content := ElicitationContent(Response);
+  if not Assigned(Content) then
+    Exit;
+
+  var Value := Content.GetValue(Field);
+  if IsJsonString(Value) then
+    Result := TJSONString(Value).Value
+  else if Assigned(Value) and not (Value is TJSONNull) then
+    Result := Value.ToJSON;
+end;
+
+class function TMCPInputResponse.SamplingText(const Response: TJSONObject): string;
+begin
+  Result := '';
+  if not Assigned(Response) then
+    Exit;
+
+  var Content := Response.GetValue('content');
+  if not (Content is TJSONObject) then
+    Exit;
+  var Text := TJSONObject(Content).GetValue('text');
+  if IsJsonString(Text) then
+    Result := TJSONString(Text).Value;
+end;
+
+class function TMCPInputResponse.Roots(const Response: TJSONObject): TJSONArray;
+begin
+  Result := nil;
+  if not Assigned(Response) then
+    Exit;
+
+  var Value := Response.GetValue('roots');
+  if Value is TJSONArray then
+    Result := TJSONArray(Value);
 end;
 
 { EMCPInputRequired }

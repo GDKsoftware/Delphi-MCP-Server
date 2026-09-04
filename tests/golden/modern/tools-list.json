@@ -257,6 +257,96 @@
             },
             "additionalProperties": false
           }
+        },
+        {
+          "name": "test_input_required_result_elicitation",
+          "description": "Asks the client for a name through an elicitation input request, then greets it",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_input_required_result_sampling",
+          "description": "Asks the client to sample an answer, then returns that answer",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_input_required_result_list_roots",
+          "description": "Asks the client for its roots, then lists them",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_input_required_result_request_state",
+          "description": "Asks for a confirmation and carries a signed requestState across the round trip",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_input_required_result_multiple_inputs",
+          "description": "Asks for a name, a sampled greeting and the client roots in one round trip",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_input_required_result_multi_round",
+          "description": "Asks for a name and then a colour in two consecutive round trips",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_input_required_result_tampered_state",
+          "description": "Asks for a confirmation with a signed requestState that must come back unchanged",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_input_required_result_capabilities",
+          "description": "Asks only for the kinds of input the client declared it can provide",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_missing_capability",
+          "description": "Requires the sampling client capability and fails with -32021 when it is absent",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
         }
       ],
       "ttlMs": 0,

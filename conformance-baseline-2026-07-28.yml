@@ -4,16 +4,3 @@
 server:
   - server-stateless
   - tools-call-with-progress
-  - input-required-result-basic-elicitation
-  - input-required-result-basic-sampling
-  - input-required-result-basic-list-roots
-  - input-required-result-request-state
-  - input-required-result-multiple-input-requests
-  - input-required-result-multi-round
-  - input-required-result-non-tool-request
-  - input-required-result-result-type
-  - input-required-result-tampered-state
-  - input-required-result-capability-check
-  # only WARNING checks (MRTR is not implemented, so the tool these call is unknown); the runner counts them as not passed
-  - input-required-result-missing-input-response
-  - input-required-result-ignore-extra-params
