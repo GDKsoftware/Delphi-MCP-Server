@@ -34,7 +34,7 @@ begin
   Assert.IsTrue(TMCPRegistry.HasTool('get_time'));
   Assert.IsTrue(TMCPRegistry.HasTool('list_files'));
   Assert.IsTrue(TMCPRegistry.HasTool('calculate'));
-  Assert.AreEqual(12, Integer(Length(TMCPRegistry.GetToolNames)));
+  Assert.AreEqual(21, Integer(Length(TMCPRegistry.GetToolNames)));
 end;
 
 procedure TRegistryTests.BuiltInResources_AreRegisteredFromInitialization;
@@ -53,7 +53,7 @@ begin
   Assert.IsTrue(TMCPRegistry.HasPrompt('test_prompt_with_arguments'));
   Assert.IsTrue(TMCPRegistry.HasPrompt('test_prompt_with_embedded_resource'));
   Assert.IsTrue(TMCPRegistry.HasPrompt('test_prompt_with_image'));
-  Assert.AreEqual(5, Integer(Length(TMCPRegistry.GetPromptNames)));
+  Assert.AreEqual(6, Integer(Length(TMCPRegistry.GetPromptNames)));
 end;
 
 procedure TRegistryTests.BuiltInResourceTemplates_AreRegisteredFromInitialization;

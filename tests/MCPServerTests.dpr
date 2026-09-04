@@ -44,6 +44,7 @@ uses
   MCPServer.Resource.Logs in '..\src\Resources\MCPServer.Resource.Logs.pas',
   MCPServer.Resource.Project in '..\src\Resources\MCPServer.Resource.Project.pas',
   MCPServer.Tool.ContentSamples in '..\src\Tools\MCPServer.Tool.ContentSamples.pas',
+  MCPServer.Tool.InputRequiredSamples in '..\src\Tools\MCPServer.Tool.InputRequiredSamples.pas',
   MCPServer.Resource.Samples in '..\src\Resources\MCPServer.Resource.Samples.pas',
   MCPServer.Prompt.SummarizeLogs in '..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas',
   MCPServer.Prompt.ContentSamples in '..\src\Prompts\MCPServer.Prompt.ContentSamples.pas',
@@ -71,6 +72,7 @@ uses
   MCPServer.Tests.Stdio in 'MCPServer.Tests.Stdio.pas',
   MCPServer.Tests.SchemaValidator in 'MCPServer.Tests.SchemaValidator.pas',
   MCPServer.Tests.Prompt in 'MCPServer.Tests.Prompt.pas',
+  MCPServer.Tests.Mrtr in 'MCPServer.Tests.Mrtr.pas',
   MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
   MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas';
 
