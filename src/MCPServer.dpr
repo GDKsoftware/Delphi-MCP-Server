@@ -38,6 +38,7 @@ uses
   MCPServer.ResourcesManager in 'Managers\MCPServer.ResourcesManager.pas',
   MCPServer.PromptsManager in 'Managers\MCPServer.PromptsManager.pas',
   MCPServer.CompletionManager in 'Managers\MCPServer.CompletionManager.pas',
+  MCPServer.SubscriptionsManager in 'Managers\MCPServer.SubscriptionsManager.pas',
   MCPServer.Resource.Server in 'Resources\MCPServer.Resource.Server.pas',
   MCPServer.Tool.Echo in 'Tools\MCPServer.Tool.Echo.pas',
   MCPServer.Tool.GetTime in 'Tools\MCPServer.Tool.GetTime.pas',
@@ -47,6 +48,7 @@ uses
   MCPServer.Resource.Project in 'Resources\MCPServer.Resource.Project.pas',
   MCPServer.Tool.ContentSamples in 'Tools\MCPServer.Tool.ContentSamples.pas',
   MCPServer.Tool.InputRequiredSamples in 'Tools\MCPServer.Tool.InputRequiredSamples.pas',
+  MCPServer.Tool.SubscriptionSamples in 'Tools\MCPServer.Tool.SubscriptionSamples.pas',
   MCPServer.Resource.Samples in 'Resources\MCPServer.Resource.Samples.pas',
   MCPServer.Prompt.SummarizeLogs in 'Prompts\MCPServer.Prompt.SummarizeLogs.pas',
   MCPServer.Prompt.ContentSamples in 'Prompts\MCPServer.Prompt.ContentSamples.pas';
@@ -56,10 +58,11 @@ var
   Settings: TMCPSettings;
   ManagerRegistry: IMCPManagerRegistry;
   CoreManager: IMCPCapabilityManager;
-  ToolsManager: IMCPCapabilityManager;
+  ToolsManager: TMCPToolsManager;
   ResourcesManager: TMCPResourcesManager;
   PromptsManager: TMCPPromptsManager;
   CompletionManager: IMCPCapabilityManager;
+  SubscriptionsManager: TMCPSubscriptionsManager;
   ShutdownEvent: TEvent;
 
 {$IFDEF MSWINDOWS}
@@ -106,12 +109,17 @@ begin
   ResourcesManager := TMCPResourcesManager.Create;
   PromptsManager := TMCPPromptsManager.Create;
   CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
+  SubscriptionsManager := TMCPSubscriptionsManager.Create;
+  ToolsManager.ChangeNotifier := SubscriptionsManager;
+  ResourcesManager.ChangeNotifier := SubscriptionsManager;
+  PromptsManager.ChangeNotifier := SubscriptionsManager;
 
   ManagerRegistry.RegisterManager(CoreManager);
   ManagerRegistry.RegisterManager(ToolsManager);
   ManagerRegistry.RegisterManager(ResourcesManager);
   ManagerRegistry.RegisterManager(PromptsManager);
   ManagerRegistry.RegisterManager(CompletionManager);
+  ManagerRegistry.RegisterManager(SubscriptionsManager);
 
   Server := TMCPIdHTTPServer.Create(nil);
   try
@@ -153,12 +161,17 @@ begin
   ResourcesManager := TMCPResourcesManager.Create;
   PromptsManager := TMCPPromptsManager.Create;
   CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
+  SubscriptionsManager := TMCPSubscriptionsManager.Create;
+  ToolsManager.ChangeNotifier := SubscriptionsManager;
+  ResourcesManager.ChangeNotifier := SubscriptionsManager;
+  PromptsManager.ChangeNotifier := SubscriptionsManager;
 
   ManagerRegistry.RegisterManager(CoreManager);
   ManagerRegistry.RegisterManager(ToolsManager);
   ManagerRegistry.RegisterManager(ResourcesManager);
   ManagerRegistry.RegisterManager(PromptsManager);
   ManagerRegistry.RegisterManager(CompletionManager);
+  ManagerRegistry.RegisterManager(SubscriptionsManager);
 
   StdioTransport := TMCPStdioTransport.Create(ManagerRegistry, CoreManager);
   try

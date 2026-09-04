@@ -5,6 +5,7 @@ interface
 uses
   System.SysUtils,
   System.Classes,
+  System.SyncObjs,
   System.JSON,
   System.Rtti,
   System.Generics.Collections,
@@ -17,8 +18,12 @@ type
   strict private
     FTools: TDictionary<string, IMCPTool>;
     FOrder: TList<string>;
+    FLock: TCriticalSection;
     FListTtlMs: Integer;
     FListCacheScope: string;
+    FChangeNotifier: IMCPSubscriptionHub;
+    function TryGetTool(const Name: string; out Tool: IMCPTool): Boolean;
+    procedure NotifyListChanged;
     function ErrorResult(const Message: string; Era: TMCPProtocolEra): TJSONObject;
     function ResultToJson(const ResultValue: TValue; Era: TMCPProtocolEra): TJSONObject;
     function ExecuteTool(const Tool: IMCPTool; const Arguments: TJSONObject; Era: TMCPProtocolEra): TJSONObject;
@@ -35,6 +40,8 @@ type
     destructor Destroy; override;
 
     procedure AddTool(const Tool: IMCPTool);
+    procedure RemoveTool(const Name: string);
+    function HasTool(const Name: string): Boolean;
 
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
@@ -50,6 +57,7 @@ type
 
     property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
     property ListCacheScope: string read FListCacheScope write FListCacheScope;
+    property ChangeNotifier: IMCPSubscriptionHub read FChangeNotifier write FChangeNotifier;
   end;
 
 implementation
@@ -90,6 +98,7 @@ end;
 constructor TMCPToolsManager.Create;
 begin
   inherited;
+  FLock := TCriticalSection.Create;
   FTools := TDictionary<string, IMCPTool>.Create;
   FOrder := TList<string>.Create;
   FListTtlMs := 0;
@@ -101,6 +110,7 @@ destructor TMCPToolsManager.Destroy;
 begin
   FTools.Free;
   FOrder.Free;
+  FLock.Free;
   inherited;
 end;
 
@@ -116,8 +126,9 @@ end;
 
 procedure TMCPToolsManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 begin
+  var Announces := Assigned(FChangeNotifier) and (Era = TMCPProtocolEra.Modern);
   var Tools := TJSONObject.Create;
-  Tools.AddPair('listChanged', TJSONBool.Create(False));
+  Tools.AddPair('listChanged', TJSONBool.Create(Announces));
   Capabilities.AddPair('tools', Tools);
 end;
 
@@ -154,9 +165,51 @@ end;
 procedure TMCPToolsManager.RegisterTool(const Tool: IMCPTool);
 begin
   ValidateToolName(Tool.Name);
-  if not FTools.ContainsKey(Tool.Name) then
-    FOrder.Add(Tool.Name);
-  FTools.AddOrSetValue(Tool.Name, Tool);
+  FLock.Enter;
+  try
+    if not FTools.ContainsKey(Tool.Name) then
+      FOrder.Add(Tool.Name);
+    FTools.AddOrSetValue(Tool.Name, Tool);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TMCPToolsManager.TryGetTool(const Name: string; out Tool: IMCPTool): Boolean;
+begin
+  FLock.Enter;
+  try
+    Result := FTools.TryGetValue(Name, Tool);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+function TMCPToolsManager.HasTool(const Name: string): Boolean;
+var
+  Tool: IMCPTool;
+begin
+  Result := TryGetTool(Name, Tool);
+end;
+
+procedure TMCPToolsManager.RemoveTool(const Name: string);
+begin
+  FLock.Enter;
+  try
+    if not FTools.ContainsKey(Name) then
+      Exit;
+    FTools.Remove(Name);
+    FOrder.Remove(Name);
+  finally
+    FLock.Leave;
+  end;
+  NotifyListChanged;
+end;
+
+procedure TMCPToolsManager.NotifyListChanged;
+begin
+  if Assigned(FChangeNotifier) then
+    FChangeNotifier.ToolsListChanged;
 end;
 
 procedure TMCPToolsManager.RegisterBuiltInTools;
@@ -168,6 +221,7 @@ end;
 procedure TMCPToolsManager.AddTool(const Tool: IMCPTool);
 begin
   RegisterTool(Tool);
+  NotifyListChanged;
 end;
 
 procedure TMCPToolsManager.CheckCursor(const Params: TJSONObject);
@@ -301,8 +355,15 @@ begin
   var ToolsArray := TJSONArray.Create;
   Result.AddPair('tools', ToolsArray);
 
-  for var Name in FOrder do
-    ToolsArray.AddElement(CreateToolJSON(FTools[Name]));
+  FLock.Enter;
+  try
+    for var Name in FOrder do
+    begin
+      ToolsArray.AddElement(CreateToolJSON(FTools[Name]));
+    end;
+  finally
+    FLock.Leave;
+  end;
 
   if Era = TMCPProtocolEra.Modern then
   begin
@@ -347,7 +408,7 @@ begin
   if ArgumentsValue is TJSONObject then
     Arguments := TJSONObject(ArgumentsValue);
 
-  if not FTools.TryGetValue(ToolName, Tool) then
+  if not TryGetTool(ToolName, Tool) then
     raise EMCPError.UnknownTool(ToolName);
 
   TLogger.Info('MCP CallTool called for tool: ' + ToolName);

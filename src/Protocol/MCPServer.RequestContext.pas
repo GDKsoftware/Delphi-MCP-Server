@@ -71,6 +71,7 @@ type
     function GetManagerRegistry: IMCPManagerRegistry;
     function GetInputResponses: TJSONObject;
     function GetRequestState: TJSONObject;
+    function GetSink: IMCPMessageSink;
     function HasClientCapability(const Path: string): Boolean;
     procedure RequireClientCapability(const Path: string);
     function IsCancelled: Boolean;
@@ -235,6 +236,11 @@ end;
 function TMCPRequestContext.GetRequestState: TJSONObject;
 begin
   Result := FRequestState;
+end;
+
+function TMCPRequestContext.GetSink: IMCPMessageSink;
+begin
+  Result := FSink;
 end;
 
 function TMCPRequestContext.TryGetInputResponse(const Key: string; out Response: TJSONObject): Boolean;

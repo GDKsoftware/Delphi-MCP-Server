@@ -43,6 +43,7 @@ type
     const DEFAULT_SHUTDOWN_DRAIN_MS = 2000;
     const SHUTDOWN_CANCEL_GRACE_MS = 500;
     const QUEUE_DEPTH = 1024;
+    const LISTENER_POLL_MS = 10;
   strict private
     FManagerRegistry: IMCPManagerRegistry;
     FCoreManager: IMCPCapabilityManager;
@@ -55,6 +56,7 @@ type
     FWorkersDone: TCountdownEvent;
     FShutdownDrainMs: Integer;
     FWorkerStuck: Boolean;
+    FListeners: Integer;
     function GetSettings: TMCPSettings;
     procedure SetSettings(const Value: TMCPSettings);
     function Hints: TMCPTransportHints;
@@ -64,6 +66,8 @@ type
     procedure ProcessInline(const Message: TJSONValue);
     procedure DispatchLine(const Message: TJSONValue);
     procedure ProcessQueued(const Message: TJSONValue);
+    procedure StartListener(const Message: TJSONValue);
+    procedure CloseSubscriptions;
     procedure StartWorkers;
     procedure DrainAndStop;
     procedure ReadLoop(InputStream: TStream);
@@ -323,7 +327,13 @@ begin
       begin
         if not FTracker.Reserve(RequestId) then
         begin
-          SendError(RequestId, JSONRPC_INVALID_REQUEST, 'Request id ' + RequestId.AsText + ' is still in flight');
+          SendError(RequestId, JSONRPC_INVALID_REQUEST, Format('Request id %s is still in flight', [RequestId.AsText]));
+          Exit;
+        end;
+        if Method = MCP_METHOD_SUBSCRIPTIONS_LISTEN then
+        begin
+          StartListener(Message);
+          Queued := True;
           Exit;
         end;
         if FQueue.PushItem(Message) <> TWaitResult.wrSignaled then
@@ -357,6 +367,40 @@ begin
     FTracker.Release(RequestId);
     Message.Free;
   end;
+end;
+
+procedure TMCPStdioTransport.StartListener(const Message: TJSONValue);
+begin
+  AtomicIncrement(FListeners);
+  TThread.CreateAnonymousThread(
+    procedure
+    begin
+      try
+        try
+          ProcessQueued(Message);
+        except
+          on E: Exception do
+            TLogger.Error(Format('Error processing stdio subscription: %s', [E.Message]));
+        end;
+      finally
+        AtomicDecrement(FListeners);
+      end;
+    end).Start;
+end;
+
+procedure TMCPStdioTransport.CloseSubscriptions;
+var
+  Hub: IMCPSubscriptionHub;
+begin
+  Supports(FManagerRegistry.GetManagerForMethod(MCP_METHOD_SUBSCRIPTIONS_LISTEN), IMCPSubscriptionHub, Hub);
+  var Deadline := TThread.GetTickCount64 + UInt64(FShutdownDrainMs);
+  repeat
+    if Assigned(Hub) then
+      Hub.CloseAll('stdin closed');
+    if AtomicCmpExchange(FListeners, 0, 0) = 0 then
+      Break;
+    Sleep(LISTENER_POLL_MS);
+  until TThread.GetTickCount64 >= Deadline;
 end;
 
 procedure TMCPStdioTransport.WorkerLoop;
@@ -402,6 +446,7 @@ begin
     FTracker.CancelAll('stdin closed');
     FWorkersDone.WaitFor(SHUTDOWN_CANCEL_GRACE_MS);
   end;
+  CloseSubscriptions;
 
   if FWorkersDone.IsSet then
   begin

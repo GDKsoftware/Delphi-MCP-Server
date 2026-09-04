@@ -39,6 +39,9 @@ type
 
   EMCPToolError = class(Exception);
 
+  EMCPTransportError = class(Exception)
+  end;
+
   EMCPRequestCancelled = class(Exception);
 
 const

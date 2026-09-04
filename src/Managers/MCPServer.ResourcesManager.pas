@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils,
+  System.SyncObjs,
   System.Classes,
   System.JSON,
   System.Rtti,
@@ -18,8 +19,11 @@ type
     FResources: TDictionary<string, IMCPResource>;
     FOrder: TList<string>;
     FTemplates: TList<IMCPResourceTemplate>;
+    FLock: TCriticalSection;
+    FChangeNotifier: IMCPSubscriptionHub;
     FListTtlMs: Integer;
     FListCacheScope: string;
+    procedure NotifyListChanged;
     procedure RegisterResource(const Resource: IMCPResource);
     procedure RegisterBuiltInResources;
     procedure RegisterBuiltInResourceTemplates;
@@ -35,6 +39,8 @@ type
     destructor Destroy; override;
 
     procedure AddResource(const Resource: IMCPResource);
+    procedure RemoveResource(const URI: string);
+    procedure ResourceUpdated(const URI: string);
     procedure AddResourceTemplate(const Template: IMCPResourceTemplate);
     function TryGetResource(const URI: string; out Resource: IMCPResource): Boolean;
     function TryGetResourceTemplate(const UriTemplate: string; out Template: IMCPResourceTemplate): Boolean;
@@ -55,6 +61,7 @@ type
 
     property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
     property ListCacheScope: string read FListCacheScope write FListCacheScope;
+    property ChangeNotifier: IMCPSubscriptionHub read FChangeNotifier write FChangeNotifier;
   end;
 
 implementation
@@ -71,6 +78,7 @@ uses
 constructor TMCPResourcesManager.Create;
 begin
   inherited;
+  FLock := TCriticalSection.Create;
   FResources := TDictionary<string, IMCPResource>.Create;
   FOrder := TList<string>.Create;
   FTemplates := TList<IMCPResourceTemplate>.Create;
@@ -85,6 +93,7 @@ begin
   FResources.Free;
   FOrder.Free;
   FTemplates.Free;
+  FLock.Free;
   inherited;
 end;
 
@@ -102,9 +111,10 @@ end;
 
 procedure TMCPResourcesManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 begin
+  var Announces := Assigned(FChangeNotifier) and (Era = TMCPProtocolEra.Modern);
   var Resources := TJSONObject.Create;
-  Resources.AddPair('subscribe', TJSONBool.Create(False));
-  Resources.AddPair('listChanged', TJSONBool.Create(False));
+  Resources.AddPair('subscribe', TJSONBool.Create(Announces));
+  Resources.AddPair('listChanged', TJSONBool.Create(Announces));
   Capabilities.AddPair('resources', Resources);
 end;
 
@@ -136,9 +146,40 @@ end;
 
 procedure TMCPResourcesManager.RegisterResource(const Resource: IMCPResource);
 begin
-  if not FResources.ContainsKey(Resource.URI) then
-    FOrder.Add(Resource.URI);
-  FResources.AddOrSetValue(Resource.URI, Resource);
+  FLock.Enter;
+  try
+    if not FResources.ContainsKey(Resource.URI) then
+      FOrder.Add(Resource.URI);
+    FResources.AddOrSetValue(Resource.URI, Resource);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TMCPResourcesManager.RemoveResource(const URI: string);
+begin
+  FLock.Enter;
+  try
+    if not FResources.ContainsKey(URI) then
+      Exit;
+    FResources.Remove(URI);
+    FOrder.Remove(URI);
+  finally
+    FLock.Leave;
+  end;
+  NotifyListChanged;
+end;
+
+procedure TMCPResourcesManager.ResourceUpdated(const URI: string);
+begin
+  if Assigned(FChangeNotifier) then
+    FChangeNotifier.ResourceUpdated(URI);
+end;
+
+procedure TMCPResourcesManager.NotifyListChanged;
+begin
+  if Assigned(FChangeNotifier) then
+    FChangeNotifier.ResourcesListChanged;
 end;
 
 procedure TMCPResourcesManager.RegisterBuiltInResources;
@@ -156,11 +197,18 @@ end;
 procedure TMCPResourcesManager.AddResource(const Resource: IMCPResource);
 begin
   RegisterResource(Resource);
+  NotifyListChanged;
 end;
 
 procedure TMCPResourcesManager.AddResourceTemplate(const Template: IMCPResourceTemplate);
 begin
-  FTemplates.Add(Template);
+  FLock.Enter;
+  try
+    FTemplates.Add(Template);
+  finally
+    FLock.Leave;
+  end;
+  NotifyListChanged;
 end;
 
 function TMCPResourcesManager.TryGetResource(const URI: string; out Resource: IMCPResource): Boolean;
@@ -182,15 +230,25 @@ begin
 end;
 
 function TMCPResourcesManager.FindResource(const URI: string): IMCPResource;
+var
+  Templates: TArray<IMCPResourceTemplate>;
 begin
-  if FResources.TryGetValue(URI, Result) then
-    Exit;
+  FLock.Enter;
+  try
+    if FResources.TryGetValue(URI, Result) then
+      Exit;
+    Templates := FTemplates.ToArray;
+  finally
+    FLock.Leave;
+  end;
 
   var Vars := TMCPTemplateVars.Create;
   try
-    for var Template in FTemplates do
+    for var Template in Templates do
+    begin
       if Template.Matches(URI, Vars) then
         Exit(Template.CreateResource(URI, Vars));
+    end;
   finally
     Vars.Free;
   end;
@@ -285,8 +343,15 @@ begin
   try
     var ResourcesArray := TJSONArray.Create;
     ResultJSON.AddPair('resources', ResourcesArray);
-    for var URI in FOrder do
-      ResourcesArray.AddElement(CreateResourceJSON(FResources[URI]));
+    FLock.Enter;
+    try
+      for var URI in FOrder do
+      begin
+        ResourcesArray.AddElement(CreateResourceJSON(FResources[URI]));
+      end;
+    finally
+      FLock.Leave;
+    end;
     AddListCacheHints(ResultJSON, Era);
 
     Result := TValue.From<TJSONObject>(ResultJSON);
@@ -370,8 +435,15 @@ begin
   try
     var TemplatesArray := TJSONArray.Create;
     ResultJSON.AddPair('resourceTemplates', TemplatesArray);
-    for var Template in FTemplates do
-      TemplatesArray.AddElement(CreateResourceTemplateJSON(Template));
+    FLock.Enter;
+    try
+      for var Template in FTemplates do
+      begin
+        TemplatesArray.AddElement(CreateResourceTemplateJSON(Template));
+      end;
+    finally
+      FLock.Leave;
+    end;
     AddListCacheHints(ResultJSON, Era);
     Result := TValue.From<TJSONObject>(ResultJSON);
   except
