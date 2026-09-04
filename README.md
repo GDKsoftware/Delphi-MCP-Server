@@ -804,7 +804,7 @@ We welcome contributions! Here's how to help:
 ### Pull Requests
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Follow existing code style (inline vars, named constants)
+3. Follow the existing code style (inline vars, named constants, no comments in code); `coding-rules.md` in the repository root lists the conventions this library keeps on purpose
 4. Test your changes
 5. Submit a pull request
 

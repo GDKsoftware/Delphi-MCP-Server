@@ -15,8 +15,6 @@ type
     property Content: string read FContent write FContent;
   end;
 
-  /// A static text resource. The URIs of these sample resources follow the
-  /// official conformance suite, which reads them by URI.
   TStaticTextResource = class(TMCPResourceBase<TStaticText>)
   protected
     function GetResourceData: TStaticText; override;
@@ -24,7 +22,6 @@ type
     constructor Create; override;
   end;
 
-  /// A static binary resource (a 1x1 PNG), read through IMCPBinaryResource.
   TStaticBinaryResource = class(TMCPResourceBase<TStaticText>, IMCPBinaryResource)
   protected
     function GetResourceData: TStaticText; override;
@@ -44,7 +41,6 @@ type
     property Data: string read FData write FData;
   end;
 
-  /// test://template/{id}/data, matched by TTemplateDataResourceTemplate.
   TTemplateDataResource = class(TMCPResourceBase<TTemplateData>)
   private
     FId: string;
@@ -106,7 +102,6 @@ end;
 
 function TStaticBinaryResource.GetResourceData: TStaticText;
 begin
-  // Text reads of a binary resource hand out the Base64 form.
   Result := TStaticText.Create;
   Result.Content := SAMPLE_PNG_BASE64;
 end;

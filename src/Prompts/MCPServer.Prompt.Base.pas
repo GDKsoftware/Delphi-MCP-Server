@@ -16,9 +16,6 @@ type
     Required: Boolean;
   end;
 
-  /// Builds the messages of a prompts/get result: one role plus one content
-  /// block per message, the same block shapes tools/call uses (text, image,
-  /// audio, resource_link, embedded resource).
   TMCPPromptMessages = class
   strict private
     FMessages: TJSONArray;
@@ -28,7 +25,6 @@ type
     destructor Destroy; override;
 
     function AddText(const Role, Text: string): TMCPPromptMessages;
-    /// Data is the raw content; it is Base64-encoded here.
     function AddImage(const Role: string; const Data: TBytes; const MimeType: string): TMCPPromptMessages; overload;
     function AddImage(const Role, Base64Data, MimeType: string): TMCPPromptMessages; overload;
     function AddAudio(const Role: string; const Data: TBytes; const MimeType: string): TMCPPromptMessages; overload;
@@ -37,13 +33,9 @@ type
       const MimeType: string = ''): TMCPPromptMessages;
     function AddEmbeddedText(const Role, Uri, MimeType, Text: string): TMCPPromptMessages;
     function AddEmbeddedBlob(const Role, Uri, MimeType: string; const Data: TBytes): TMCPPromptMessages;
-    /// Reads Resource (text, or blob for an IMCPBinaryResource) and embeds
-    /// it under Role.
     function AddEmbeddedResource(const Role: string; const Resource: IMCPResource): TMCPPromptMessages;
-    /// Annotations for the message added last (audience, priority, lastModified).
     function WithAnnotations(const Annotations: TJSONObject): TMCPPromptMessages;
 
-    /// The messages array for the result; the caller owns the clone.
     function ToJson: TJSONArray;
   end;
 
@@ -53,9 +45,6 @@ type
     function GetTitle: string;
     function GetDescription: string;
     function GetArguments: TArray<TMCPPromptArgument>;
-    /// Arguments is never nil (an empty object when the request omitted
-    /// it). Builds the messages into Messages; returns the optional
-    /// result-level description.
     function Get(const Arguments: TJSONObject; Messages: TMCPPromptMessages): string;
 
     property Name: string read GetName;
@@ -64,7 +53,6 @@ type
     property Arguments: TArray<TMCPPromptArgument> read GetArguments;
   end;
 
-  /// Prompt with a hand-written argument list and raw JSON arguments.
   TMCPPromptBase = class(TInterfacedObject, IMCPPrompt, IMCPPromptMetadata)
   protected
     FName: string;
@@ -84,12 +72,6 @@ type
     function Get(const Arguments: TJSONObject; Messages: TMCPPromptMessages): string; virtual; abstract;
   end;
 
-  /// Prompt whose arguments are the string properties of a class T; the
-  /// argument list comes from T's RTTI, [SchemaDescription] and [Optional]
-  /// (a required property that is missing from arguments is -32602).
-  ///
-  /// T must declare only string properties: prompts/get arguments are
-  /// always plain strings on the wire.
   TMCPPromptBase<T: class, constructor> = class(TInterfacedObject, IMCPPrompt, IMCPPromptMetadata)
   protected
     FName: string;
@@ -300,7 +282,7 @@ begin
           Continue;
 
         var Arg: TMCPPromptArgument;
-        Arg.Name := LowerCase(Prop.Name);
+        Arg.Name := TMCPSerializer.GetWireName(Prop);
         Arg.Description := '';
         Arg.Required := True;
         for var Attr in Prop.GetAttributes do

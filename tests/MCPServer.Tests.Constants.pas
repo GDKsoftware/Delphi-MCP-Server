@@ -6,8 +6,6 @@ uses
   DUnitX.TestFramework;
 
 type
-  /// Guards the protocol constants in MCPServer.Types and the aliases that
-  /// keep MCPServer.JsonRpcProcessor.JSONRPC_* compiling for consumers.
   [TestFixture]
   TProtocolConstantsTests = class
   public
@@ -17,12 +15,14 @@ type
     [Test] procedure ProtocolVersions_AreConsistent;
     [Test] procedure MetaKeys_UseReservedPrefix;
     [Test] procedure CacheableMethods_MatchSpec;
+    [Test] procedure IsJsonString_AcceptsStringsOnly;
   end;
 
 implementation
 
 uses
   System.SysUtils,
+  System.JSON,
   MCPServer.Types,
   MCPServer.JsonRpcProcessor;
 
@@ -61,8 +61,8 @@ begin
   Assert.AreEqual('2025-11-25', MCP_LATEST_LEGACY_PROTOCOL_VERSION);
 
   Assert.AreEqual(2, Length(MCP_LEGACY_PROTOCOL_VERSIONS));
-  Assert.AreEqual(MCP_PROTOCOL_VERSION_2025_06_18, MCP_LEGACY_PROTOCOL_VERSIONS[0]);
-  Assert.AreEqual(MCP_PROTOCOL_VERSION_2025_11_25, MCP_LEGACY_PROTOCOL_VERSIONS[1]);
+  Assert.AreEqual(MCP_PROTOCOL_VERSION_2025_11_25, MCP_LEGACY_PROTOCOL_VERSIONS[0]);
+  Assert.AreEqual(MCP_PROTOCOL_VERSION_2025_06_18, MCP_LEGACY_PROTOCOL_VERSIONS[1]);
 
   Assert.AreEqual(1, Length(MCP_MODERN_PROTOCOL_VERSIONS));
   Assert.AreEqual(MCP_LATEST_PROTOCOL_VERSION, MCP_MODERN_PROTOCOL_VERSIONS[0]);
@@ -92,7 +92,20 @@ begin
   Assert.AreEqual('resources/read', MCP_CACHEABLE_METHODS[5]);
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TProtocolConstantsTests);
+procedure TProtocolConstantsTests.IsJsonString_AcceptsStringsOnly;
+begin
+  var Json := TJSONObject.ParseJSONValue('{"s":"text","n":12345,"f":1.5,"b":true,"o":{},"z":null}') as TJSONObject;
+  try
+    Assert.IsTrue(IsJsonString(Json.GetValue('s')));
+    Assert.IsFalse(IsJsonString(Json.GetValue('n')), 'a number is not a string');
+    Assert.IsFalse(IsJsonString(Json.GetValue('f')));
+    Assert.IsFalse(IsJsonString(Json.GetValue('b')));
+    Assert.IsFalse(IsJsonString(Json.GetValue('o')));
+    Assert.IsFalse(IsJsonString(Json.GetValue('z')));
+    Assert.IsFalse(IsJsonString(nil));
+  finally
+    Json.Free;
+  end;
+end;
 
 end.

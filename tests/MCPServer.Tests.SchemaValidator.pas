@@ -294,7 +294,4 @@ begin
   end;
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TSchemaValidatorTests);
-
 end.

@@ -25,7 +25,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    
+
     property Name: string read FName write FName;
     property Version: string read FVersion write FVersion;
     property Description: string read FDescription write FDescription;
@@ -59,7 +59,6 @@ type
     constructor Create; override;
   end;
 
-
 implementation
 
 uses
@@ -91,7 +90,6 @@ begin
   FName := 'Project Information';
   FDescription := 'Basic information about the Delphi MCP Server project';
   FMimeType := 'application/json';
-  // Static content: an hour of caching, shareable between callers.
   FTtlMs := PROJECT_RESOURCE_TTL_MS;
   FCacheScope := MCP_CACHE_SCOPE_PUBLIC;
 end;
@@ -160,7 +158,6 @@ begin
 '''';
 end;
 
-
 initialization
   TMCPRegistry.RegisterResource('project://info',
     function: IMCPResource
@@ -168,13 +165,13 @@ initialization
       Result := TProjectInfoResource.Create;
     end
   );
-  
+
   TMCPRegistry.RegisterResource('project://readme',
     function: IMCPResource
     begin
       Result := TProjectReadmeResource.Create;
     end
   );
-  
+
 
 end.

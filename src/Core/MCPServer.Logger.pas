@@ -12,14 +12,14 @@ type
   {$SCOPEDENUMS ON}
   TLogLevel = (Debug, Info, Warning, Error);
   {$SCOPEDENUMS OFF}
-  
+
   TLogMessageProc = reference to procedure(const Message: string);
 
   TLogger = class
   private
     class var FInstance: TLogger;
     class var FLock: TCriticalSection;
-    
+
     FLogToConsole: Boolean;
     FLogToFile: Boolean;
     FLogFile: TStreamWriter;
@@ -54,25 +54,22 @@ type
     class constructor Create;
     class destructor Destroy;
     destructor Destroy; override;
-    
+
     class function Instance: TLogger;
-    
+
     class procedure Debug(const Message: string); overload;
     class procedure Debug(const Format: string; const Args: array of const); overload;
-    
+
     class procedure Info(const Message: string); overload;
     class procedure Info(const Format: string; const Args: array of const); overload;
-    
+
     class procedure Warning(const Message: string); overload;
     class procedure Warning(const Format: string; const Args: array of const); overload;
-    
+
     class procedure Error(const Message: string); overload;
     class procedure Error(const Format: string; const Args: array of const); overload;
     class procedure Error(const Exception: Exception); overload;
 
-    /// Returns the JSON text with the values of _meta, requestState,
-    /// inputResponses and token-like members replaced, for logging. Text
-    /// that is not JSON is described by its length only.
     class function RedactJson(const Json: string): string;
 
     class property LogToConsole: Boolean read GetLogToConsole write SetLogToConsole;
@@ -81,10 +78,6 @@ type
     class property MinLogLevel: TLogLevel read GetMinLogLevel write SetMinLogLevel;
     class property OnLogMessage: TLogMessageProc read GetOnLogMessage write SetOnLogMessage;
     class property UseStdErr: Boolean read GetUseStdErr write SetUseStdErr;
-    /// True while a stdio transport owns stdout. Console logging then always
-    /// goes to stderr, and setting UseStdErr to False is refused with a
-    /// one-time warning, because anything on stdout that is not an MCP
-    /// message corrupts the channel. Set by TMCPStdioTransport.Create.
     class property StdoutReserved: Boolean read GetStdoutReserved write SetStdoutReserved;
   end;
 
@@ -142,7 +135,6 @@ begin
   Result := FInstance;
 end;
 
-
 procedure TLogger.EnsureLogFile;
 begin
   if FLogToFile and not Assigned(FLogFile) then
@@ -182,7 +174,6 @@ begin
   try
     if FLogToConsole then
     begin
-      // Never touch stdout while a stdio transport owns it.
       ToStdErr := FUseStdErr or FStdoutReserved;
 
       {$IFDEF MSWINDOWS}
@@ -202,14 +193,14 @@ begin
       SetConsoleTextAttribute(ConsoleHandle, 7);
       {$ENDIF}
     end;
-      
+
     if FLogToFile then
     begin
       EnsureLogFile;
       if Assigned(FLogFile) then
         FLogFile.WriteLine(LogLine);
     end;
-    
+
     if Assigned(FOnLogMessage) then
       FOnLogMessage(LogLine);
   finally
@@ -407,7 +398,6 @@ begin
     Exit;
   end;
 
-  // Refused: stdout belongs to the stdio transport. Warn once, on stderr.
   FLock.Enter;
   try
     WarnOnce := not lInstance.FStdoutWarningIssued;

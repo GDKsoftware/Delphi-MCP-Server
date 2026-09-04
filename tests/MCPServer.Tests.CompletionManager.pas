@@ -24,6 +24,7 @@ type
     [Test] procedure RefPrompt_MissingRefName_IsInvalidParams;
     [Test] procedure RefResource_Template_Completes;
     [Test] procedure RefResource_UnknownUri_IsNotFound;
+    [Test] procedure RefResource_UnknownUri_Legacy_IsLegacyNotFound;
     [Test] procedure MissingArgument_IsInvalidParams;
     [Test] procedure UnknownRefType_IsInvalidParams;
     [Test] procedure CapabilitiesInclude_Completions;
@@ -144,6 +145,25 @@ begin
   end;
 end;
 
+procedure TCompletionManagerTests.RefResource_UnknownUri_Legacy_IsLegacyNotFound;
+begin
+  var Manager := TMCPCompletionManager.Create(FHarness.PromptsManager, FHarness.ResourcesManager);
+  var Params := TJSONObject.ParseJSONValue(
+    '{"ref":{"type":"ref/resource","uri":"nope://missing"},"argument":{"name":"x","value":""}}') as TJSONObject;
+  try
+    try
+      Manager.Complete(Params, TMCPProtocolEra.Legacy).AsType<TJSONObject>.Free;
+      Assert.Fail('expected an error');
+    except
+      on E: EMCPError do
+        Assert.AreEqual(MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY, E.Code);
+    end;
+  finally
+    Params.Free;
+    Manager.Free;
+  end;
+end;
+
 procedure TCompletionManagerTests.MissingArgument_IsInvalidParams;
 begin
   var Manager := TMCPCompletionManager.Create(FHarness.PromptsManager, FHarness.ResourcesManager);
@@ -193,8 +213,5 @@ begin
     Manager.Free;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TCompletionManagerTests);
 
 end.

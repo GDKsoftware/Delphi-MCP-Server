@@ -1,16 +1,5 @@
 unit MCPServer.StdioTransport;
 
-/// The stdio transport: JSON-RPC messages on stdin, one per line, answered
-/// on stdout; every log line on stderr.
-///
-/// A reader thread (the calling thread of Run) parses each line. Messages
-/// without an id and legacy ping are handled on that thread at once, so a
-/// notifications/cancelled reaches a request that is still running. Other
-/// requests go through a queue to MaxConcurrentRequests worker threads
-/// (default 1: responses in request order). A cancelled request gets no
-/// response. When stdin closes, queued and running work is drained for
-/// ShutdownDrainMs, the rest is cancelled, and Run returns.
-
 interface
 
 uses
@@ -27,8 +16,6 @@ uses
   MCPServer.Logger;
 
 type
-  /// The requests a stdio process has accepted and not yet answered, keyed
-  /// by id, so notifications/cancelled can reach them.
   TMCPStdioRequestTracker = class(TInterfacedObject, IMCPRequestTracker)
   strict private
     type
@@ -43,14 +30,11 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    /// Claims the id when it is read; False when that id is still in flight.
     function Reserve(const RequestId: TMCPRequestId): Boolean;
-    /// Drops the claim once the request is answered or refused.
     procedure Release(const RequestId: TMCPRequestId);
     procedure Track(const Context: IMCPRequestContext);
     procedure Untrack(const Context: IMCPRequestContext);
     function TryCancel(const RequestId: TMCPRequestId; const Reason: string): Boolean;
-    /// Cancels everything still in flight; returns how many there were.
     function CancelAll(const Reason: string): Integer;
   end;
 
@@ -70,6 +54,7 @@ type
     FQueue: TThreadedQueue<TJSONValue>;
     FWorkersDone: TCountdownEvent;
     FShutdownDrainMs: Integer;
+    FWorkerStuck: Boolean;
     function GetSettings: TMCPSettings;
     procedure SetSettings(const Value: TMCPSettings);
     function Hints: TMCPTransportHints;
@@ -87,16 +72,9 @@ type
   public
     constructor Create(ManagerRegistry: IMCPManagerRegistry; CoreManager: IMCPCapabilityManager);
     destructor Destroy; override;
-    /// Serves the process's standard input and output until stdin closes.
     procedure Run;
-    /// Serves the given streams until the input ends; what Run does with the
-    /// standard handles. Both streams stay owned by the caller.
     procedure RunWith(InputStream, OutputStream: TStream);
-    /// Server identity and protocol options; assign before Run. Without it the
-    /// processor uses the defaults (settings.ini next to the executable).
     property Settings: TMCPSettings read GetSettings write SetSettings;
-    /// How long Run waits for in-flight requests after stdin closed before
-    /// cancelling them. Default DEFAULT_SHUTDOWN_DRAIN_MS.
     property ShutdownDrainMs: Integer read FShutdownDrainMs write FShutdownDrainMs;
   end;
 
@@ -147,7 +125,6 @@ end;
 
 class function TMCPStdioRequestTracker.KeyOf(const RequestId: TMCPRequestId): string;
 begin
-  // 1 and "1" are different ids.
   if RequestId.Kind = TMCPRequestIdKind.Number then
     Result := 'n:' + RequestId.AsText
   else
@@ -192,7 +169,6 @@ begin
   finally
     FLock.Leave;
   end;
-  // The cancellation arrived before the handler started.
   if CancelNow then
     Context.Cancel;
 end;
@@ -227,7 +203,7 @@ begin
   if Reason <> '' then
     TLogger.Info(Format('Request %s cancelled by the client: %s', [RequestId.AsText, Reason]))
   else
-    TLogger.Info('Request ' + RequestId.AsText + ' cancelled by the client');
+    TLogger.Info(Format('Request %s cancelled by the client', [RequestId.AsText]));
 end;
 
 function TMCPStdioRequestTracker.CancelAll(const Reason: string): Integer;
@@ -236,7 +212,7 @@ begin
   try
     FLock.Enter;
     try
-      Result := FEntries.Count;
+      Result := Integer(FEntries.Count);
       for var Key in FEntries.Keys.ToArray do
       begin
         var Entry := FEntries[Key];
@@ -270,17 +246,18 @@ begin
   FTrackerIntf := FTracker;
   FShutdownDrainMs := DEFAULT_SHUTDOWN_DRAIN_MS;
 
-  // stdout carries MCP messages only; every log line must go to stderr,
-  // also for library consumers that never set UseStdErr themselves.
   TLogger.UseStdErr := True;
   TLogger.StdoutReserved := True;
 end;
 
 destructor TMCPStdioTransport.Destroy;
 begin
-  FJsonRpcProcessor.Free;
-  FLegacySession.Free;
-  FTrackerIntf := nil;
+  if not FWorkerStuck then
+  begin
+    FJsonRpcProcessor.Free;
+    FLegacySession.Free;
+    FTrackerIntf := nil;
+  end;
   inherited;
 end;
 
@@ -331,8 +308,6 @@ end;
 
 procedure TMCPStdioTransport.DispatchLine(const Message: TJSONValue);
 begin
-  // Malformed shapes, notifications, client responses and legacy ping are
-  // answered on the reader thread; every other request is queued.
   var Queued := False;
   try
     if Message is TJSONObject then
@@ -388,12 +363,11 @@ procedure TMCPStdioTransport.WorkerLoop;
 var
   Message: TJSONValue;
 begin
+  var Queue := FQueue;
+  var Done := FWorkersDone;
   try
-    while FQueue.PopItem(Message) = TWaitResult.wrSignaled do
+    while Queue.PopItem(Message) = TWaitResult.wrSignaled do
     begin
-      // A nil sentinel (one per worker, pushed by DrainAndStop) is the
-      // shutdown signal: everything queued ahead of it is real work and
-      // gets processed first, since the queue is FIFO.
       if not Assigned(Message) then
         Break;
       try
@@ -404,7 +378,7 @@ begin
       end;
     end;
   finally
-    FWorkersDone.Signal;
+    Done.Signal;
   end;
 end;
 
@@ -420,31 +394,27 @@ end;
 
 procedure TMCPStdioTransport.DrainAndStop;
 begin
-  // One sentinel per worker: whatever real work is already queued runs
-  // first (the queue is FIFO), then each worker pops its sentinel and
-  // stops. No new work is pushed after this point (the reader loop has
-  // already returned).
   for var I := 1 to WorkerCount do
     FQueue.PushItem(nil);
 
-  if FWorkersDone.WaitFor(FShutdownDrainMs) <> TWaitResult.wrSignaled then
+  if FWorkersDone.WaitFor(Cardinal(FShutdownDrainMs)) <> TWaitResult.wrSignaled then
   begin
     FTracker.CancelAll('stdin closed');
     FWorkersDone.WaitFor(SHUTDOWN_CANCEL_GRACE_MS);
   end;
 
-  // A worker that is still stuck in a handler owns nothing we free here; it
-  // ends with the process. Once every worker took its sentinel the queue
-  // holds nothing else, so it is safe to free here.
   if FWorkersDone.IsSet then
   begin
     FWorkersDone.Free;
     FQueue.Free;
+    FWorkersDone := nil;
+    FQueue := nil;
   end
   else
+  begin
+    FWorkerStuck := True;
     TLogger.Warning('A request handler did not stop; leaving it to the process exit');
-  FWorkersDone := nil;
-  FQueue := nil;
+  end;
 end;
 
 procedure TMCPStdioTransport.ReadLoop(InputStream: TStream);
@@ -470,7 +440,6 @@ begin
           DispatchLine(TJSONObject.ParseJSONValue(Line));
         end;
       except
-        // Never on stdout: a failure here has no request to answer.
         on E: Exception do
           TLogger.Error('Error reading stdio request: ' + E.Message);
       end;

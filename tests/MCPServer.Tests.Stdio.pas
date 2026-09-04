@@ -12,8 +12,6 @@ uses
   MCPServer.Tests.Harness;
 
 type
-  /// Drives TMCPStdioTransport.RunWith over in-memory streams: the bytes a
-  /// client would write to stdin in, the bytes it would read from stdout out.
   [TestFixture]
   TStdioTransportTests = class
   private
@@ -175,8 +173,6 @@ procedure TStdioTransportTests.DuplicateId_WhileInFlight_IsInvalidRequest;
 begin
   var Slow := '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":4,"stepMs":100}}}';
   var Lines := Run([Slow, '{"jsonrpc":"2.0","id":7,"method":"ping"}']);
-  // ping is answered inline and is never a duplicate; the second queued
-  // request with the same id is.
   Lines := Run([Slow, Slow]);
   Assert.AreEqual(2, Integer(Length(Lines)));
   var First := ParseLine(Lines[0]);
@@ -261,8 +257,5 @@ begin
   Assert.AreEqual(0, Integer(Length(Lines)), 'the request was cancelled at shutdown and got no response');
   Assert.IsTrue(FElapsedMs < 3000, 'Run returned after the drain timeout: ' + FElapsedMs.ToString + ' ms');
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TStdioTransportTests);
 
 end.

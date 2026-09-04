@@ -6,8 +6,6 @@ uses
   DUnitX.TestFramework;
 
 type
-  /// Header value decoding (Base64 sentinel), Accept parsing, Origin policy
-  /// and the JSON depth scanner.
   [TestFixture]
   THttpHeadersTests = class
   public
@@ -24,6 +22,7 @@ type
     [Test] procedure Origin_AbsentAllowed_NullDenied;
     [Test] procedure Origin_AllowListMatchesSchemeHostAndPort;
     [Test] procedure Origin_PortWildcardAndAllowAll;
+    [Test] procedure Origin_DefaultPortEqualsExplicitPort;
     [Test] procedure NestingDepth_CountsObjectsAndArraysOutsideStrings;
   end;
 
@@ -146,6 +145,15 @@ begin
   Assert.IsFalse(TMCPOriginPolicy.IsAllowed('null', ['*']));
 end;
 
+procedure THttpHeadersTests.Origin_DefaultPortEqualsExplicitPort;
+begin
+  Assert.IsTrue(TMCPOriginPolicy.IsAllowed('https://app.example:443', ['https://app.example']));
+  Assert.IsTrue(TMCPOriginPolicy.IsAllowed('https://app.example', ['https://app.example:443']));
+  Assert.IsTrue(TMCPOriginPolicy.IsAllowed('http://app.example:80', ['http://app.example']));
+  Assert.IsFalse(TMCPOriginPolicy.IsAllowed('http://app.example:8080', ['http://app.example']));
+  Assert.IsFalse(TMCPOriginPolicy.IsAllowed('http://app.example:443', ['https://app.example']));
+end;
+
 procedure THttpHeadersTests.NestingDepth_CountsObjectsAndArraysOutsideStrings;
 begin
   Assert.AreEqual(0, TMCPJsonLimits.NestingDepth('"scalar"'));
@@ -154,8 +162,5 @@ begin
   Assert.AreEqual(1, TMCPJsonLimits.NestingDepth('{"a":"[[[{{{"}'));
   Assert.AreEqual(2, TMCPJsonLimits.NestingDepth('{"a":"\"[","b":[1]}'));
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(THttpHeadersTests);
 
 end.

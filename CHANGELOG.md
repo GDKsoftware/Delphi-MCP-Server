@@ -288,3 +288,29 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The result object of a `TMCPToolBase<T, R>` tool was cloned into
   `structuredContent` and never freed; every call leaked it.
 - Enumeration properties of a result were serialised as booleans.
+- Resource templates compiled their pattern into one shared `TRegEx` and
+  matched on it from every Indy thread at once; matching is thread-safe now.
+  Template variables are percent-decoded only: a `+` in a URI stays a `+`.
+- The stdio worker threads could still be running when the transport was
+  freed after the drain timeout; the transport now leaves the shared objects
+  in place for them instead of freeing them under a running thread.
+- The stdio line reader read a line longer than the limit into memory before
+  rejecting it; it now discards such a line chunk by chunk up to its newline.
+- `TMCPLegacySession` was read and written by several threads without a
+  lock.
+- Origin allow-list entries without a port did not match an `Origin` header
+  that spelled out the default port (`https://app.example:443`), and the
+  other way round.
+- `jsonrpc`, `method`, `protocolVersion`, `MCP-Name` and the cancel `reason`
+  were accepted when they were numbers, because `TJSONNumber` descends from
+  `TJSONString`; `IsJsonString` in `MCPServer.Types` tells them apart.
+- `completion/complete` for an unknown `ref/resource` answers `-32002` to a
+  legacy client (`-32602` stays for a modern one).
+- `TMCPCompletionManager` did not hold a reference to the prompts and
+  resources managers it was given as interfaces.
+- The `/info` endpoint listed the protocol versions in a fixed string; it
+  now derives them from the supported version lists, newest first.
+- An invalid JSON literal in a `[SchemaDefault]` attribute raises
+  `EArgumentException` instead of being silently dropped.
+- A tool result that fails to serialise no longer leaks the partial JSON
+  object; the DEBUG `outputSchema` check no longer leaks the schema.

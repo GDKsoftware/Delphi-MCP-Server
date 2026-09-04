@@ -1,10 +1,5 @@
 unit MCPServer.StdioChannel;
 
-/// The byte-level side of the stdio transport: one UTF-8 encoded JSON-RPC
-/// message per line, LF-delimited, no BOM, and the standard handles as
-/// streams. Text I/O is deliberately not used: it decodes stdin with the
-/// console code page on Windows and would alter every non-ASCII character.
-
 interface
 
 uses
@@ -15,17 +10,11 @@ uses
 
 type
   TMCPLineStatus = (
-    /// A complete line was decoded.
     Ok,
-    /// The line exceeded the limit; it was skipped up to its newline.
     TooLong,
-    /// The bytes were not valid UTF-8; the line was skipped.
     InvalidUtf8
   );
 
-  /// Reads LF-delimited UTF-8 lines from a byte stream. A trailing CR is
-  /// dropped, a leading byte-order mark is ignored, the last line needs no
-  /// newline.
   TMCPLineReader = class
   strict private
     const READ_CHUNK_BYTES = 64 * 1024;
@@ -40,13 +29,9 @@ type
     function DecodeLine(Start, Count: Integer; out Line: string): TMCPLineStatus;
   public
     constructor Create(Stream: TStream; MaxLineBytes: Integer);
-    /// False at the end of the stream. Status says whether Line is usable.
     function ReadLine(out Line: string; out Status: TMCPLineStatus): Boolean;
   end;
 
-  /// Writes one message per line, UTF-8 with a bare LF, and serialises
-  /// concurrent writers so lines never interleave. Any newline inside a
-  /// message is replaced by a space: the framing does not allow it.
   TMCPLineWriter = class(TInterfacedObject, IMCPMessageSink)
   strict private
     FStream: TStream;
@@ -57,7 +42,6 @@ type
     procedure Send(const Json: string);
   end;
 
-/// Streams over the process's standard input and output handles.
 function StandardInputStream: TStream;
 function StandardOutputStream: TStream;
 
@@ -103,7 +87,6 @@ end;
 
 function TMCPLineReader.Fill: Boolean;
 begin
-  // Grow the buffer when a line is longer than a chunk, then append a chunk.
   if Length(FPending) - FPendingLength < READ_CHUNK_BYTES then
     SetLength(FPending, Length(FPending) + READ_CHUNK_BYTES);
 
@@ -142,11 +125,9 @@ begin
   try
     Line := TEncoding.UTF8.GetString(FPending, Start, Count);
   except
-    // Some malformed sequences raise instead of decoding leniently.
     Line := '';
     Exit(TMCPLineStatus.InvalidUtf8);
   end;
-  // The RTL decoder answers an empty string for other malformed input.
   if (Line = '') and (Count > 0) then
     Exit(TMCPLineStatus.InvalidUtf8);
   Result := TMCPLineStatus.Ok;
@@ -172,9 +153,37 @@ begin
       end;
     ScanFrom := FPendingLength;
 
+    if FPendingLength > FMaxLineBytes then
+    begin
+      FPendingLength := 0;
+      var Skipped: TArray<Byte>;
+      SetLength(Skipped, READ_CHUNK_BYTES);
+      while True do
+      begin
+        var Count := Integer(FStream.Read(Skipped[0], Length(Skipped)));
+        if Count <= 0 then
+        begin
+          FEndOfStream := True;
+          Line := '';
+          Status := TMCPLineStatus.TooLong;
+          Exit(True);
+        end;
+        for var I := 0 to Count - 1 do
+          if Skipped[I] = 10 then
+          begin
+            var Rest: Integer := Count - (I + 1);
+            if Rest > 0 then
+              Move(Skipped[I + 1], FPending[0], Rest);
+            FPendingLength := Rest;
+            Line := '';
+            Status := TMCPLineStatus.TooLong;
+            Exit(True);
+          end;
+      end;
+    end;
+
     if FEndOfStream or not Fill then
     begin
-      // The final line may end without a newline.
       if FPendingLength = 0 then
         Exit(False);
       Status := DecodeLine(0, FPendingLength, Line);

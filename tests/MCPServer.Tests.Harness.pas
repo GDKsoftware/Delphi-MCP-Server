@@ -12,10 +12,6 @@ uses
   MCPServer.JsonRpcProcessor;
 
 type
-  /// Builds the same manager registry as MCPServer.dpr (core, tools,
-  /// resources, prompts and completion managers on top of the built-in
-  /// registrations) and drives the transport-independent JSON-RPC processor
-  /// directly.
   TMCPTestHarness = class
   private
     FSettings: TMCPSettings;
@@ -29,8 +25,6 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    /// Sends one JSON-RPC message through the processor and returns the raw
-    /// response body; an empty string means "no response" (notification).
     function Process(const RequestBody: string): string;
 
     property Settings: TMCPSettings read FSettings;
@@ -54,8 +48,6 @@ constructor TMCPTestHarness.Create;
 begin
   inherited Create;
 
-  // Never create a settings.ini next to the test executable; the defaults are
-  // the same values the server writes into a fresh settings.ini.
   FSettings := TMCPSettings.Create('', False);
 
   FManagerRegistry := TMCPManagerRegistry.Create;

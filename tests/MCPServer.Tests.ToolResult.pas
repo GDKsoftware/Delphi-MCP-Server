@@ -152,7 +152,4 @@ begin
   Assert.IsFalse(Encoded.Contains(#13) or Encoded.Contains(#10));
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TToolResultTests);
-
 end.

@@ -8,8 +8,6 @@ uses
   MCPServer.Tests.Golden;
 
 type
-  /// Pins the wire behaviour for requests that carry per-request _meta
-  /// (MCP 2026-07-28), replayed through the plain JSON-RPC layer.
   [TestFixture]
   TModernGoldenTests = class
   private
@@ -77,7 +75,6 @@ end;
 
 procedure TModernGoldenTests.Server_Discover_AfterInitialize;
 begin
-  // A legacy handshake on the same process must not latch the server.
   FHarness.Process(INITIALIZE_REQUEST);
   CheckGolden('server-discover');
 end;
@@ -156,8 +153,5 @@ procedure TModernGoldenTests.MissingJsonRpcField;
 begin
   CheckGolden('missing-jsonrpc-field');
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TModernGoldenTests);
 
 end.

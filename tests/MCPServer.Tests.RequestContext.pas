@@ -13,7 +13,6 @@ uses
   MCPServer.Tests.Harness;
 
 type
-  /// Era detection, one branch per test, straight against BuildRequestContext.
   [TestFixture]
   TRequestContextTests = class
   private
@@ -125,8 +124,6 @@ end;
 
 procedure TRequestContextTests.Initialize_WithModernMeta_IsNotFound;
 begin
-  // A modern client probing with initialize must learn that the method does
-  // not exist in its era; only an initialize without modern _meta is legacy.
   ExpectError(Request('initialize', '{"protocolVersion":"2025-11-25",' + META_MODERN + '}'), TMCPTransportHints.None,
     JSONRPC_METHOD_NOT_FOUND, 404, 'initialize is legacy-only');
 
@@ -180,7 +177,6 @@ begin
   var Context := Build(Request('tools/list', '{' + META_MODERN + '}'), Hints);
   Assert.AreEqual(TMCPProtocolEra.Modern, Context.Era);
 
-  // The mirrored method header is compared case-sensitively.
   Hints.MethodHeader := 'TOOLS/LIST';
   ExpectError(Request('tools/list', '{' + META_MODERN + '}'), Hints,
     MCP_ERROR_HEADER_MISMATCH, 400, 'Mcp-Method differs from the body');
@@ -203,7 +199,6 @@ begin
   Hints.NameHeader := 'file:///cafe.txt';
   ExpectError(Body, Hints, MCP_ERROR_HEADER_MISMATCH, 400, 'Mcp-Name differs from params.uri');
 
-  // "file:///café.txt" as UTF-8 in the Base64 sentinel form.
   Hints.NameHeader := '=?base64?ZmlsZTovLy9jYWbDqS50eHQ=?=';
   var Context := Build(Body, Hints);
   Assert.AreEqual(TMCPProtocolEra.Modern, Context.Era);
@@ -364,8 +359,5 @@ begin
     end;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TRequestContextTests);
 
 end.

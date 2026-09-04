@@ -1,10 +1,5 @@
 unit MCPServer.ContentBlocks;
 
-/// Content block builders shared by tools/call results (an array of blocks)
-/// and prompts/get messages (one block per message): the wire shape for
-/// text, image, audio, resource link and embedded resource content is the
-/// same in both places.
-
 interface
 
 uses
@@ -19,7 +14,6 @@ function CreateResourceLinkBlock(const Uri, Name: string; const Description: str
 function CreateEmbeddedTextBlock(const Uri, MimeType, Text: string): TJSONObject;
 function CreateEmbeddedBlobBlock(const Uri, MimeType, Base64Blob: string): TJSONObject;
 
-/// Base64 without line breaks, as the schema requires for blobs.
 function EncodeBase64Blob(const Data: TBytes): string;
 
 implementation

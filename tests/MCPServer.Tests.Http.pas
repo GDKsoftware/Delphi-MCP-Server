@@ -22,7 +22,6 @@ type
     function Json: TJSONObject;
   end;
 
-  /// The Streamable HTTP transport, in-process on an ephemeral port.
   [TestFixture]
   THttpTransportTests = class
   private
@@ -435,7 +434,6 @@ begin
   StartServer;
   var Addresses := FServer.BoundAddresses;
   Assert.IsTrue(Length(Addresses) >= 1);
-  // Indy reports the IPv6 loopback in its expanded form.
   for var Address in Addresses do
     Assert.IsTrue(Address.StartsWith('127.0.0.1:') or Address.StartsWith('[::1]:')
       or Address.StartsWith('[0:0:0:0:0:0:0:1]:'), Address);
@@ -465,8 +463,5 @@ begin
   end;
   Assert.AreEqual(404, Send('GET', '/nothing', '', []).Status);
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(THttpTransportTests);
 
 end.

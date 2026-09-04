@@ -13,8 +13,6 @@ type
   TNoParams = class
   end;
 
-  /// Plain text result. The names of these sample tools follow the official
-  /// conformance suite, which calls them by name.
   TSimpleTextTool = class(TMCPToolBase<TNoParams>)
   protected
     function ExecuteWithParams(const Params: TNoParams): string; override;
@@ -22,7 +20,6 @@ type
     constructor Create; override;
   end;
 
-  /// One image block (a 1x1 PNG).
   TImageContentTool = class(TMCPToolBase<TNoParams>)
   protected
     function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
@@ -30,7 +27,6 @@ type
     constructor Create; override;
   end;
 
-  /// One audio block (a silent WAV).
   TAudioContentTool = class(TMCPToolBase<TNoParams>)
   protected
     function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
@@ -38,7 +34,6 @@ type
     constructor Create; override;
   end;
 
-  /// An embedded text resource.
   TEmbeddedResourceTool = class(TMCPToolBase<TNoParams>)
   protected
     function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
@@ -46,7 +41,6 @@ type
     constructor Create; override;
   end;
 
-  /// Text, image and an embedded resource in one result.
   TMultipleContentTypesTool = class(TMCPToolBase<TNoParams>)
   protected
     function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
@@ -54,7 +48,6 @@ type
     constructor Create; override;
   end;
 
-  /// Always fails with a tool execution error (isError: true).
   TProgressToolParams = class
   private
     FSteps: Integer;
@@ -68,7 +61,6 @@ type
     property StepMs: Integer read FStepMs write FStepMs;
   end;
 
-  /// Reports progress for every step and stops when the client cancels.
   TProgressTool = class(TMCPToolBase<TProgressToolParams>)
   public
     const DEFAULT_STEPS = 5;
@@ -89,9 +81,6 @@ type
     constructor Create; override;
   end;
 
-  /// A hand-written schema exercising the JSON Schema 2020-12 keywords the
-  /// conformance suite checks for verbatim preservation: $schema, $defs,
-  /// $anchor, $ref, allOf/anyOf, if/then/else and additionalProperties.
   TJsonSchema202012Tool = class(TMCPToolBase)
   protected
     function BuildSchema: TJSONObject; override;
@@ -103,9 +92,7 @@ type
 const
   SAMPLE_TEXT_RESOURCE_URI = 'test://static-text';
   SAMPLE_TEXT_RESOURCE_CONTENT = 'This is the content of the static text resource.';
-  /// A 1x1 transparent PNG.
   SAMPLE_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-  /// A WAV header for 8 kHz mono 8-bit audio with no samples.
   SAMPLE_WAV_BASE64 = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
 
 implementation
@@ -230,7 +217,7 @@ begin
       Context.CheckCancelled;
       Context.ReportProgress(Step - 1, Steps, Format('Step %d of %d', [Step, Steps]));
     end;
-    Sleep(StepMs);
+    Sleep(Cardinal(StepMs));
   end;
   if Assigned(Context) then
     Context.ReportProgress(Steps, Steps, 'Done');

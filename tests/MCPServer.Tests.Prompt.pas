@@ -202,8 +202,4 @@ begin
   end;
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TPromptMessagesTests);
-  TDUnitX.RegisterTestFixture(TPromptBaseTests);
-
 end.

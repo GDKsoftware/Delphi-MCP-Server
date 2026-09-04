@@ -14,19 +14,14 @@ uses
   MCPServer.ResourcesManager;
 
 type
-  /// completion/complete for a prompt argument (ref/prompt) or a resource
-  /// template variable (ref/resource, tried as a template's uriTemplate
-  /// first, then as an exact resource's URI).
-  ///
-  /// A target that does not implement IMCPCompletable answers no
-  /// suggestions rather than an error, since not offering completion for a
-  /// known prompt or resource is a valid choice.
   TMCPCompletionManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPCapabilityProvider)
   strict private
     FPrompts: TMCPPromptsManager;
     FResources: TMCPResourcesManager;
+    FPromptsRef: IInterface;
+    FResourcesRef: IInterface;
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
-    function ResolveTarget(const Ref: TJSONObject): IInterface;
+    function ResolveTarget(const Ref: TJSONObject; Era: TMCPProtocolEra): IInterface;
     function ParseContext(const Params: TJSONObject): TArray<TPair<string, string>>;
     function BuildCompletionJSON(const Completion: TMCPCompletion): TJSONObject;
   public
@@ -58,6 +53,8 @@ begin
   inherited Create;
   FPrompts := Prompts;
   FResources := Resources;
+  FPromptsRef := Prompts;
+  FResourcesRef := Resources;
 end;
 
 function TMCPCompletionManager.GetCapabilityName: string;
@@ -97,7 +94,7 @@ begin
     raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
 end;
 
-function TMCPCompletionManager.ResolveTarget(const Ref: TJSONObject): IInterface;
+function TMCPCompletionManager.ResolveTarget(const Ref: TJSONObject; Era: TMCPProtocolEra): IInterface;
 var
   Prompt: IMCPPrompt;
   Template: IMCPResourceTemplate;
@@ -129,7 +126,7 @@ begin
     else if FResources.TryGetResource(Uri, Resource) then
       Result := Resource
     else
-      raise EMCPError.ResourceNotFound(Uri, TMCPProtocolEra.Modern);
+      raise EMCPError.ResourceNotFound(Uri, Era);
   end
   else
     raise EMCPError.InvalidParams('params.ref.type must be "ref/prompt" or "ref/resource"');
@@ -198,7 +195,7 @@ begin
 
   TLogger.Info('MCP Complete called for argument: ' + TJSONString(ArgumentNameValue).Value);
 
-  var Target := ResolveTarget(TJSONObject(RefValue));
+  var Target := ResolveTarget(TJSONObject(RefValue), Era);
   var Completion: TMCPCompletion;
   if Supports(Target, IMCPCompletable, Completable) then
     Completion := Completable.Complete(TJSONString(ArgumentNameValue).Value, TJSONString(ArgumentValueValue).Value,

@@ -18,15 +18,6 @@ type
   TMCPPromptFactory = reference to function: IMCPPrompt;
   TMCPResourceTemplateFactory = reference to function: IMCPResourceTemplate;
 
-  /// Process-wide registry of tool, resource, prompt and resource-template
-  /// factories, enumerated in registration order.
-  ///
-  /// The dictionaries exist from the class constructor on, so registration
-  /// from unit initialization sections needs no lazy checks. Registration is
-  /// not synchronised: register everything before the managers are created.
-  /// TMCPToolsManager.Create and TMCPResourcesManager.Create read the
-  /// registry once, so in practice that means before TMCPIdHTTPServer.Start
-  /// or TMCPStdioTransport.Run.
   TMCPRegistry = class
   private
     class var FTools: TDictionary<string, TMCPToolFactory>;
@@ -45,8 +36,6 @@ type
     class procedure RegisterResource(const URI: string; Factory: TMCPResourceFactory);
     class procedure RegisterPrompt(const Name: string; Factory: TMCPPromptFactory);
     class procedure RegisterResourceTemplate(const UriTemplate: string; Factory: TMCPResourceTemplateFactory);
-    /// Removes a registration again (no-op for an unknown URI). Like
-    /// registration, only meaningful before the managers are created.
     class procedure UnregisterResource(const URI: string);
 
     class function CreateTool(const Name: string): IMCPTool;
@@ -54,13 +43,9 @@ type
     class function CreatePrompt(const Name: string): IMCPPrompt;
     class function CreateResourceTemplate(const UriTemplate: string): IMCPResourceTemplate;
 
-    /// Names in registration order.
     class function GetToolNames: TArray<string>;
-    /// URIs in registration order.
     class function GetResourceURIs: TArray<string>;
-    /// Names in registration order.
     class function GetPromptNames: TArray<string>;
-    /// Template strings in registration order.
     class function GetResourceTemplateURIs: TArray<string>;
 
     class function HasTool(const Name: string): Boolean;

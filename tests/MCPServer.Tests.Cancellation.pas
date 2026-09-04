@@ -12,7 +12,6 @@ uses
   MCPServer.Tests.Harness;
 
 type
-  /// Collects what a context sends through the sink.
   TRecordingSink = class(TInterfacedObject, IMCPMessageSink)
   private
     FMessages: TStrings;
@@ -21,8 +20,6 @@ type
     procedure Send(const Json: string);
   end;
 
-  /// A tracker that cancels every request as soon as it is tracked and
-  /// records the cancellations it is asked for.
   TCancellingTracker = class(TInterfacedObject, IMCPRequestTracker)
   private
     FCancelOnTrack: Boolean;
@@ -267,8 +264,5 @@ begin
     Harness.Free;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TCancellationTests);
 
 end.

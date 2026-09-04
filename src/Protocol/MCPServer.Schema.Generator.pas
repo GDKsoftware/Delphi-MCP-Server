@@ -9,25 +9,6 @@ uses
   System.JSON;
 
 type
-  /// JSON Schema (2020-12 subset) for a parameter or result class, derived
-  /// from its published/public properties:
-  ///
-  ///   Integer, Int64, Byte ...        integer
-  ///   Double, Single, Currency        number
-  ///   TDateTime / TDate / TTime       string with format date-time / date / time
-  ///   string                          string
-  ///   Boolean                         boolean
-  ///   other enumerations              string with the enum names
-  ///   sets                            array of enum names
-  ///   dynamic arrays, TList<T>        array with typed items
-  ///   TJSONArray / TJSONObject        array / object (free form)
-  ///   other classes                   nested object schema
-  ///
-  /// Property attributes: [SchemaDescription], [SchemaTitle], [SchemaFormat],
-  /// [SchemaMinimum], [SchemaMaximum], [SchemaMinLength], [SchemaMaxLength],
-  /// [SchemaPattern], [SchemaDefault], [SchemaEnum], [SchemaName] (overrides
-  /// the wire name) and [Optional]. Class attributes:
-  /// [SchemaAdditionalProperties] and [SchemaDialect] (root schema only).
   TMCPSchemaGenerator = class
   private
     const MAX_NESTING_DEPTH = 8;
@@ -95,7 +76,6 @@ end;
 
 class function TMCPSchemaGenerator.ListItemType(RttiType: TRttiType): TRttiType;
 begin
-  // TList<T> and TObjectList<T> expose Items[Index: NativeInt]: T.
   Result := nil;
   var ItemsProp := RttiType.GetIndexedProperty('Items');
   if not Assigned(ItemsProp) or not Assigned(ItemsProp.ReadMethod) then
@@ -203,7 +183,6 @@ end;
 
 class function TMCPSchemaGenerator.NumberValue(const Value: Double): TJSONNumber;
 begin
-  // Whole bounds are written as integers, so "minimum": 1 rather than 1.0.
   if Frac(Value) = 0 then
     Result := TJSONNumber.Create(Trunc(Value))
   else
@@ -242,7 +221,13 @@ begin
     else if Attr is SchemaPatternAttribute then
       PropSchema.AddPair('pattern', SchemaPatternAttribute(Attr).Pattern)
     else if Attr is SchemaDefaultAttribute then
-      PropSchema.AddPair('default', TJSONObject.ParseJSONValue(SchemaDefaultAttribute(Attr).Json));
+    begin
+      var DefaultValue := TJSONObject.ParseJSONValue(SchemaDefaultAttribute(Attr).Json);
+      if not Assigned(DefaultValue) then
+        raise EArgumentException.CreateFmt('[SchemaDefault] on %s is not valid JSON: %s',
+          [Prop.Name, SchemaDefaultAttribute(Attr).Json]);
+      PropSchema.AddPair('default', DefaultValue);
+    end;
   end;
 end;
 
@@ -287,8 +272,6 @@ begin
         ExplicitAdditionalProperties := True;
       end;
 
-    // A tool without parameters accepts an empty object and nothing else,
-    // unless the class said otherwise.
     if not ExplicitAdditionalProperties and (Properties.Count = 0) then
       Result.AddPair('additionalProperties', TJSONBool.Create(False));
   except

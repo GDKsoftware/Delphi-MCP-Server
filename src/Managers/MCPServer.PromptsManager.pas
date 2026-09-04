@@ -13,13 +13,6 @@ uses
   MCPServer.Prompt.Base;
 
 type
-  /// prompts/list and prompts/get over the prompts registered in
-  /// TMCPRegistry, listed in registration order.
-  ///
-  /// A missing or unknown prompt name is -32602 (EMCPError.UnknownPrompt);
-  /// a missing required argument or a wrong argument type is -32602 too
-  /// (mapped from the prompt's own EArgumentException), since prompts/get
-  /// has no isError concept to report it through instead.
   TMCPPromptsManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPCapabilityProvider)
   strict private
     FPrompts: TDictionary<string, IMCPPrompt>;
@@ -35,9 +28,7 @@ type
     constructor Create;
     destructor Destroy; override;
 
-    /// Adds a prompt to this manager only (next to the ones from TMCPRegistry).
     procedure AddPrompt(const Prompt: IMCPPrompt);
-    /// The prompt registered under Name, or nil.
     function TryGetPrompt(const Name: string; out Prompt: IMCPPrompt): Boolean;
 
     function GetCapabilityName: string;
@@ -52,7 +43,6 @@ type
     function GetPrompt(const Params: System.JSON.TJSONObject): TValue; overload;
     function GetPrompt(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
 
-    /// Cache hints on prompts/list for modern clients; 0 and 'private' unless set.
     property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
     property ListCacheScope: string read FListCacheScope write FListCacheScope;
   end;
@@ -149,7 +139,6 @@ end;
 
 procedure TMCPPromptsManager.CheckCursor(const Params: TJSONObject);
 begin
-  // Every list fits in one page; a cursor is never one this server issued.
   if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
     raise EMCPError.InvalidParams('Invalid cursor');
 end;

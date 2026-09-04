@@ -14,21 +14,14 @@ uses
   MCPServer.Logger;
 
 type
-  /// Outcome of one JSON-RPC message. Body is empty when nothing must be
-  /// sent back (notifications, client responses). HttpStatus is the status
-  /// a Streamable HTTP transport should answer with.
   TMCPProcessResult = record
     Body: string;
     HttpStatus: Integer;
     Era: TMCPProtocolEra;
     IsNotification: Boolean;
-    /// True when the request was cancelled by the client; Body is empty.
     Cancelled: Boolean;
   end;
 
-  /// Transport-independent JSON-RPC pipeline: parse, validate the message
-  /// shape, detect the protocol era, dispatch to the owning manager, shape
-  /// the result for the era and decide the HTTP status.
   TMCPJsonRpcProcessor = class
   private
     FManagerRegistry: IMCPManagerRegistry;
@@ -62,32 +55,19 @@ type
     constructor Create(ManagerRegistry: IMCPManagerRegistry; Settings: TMCPSettings); overload;
     destructor Destroy; override;
 
-    /// Plain JSON-RPC layer without transport hints; returns the response body.
     function ProcessRequest(const RequestBody: string; const SessionID: string): string;
     function ProcessRequestEx(const RequestBody: string; const Hints: TMCPTransportHints): TMCPProcessResult; overload;
-    /// Message is the already parsed body (nil when parsing failed); the
-    /// caller keeps ownership.
     function ProcessRequestEx(const Message: TJSONValue; const Hints: TMCPTransportHints): TMCPProcessResult; overload;
 
-    /// Decides the era of a request and validates the modern _meta fields.
-    /// Raises EMCPError with the HTTP status a modern transport must use.
     function BuildRequestContext(const Method: string; const Params: TJSONObject;
       const RequestId: TMCPRequestId; const Hints: TMCPTransportHints): IMCPRequestContext;
-    /// The JSON-RPC error response body for an error a transport detected
-    /// itself (a duplicate id, an overlong line). The error's data is
-    /// detached into the body.
     function BuildErrorResponse(const RequestId: TMCPRequestId; const Error: EMCPError): string;
 
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry;
-    /// Server identity and protocol options. A processor created without
-    /// settings uses the defaults (settings.ini next to the executable when present).
     property Settings: TMCPSettings read FSettings write SetSettings;
   end;
 
 const
-  // The JSON-RPC error codes are defined in MCPServer.Types. These aliases
-  // keep consumer code that references MCPServer.JsonRpcProcessor.JSONRPC_*
-  // compiling.
   JSONRPC_PARSE_ERROR = MCPServer.Types.JSONRPC_PARSE_ERROR;
   JSONRPC_INVALID_REQUEST = MCPServer.Types.JSONRPC_INVALID_REQUEST;
   JSONRPC_METHOD_NOT_FOUND = MCPServer.Types.JSONRPC_METHOD_NOT_FOUND;
@@ -101,10 +81,8 @@ const
   RESULT_TYPE_COMPLETE = 'complete';
   CACHE_SCOPE_PRIVATE = 'private';
 
-  /// Methods that only exist in the initialize-based revisions.
   LEGACY_ONLY_METHODS: array[0..4] of string = (
     'ping', 'initialize', 'logging/setLevel', 'resources/subscribe', 'resources/unsubscribe');
-  /// Methods that only exist with per-request _meta.
   MODERN_ONLY_METHODS: array[0..1] of string = ('server/discover', 'subscriptions/listen');
   LOG_LEVELS: array[0..7] of string = (
     'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
@@ -195,7 +173,6 @@ end;
 
 function TMCPJsonRpcProcessor.EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
 begin
-  // Before the body is understood only the header can tell the era apart.
   if Hints.HasHeaderLayer and Hints.HasProtocolVersionHeader
     and IsModernProtocolVersion(Hints.ProtocolVersionHeader) then
     Result := TMCPProtocolEra.Modern
@@ -206,8 +183,6 @@ end;
 function TMCPJsonRpcProcessor.EraFromMessage(const Method: string; const Params: TJSONObject;
   const Hints: TMCPTransportHints): TMCPProtocolEra;
 begin
-  // The era that decides the status of a rejected request: a body that
-  // names a protocol version in _meta is modern even when it fails validation.
   Result := EraFromHeaders(Hints);
   if (Result = TMCPProtocolEra.Modern) or not Assigned(Params) then
     Exit;
@@ -256,7 +231,6 @@ procedure TMCPJsonRpcProcessor.ValidateMirroredHeaders(const Method: string; con
 var
   Decoded: string;
 begin
-  // Mcp-Method mirrors the method on every modern POST.
   if not Hints.HasMethodHeader then
     raise EMCPError.HeaderMismatch('Mcp-Method header is missing');
   if Hints.MethodHeader <> Method then
@@ -264,7 +238,6 @@ begin
       'Header mismatch: Mcp-Method header value ''%s'' does not match body value ''%s''',
       [Hints.MethodHeader, Method]));
 
-  // Mcp-Name mirrors params.name (tools/call, prompts/get) or params.uri (resources/read).
   var SourceField := '';
   if (Method = 'tools/call') or (Method = 'prompts/get') then
     SourceField := 'name'
@@ -282,7 +255,7 @@ begin
   if Assigned(Params) then
   begin
     var Source := Params.GetValue(SourceField);
-    if Source is TJSONString then
+    if IsJsonString(Source) then
       BodyValue := TJSONString(Source).Value;
   end;
   if Decoded <> BodyValue then
@@ -298,9 +271,6 @@ var
 begin
   var Meta := ExtractMeta(Params);
 
-  // 1. A protocol version in _meta makes the request modern, initialize
-  //    included: in that era it is an unknown method, which is what a
-  //    modern client probing the server expects.
   var VersionValue: TJSONValue := nil;
   if Assigned(Meta) then
     VersionValue := Meta.GetValue(MCP_META_PROTOCOL_VERSION);
@@ -338,27 +308,23 @@ begin
       Hints.LegacySession, FManagerRegistry, Hints.Sink));
   end;
 
-  // 2. initialize without modern _meta selects the legacy era and negotiates
-  //    the revision.
   if Method = 'initialize' then
   begin
     var Requested := '';
     if Assigned(Params) then
     begin
       var RequestedValue := Params.GetValue('protocolVersion');
-      if RequestedValue is TJSONString then
+      if IsJsonString(RequestedValue) then
         Requested := TJSONString(RequestedValue).Value;
     end;
     Exit(TMCPRequestContext.Create(TMCPProtocolEra.Legacy, NegotiateLegacyProtocolVersion(Requested),
       Method, RequestId, Meta, Hints.LegacySession, FManagerRegistry, Hints.Sink));
   end;
 
-  // 3. A modern-only method without _meta is a malformed modern request.
   if IsModernOnlyMethod(Method) then
     raise EMCPError.Create(JSONRPC_INVALID_PARAMS,
       Format('%s requires params._meta.%s', [Method, MCP_META_PROTOCOL_VERSION]), nil, HTTP_STATUS_BAD_REQUEST);
 
-  // 4. On HTTP the header alone can still name the revision.
   if Hints.HasHeaderLayer and Hints.HasProtocolVersionHeader then
   begin
     var Header := Hints.ProtocolVersionHeader;
@@ -374,7 +340,6 @@ begin
       Hints.LegacySession, FManagerRegistry, Hints.Sink));
   end;
 
-  // 5. Legacy, with the version negotiated on this process when known.
   Version := '';
   if Assigned(Hints.LegacySession) then
     Version := Hints.LegacySession.ProtocolVersion;
@@ -417,7 +382,6 @@ end;
 
 procedure TMCPJsonRpcProcessor.HandleCancelled(const Params: TJSONObject; const Hints: TMCPTransportHints);
 begin
-  // Only a transport that tracks its requests can act on the notification.
   if not Assigned(Hints.Tracker) or not Assigned(Params) then
     Exit;
 
@@ -430,7 +394,7 @@ begin
 
   var Reason := '';
   var ReasonValue := Params.GetValue('reason');
-  if ReasonValue is TJSONString then
+  if IsJsonString(ReasonValue) then
     Reason := TJSONString(ReasonValue).Value;
 
   if not Hints.Tracker.TryCancel(RequestId, Reason) then
@@ -504,7 +468,6 @@ function TMCPJsonRpcProcessor.ResultToJson(const Value: TValue; const Context: I
 begin
   if Context.Era = TMCPProtocolEra.Legacy then
   begin
-    // Byte-for-byte what the initialize-based revisions always received.
     if Value.IsEmpty then
       Result := nil
     else if Value.IsType<TJSONObject> then
@@ -516,7 +479,6 @@ begin
     Exit;
   end;
 
-  // Modern results are always objects with a resultType.
   var ResultObject: TJSONObject;
   if Value.IsType<TJSONObject> then
     ResultObject := Value.AsType<TJSONObject>
@@ -533,9 +495,6 @@ end;
 
 function TMCPJsonRpcProcessor.StatusForError(Era: TMCPProtocolEra; const Error: EMCPError): Integer;
 begin
-  // Legacy clients read 404 as "session terminated". They get 200 for every
-  // JSON-RPC error; the one 4xx their revisions define is 400 for a bad
-  // MCP-Protocol-Version header, which arrives with the status set.
   if Era = TMCPProtocolEra.Legacy then
   begin
     if Error.HttpStatus = HTTP_STATUS_BAD_REQUEST then
@@ -587,7 +546,6 @@ end;
 
 function TMCPJsonRpcProcessor.ExceptionToError(Era: TMCPProtocolEra; const E: Exception): EMCPError;
 begin
-  // The text heuristic predates typed errors; legacy answers keep it.
   if (Era = TMCPProtocolEra.Legacy) and (Pos('not found', E.Message) > 0) then
     Result := EMCPError.Create(JSONRPC_METHOD_NOT_FOUND, E.Message)
   else
@@ -642,14 +600,12 @@ begin
       end;
 
       var JsonRpc := Request.GetValue('jsonrpc');
-      if not (JsonRpc is TJSONString) or (TJSONString(JsonRpc).Value <> JSONRPC_VERSION) then
+      if not IsJsonString(JsonRpc) or (TJSONString(JsonRpc).Value <> JSONRPC_VERSION) then
         raise EMCPError.InvalidRequest('jsonrpc must be "2.0"');
 
       var MethodValue := Request.GetValue('method');
-      if not (MethodValue is TJSONString) then
+      if not IsJsonString(MethodValue) then
       begin
-        // A message with result or error is a response sent by the client;
-        // it is never answered.
         if Assigned(Request.GetValue('result')) or Assigned(Request.GetValue('error')) then
         begin
           if Era = TMCPProtocolEra.Modern then
@@ -669,7 +625,11 @@ begin
       if Assigned(ParamsValue) then
       begin
         if not (ParamsValue is TJSONObject) then
+        begin
+          if Era = TMCPProtocolEra.Modern then
+            raise EMCPError.Create(JSONRPC_INVALID_PARAMS, 'params must be an object', nil, HTTP_STATUS_BAD_REQUEST);
           raise EMCPError.InvalidParams('params must be an object');
+        end;
         Params := TJSONObject(ParamsValue);
       end;
 
@@ -690,8 +650,6 @@ begin
           Hints.Tracker.Untrack(Context);
       end;
 
-      // A cancelled request gets no response, whether or not the handler
-      // noticed the cancellation.
       if Context.IsCancelled then
       begin
         if ExecuteResult.IsObject then

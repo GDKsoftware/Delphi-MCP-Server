@@ -44,10 +44,10 @@ type
   public
     constructor Create(const ASettingsFile: string = ''; const ACreateFile: Boolean = True);
     destructor Destroy; override;
-    
+
     procedure LoadFromFile;
     procedure SaveToFile;
-    
+
     property Port: Integer read FPort write FPort;
     property Host: string read FHost write FHost;
     property Protocol: string read GetProtocol;
@@ -62,42 +62,22 @@ type
     property SSLKeyFile: string read FSSLKeyFile write FSSLKeyFile;
     property SSLRootCertFile: string read FSSLRootCertFile write FSSLRootCertFile;
 
-    // Optional server identity ([Server] Title, Description, WebsiteUrl,
-    // Instructions); reported in initialize and server/discover when set.
     property ServerTitle: string read FServerTitle write FServerTitle;
     property ServerDescription: string read FServerDescription write FServerDescription;
     property ServerWebsiteUrl: string read FServerWebsiteUrl write FServerWebsiteUrl;
     property Instructions: string read FInstructions write FInstructions;
 
-    /// [Protocol] LenientModernPing: answer ping for 2026-07-28 requests
-    /// although the revision removed it. Default off.
     property LenientModernPing: Boolean read FLenientModernPing write FLenientModernPing;
-    /// [Protocol] DiscoverListsLegacyVersions: also list the initialize-based
-    /// revisions in server/discover and in unsupported-version errors. Default off.
     property DiscoverListsLegacyVersions: Boolean read FDiscoverListsLegacyVersions write FDiscoverListsLegacyVersions;
-    /// [Protocol] DiscoverTtlMs: cache hint on server/discover. Default 0.
     property DiscoverTtlMs: Integer read FDiscoverTtlMs write FDiscoverTtlMs;
 
-    /// [Server] BindAddress: the interface to listen on. Empty (default)
-    /// derives it from Host: a loopback Host binds 127.0.0.1 and ::1, any
-    /// other Host binds every interface.
     property BindAddress: string read FBindAddress write FBindAddress;
-    /// [Server] EndpointInfoPath: optional GET path that answers a small JSON
-    /// document with the endpoint URL and the protocol versions. Empty = off.
     property EndpointInfoPath: string read FEndpointInfoPath write FEndpointInfoPath;
-    /// [Server] MaxRequestBodyBytes: larger POST bodies get 413. Default 4 MB.
     property MaxRequestBodyBytes: Integer read FMaxRequestBodyBytes write FMaxRequestBodyBytes;
-    /// [Server] MaxJsonDepth: deeper nesting gets 400. Default 64.
     property MaxJsonDepth: Integer read FMaxJsonDepth write FMaxJsonDepth;
-    /// [Server] MaxConnections: Indy connection limit; 0 = unlimited.
     property MaxConnections: Integer read FMaxConnections write FMaxConnections;
-    /// [Server] MaxConcurrentRequests: worker threads of the stdio transport.
-    /// 1 (default) answers requests in the order they arrive.
     property MaxConcurrentRequests: Integer read FMaxConcurrentRequests write FMaxConcurrentRequests;
-    /// [Security] AllowedOrigins: origins that pass the Origin check next to
-    /// the loopback origins. Falls back to [CORS] AllowedOrigins when empty.
     property SecurityAllowedOrigins: string read FSecurityAllowedOrigins write FSecurityAllowedOrigins;
-    /// The effective allow-list for the Origin check.
     property AllowedOrigins: string read GetAllowedOrigins;
 
     const DEFAULT_MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
@@ -115,20 +95,20 @@ uses
 constructor TMCPSettings.Create(const ASettingsFile: string; const ACreateFile: Boolean);
 begin
   inherited Create;
-  
+
   if ASettingsFile = '' then
     FSettingsFile := TPath.Combine(ExtractFilePath(ParamStr(0)), 'settings.ini')
   else
     FSettingsFile := ASettingsFile;
-    
+
   LoadDefaults;
-  
+
   if ACreateFile and (not TFile.Exists(FSettingsFile)) then
   begin
     TLogger.Info('Settings file not found. Creating default settings: ' + FSettingsFile);
     CreateDefaultSettingsFile;
   end;
-  
+
   LoadFromFile;
 end;
 
@@ -219,7 +199,7 @@ begin
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', '; Comma-separated list of allowed origins', '');
     IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
-    
+
     IniFile.WriteString('SSL', '; SSL/TLS configuration (optional)', '');
     IniFile.WriteBool('SSL', 'Enabled', FSSLEnabled);
     IniFile.WriteString('SSL', 'CertFile', FSSLCertFile);
@@ -236,7 +216,7 @@ var
 begin
   if not TFile.Exists(FSettingsFile) then
     Exit;
-    
+
   IniFile := TIniFile.Create(FSettingsFile);
   try
     FPort := IniFile.ReadInteger('Server', 'Port', FPort);
@@ -263,12 +243,12 @@ begin
 
     FCorsEnabled := IniFile.ReadBool('CORS', 'Enabled', FCorsEnabled);
     FCorsAllowedOrigins := IniFile.ReadString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
-    
+
     FSSLEnabled := IniFile.ReadBool('SSL', 'Enabled', FSSLEnabled);
     FSSLCertFile := IniFile.ReadString('SSL', 'CertFile', FSSLCertFile);
     FSSLKeyFile := IniFile.ReadString('SSL', 'KeyFile', FSSLKeyFile);
     FSSLRootCertFile := IniFile.ReadString('SSL', 'RootCertFile', FSSLRootCertFile);
-    
+
     TLogger.Info('Settings loaded from: ' + FSettingsFile);
     TLogger.Info('Server: ' + Protocol + '://' + FHost + ':' + IntToStr(FPort));
     if FSSLEnabled then
@@ -315,7 +295,7 @@ begin
 
     IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
     IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
-    
+
     IniFile.WriteBool('SSL', 'Enabled', FSSLEnabled);
     IniFile.WriteString('SSL', 'CertFile', FSSLCertFile);
     IniFile.WriteString('SSL', 'KeyFile', FSSLKeyFile);

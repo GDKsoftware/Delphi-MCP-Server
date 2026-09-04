@@ -16,9 +16,6 @@ type
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
-    /// Returns a string (one text block), a TJSONObject (structured content),
-    /// a TJSONArray (content blocks) or a TMCPToolResult. The tools manager
-    /// takes ownership of objects.
     function Execute(const Arguments: TJSONObject): TValue;
 
     property Name: string read GetName;
@@ -28,14 +25,6 @@ type
     property OutputSchema: TJSONObject read GetOutputSchema;
   end;
 
-  /// Tool with a hand-written schema and raw JSON arguments.
-  ///
-  /// The protected fields FAnnotations and FIcons (nil by default) are
-  /// reported in tools/list when set; the tool owns them. Execute validates
-  /// Arguments against BuildSchema (raising EArgumentException, which the
-  /// tools manager reports as an isError result) before calling DoExecute;
-  /// this is the only validation a hand-written schema gets, since it does
-  /// not go through TMCPSerializer.
   TMCPToolBase = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
@@ -59,11 +48,6 @@ type
     function Execute(const Arguments: TJSONObject): TValue;
   end;
 
-  /// Tool whose parameters are a class T; the schema comes from T's RTTI.
-  ///
-  /// Override ExecuteWithParams for a text result, or ExecuteWithContext for
-  /// any other result (TMCPToolResult, structured content) and access to the
-  /// request context. The default ExecuteWithContext calls ExecuteWithParams.
   TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
@@ -88,8 +72,6 @@ type
     function Execute(const Arguments: TJSONObject): TValue;
   end;
 
-  /// Tool with parameters T and a typed result R that is serialised as
-  /// structured content (with the compact JSON as text for older clients).
   TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
@@ -292,7 +274,12 @@ begin
   Response := ExecuteWithParams(Params);
   try
     var JsonObj := TJSONObject.Create;
-    TMCPSerializer.Serialize(Response, JsonObj);
+    try
+      TMCPSerializer.Serialize(Response, JsonObj);
+    except
+      JsonObj.Free;
+      raise;
+    end;
     Result := TValue.From<TJSONObject>(JsonObj);
   finally
     Response.Free;

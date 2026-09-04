@@ -6,8 +6,6 @@ uses
   DUnitX.TestFramework;
 
 type
-  /// TMCPRegistry is filled from unit initialization sections; these tests
-  /// only read it so the golden tests keep seeing the shipped registry.
   [TestFixture]
   TRegistryTests = class
   public
@@ -67,7 +65,6 @@ end;
 
 procedure TRegistryTests.ServerStatus_IsRegisteredByDefault;
 begin
-  // Registered by the initialization section of MCPServer.Resource.Server.
   var Status := TMCPRegistry.CreateResource('server://status');
   Assert.AreEqual('server://status', Status.URI);
   Assert.AreEqual('server_status', Status.Name);
@@ -101,8 +98,5 @@ begin
   Assert.AreEqual('echo', First.Name);
   Assert.AreNotSame(First, Second);
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TRegistryTests);
 
 end.

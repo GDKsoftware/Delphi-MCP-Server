@@ -25,7 +25,6 @@ type
     property Doubled: Integer read FDoubled write FDoubled;
   end;
 
-  /// A typed tool: structured content plus the text fallback.
   TDoublingTool = class(TMCPToolBase<TStructuredParams, TStructuredOutput>)
   protected
     function ExecuteWithParams(const Params: TStructuredParams): TStructuredOutput; override;
@@ -33,8 +32,6 @@ type
     constructor Create; override;
   end;
 
-  /// A hand-written schema, to exercise TMCPToolBase's own validation
-  /// (nothing goes through TMCPSerializer for this tool).
   THandWrittenTool = class(TMCPToolBase)
   protected
     function BuildSchema: TJSONObject; override;
@@ -331,8 +328,5 @@ begin
     Json.Free;
   end;
 end;
-
-initialization
-  TDUnitX.RegisterTestFixture(TToolsManagerTests);
 
 end.

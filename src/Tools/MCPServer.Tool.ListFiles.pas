@@ -19,7 +19,7 @@ type
   public
     [SchemaDescription('Directory path to list files from')]
     property Path: string read FPath write FPath;
-    
+
     [Optional]
     [SchemaDescription('Include hidden files in the listing')]
     property IncludeHidden: Boolean read FIncludeHidden write FIncludeHidden;
@@ -67,7 +67,7 @@ begin
       Result := 'Error: Access denied - path outside allowed directory';
       Exit;
     end;
-    
+
     if TDirectory.Exists(NormalizedPath) then
     begin
       FileArray := TDirectory.GetFiles(NormalizedPath);
@@ -83,7 +83,7 @@ begin
           {$WARN SYMBOL_PLATFORM ON}
         end;
         {$ENDIF}
-          
+
         Files.Add(ExtractFileName(FileName));
       end;
       Result := 'Files in ' + NormalizedPath + ':' + sLineBreak + Files.Text;
