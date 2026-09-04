@@ -85,6 +85,7 @@
         <DCCReference Include="..\src\Protocol\MCPServer.ContentBlocks.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.Logger.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.Settings.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.Authorization.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.Registration.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.ManagerRegistry.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Base.pas"/>
@@ -106,6 +107,7 @@
         <DCCReference Include="MCPServer.Tests.Prompt.pas"/>
         <DCCReference Include="MCPServer.Tests.Mrtr.pas"/>
         <DCCReference Include="MCPServer.Tests.Subscriptions.pas"/>
+        <DCCReference Include="MCPServer.Tests.Authorization.pas"/>
         <DCCReference Include="MCPServer.Tests.PromptsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.CompletionManager.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
