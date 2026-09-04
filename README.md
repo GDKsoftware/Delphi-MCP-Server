@@ -19,8 +19,11 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - [Integration with Codex](#integration-with-codex)
 - [Testing with MCP Inspector](#testing-with-mcp-inspector)
 - [Available Example Tools](#available-example-tools)
+- [Available Example Prompts](#available-example-prompts)
 - [Available Example Resources](#available-example-resources)
 - [Configuration](#configuration)
+- [Authentication](#authentication)
+- [Network and Security](#network-and-security)
 - [License](#license)
 - [Contributing](#contributing)
 - [About GDK Software](#about-gdk-software)
@@ -33,7 +36,8 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - **Dual Response Mode**: Supports both JSON-RPC and Server-Sent Events in the same server
 - **Tool System**: Extensible tool system with RTTI-based discovery and execution
 - **Resource Management**: Modular resource system supporting various content types
-- **Security**: `Origin` validation against DNS rebinding on every request, loopback binding by default, CORS headers for browser clients, request size and nesting limits
+- **Security**: `Origin` and `Host` validation against DNS rebinding on every request, loopback binding by default, CORS headers for browser clients, request size and nesting limits, opt-in bearer authentication with OAuth 2.1 resource-server discovery
+- **Multi round-trip requests, streaming and subscriptions**: `InputRequiredResult` with signed `requestState`, progress and log notifications on the response stream, `subscriptions/listen` for change notifications
 - **High Performance**: Native implementation using Indy HTTP Server with keep-alive support
 - **Optional Parameters**: Support for optional tool parameters using custom attributes
 - **Cross-Platform**: Supports Windows (Win32/Win64) and Linux (x64)
@@ -854,6 +858,8 @@ consults an authorizer.
 
 - `[Server] BindAddress`: the interface to listen on. Empty (default) derives it from `Host`: a loopback `Host` binds `127.0.0.1` and `::1`, any other `Host` binds every interface. Set `0.0.0.0` to listen everywhere explicitly.
 - `[Security] AllowedOrigins`: origins that pass the `Origin` check next to the loopback origins (`localhost`, `127.0.0.1`, `[::1]`, any port). Comma-separated `scheme://host[:port]`; `:*` allows any port; `*` allows everything. Falls back to `[CORS] AllowedOrigins`. A rejected origin gets `403` with a JSON-RPC error body, also when CORS is disabled.
+- `[Security] AllowedHosts`: `Host` header values the server answers, comma-separated `host[:port]` (an entry without a port matches any port, `*` matches everything). Empty means any host. Set it when the server is reachable through a public name, so that a rebinding DNS name cannot reach it; a rejected host gets `403`.
+- `[Server] ExposeDiagnosticsResources`: `1` (default) registers `logs://recent`, `logs://{level}` and `server://status`; set `0` on a server that strangers can reach, the log buffer and the status counters are diagnostics.
 - `[CORS] Enabled`: adds the CORS response headers for browser clients; the `Origin` check runs regardless.
 - `[Server] EndpointInfoPath`: optional GET path (for example `/info`) that answers a JSON document with the endpoint URL and the protocol versions. The MCP endpoint itself only accepts POST; GET and DELETE get `405`.
 - `[Server] MaxRequestBodyBytes` (4 MB) and `MaxJsonDepth` (64): larger or deeper requests get `413` or `400`; `MaxConnections`: Indy connection limit, `0` = unlimited.

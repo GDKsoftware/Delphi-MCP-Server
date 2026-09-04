@@ -162,6 +162,17 @@ at startup. `RequestStateTtlSeconds` bounds the replay window (600 s).
 nine new example tools plus one example prompt ship with the executable;
 they are only registered when their units are in the project.
 
+## Host allow-list and diagnostics resources
+
+**`[Security] AllowedHosts` is empty by default**, so nothing changes until it
+is set; then a request whose `Host` header is not listed gets `403`.
+
+**`[Server] ExposeDiagnosticsResources=0` drops `logs://recent`,
+`logs://{level}` and `server://status`** from the shipped executable. The
+default keeps them, as before. A library that registers the resources itself
+uses `RemoveResource` and the new `RemoveResourceTemplate` on
+`TMCPResourcesManager` to the same effect.
+
 ## Authentication
 
 **Opt-in, and only over HTTP.** Nothing changes until `[Auth] BearerTokens`

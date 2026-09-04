@@ -108,6 +108,12 @@ begin
   CoreManager := TMCPCoreManager.Create(Settings);
   ToolsManager := TMCPToolsManager.Create;
   ResourcesManager := TMCPResourcesManager.Create;
+  if not Settings.ExposeDiagnosticsResources then
+  begin
+    ResourcesManager.RemoveResource('logs://recent');
+    ResourcesManager.RemoveResource('server://status');
+    ResourcesManager.RemoveResourceTemplate('logs://{level}');
+  end;
   PromptsManager := TMCPPromptsManager.Create;
   CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
   SubscriptionsManager := TMCPSubscriptionsManager.Create;
@@ -162,6 +168,12 @@ begin
   CoreManager := TMCPCoreManager.Create(Settings);
   ToolsManager := TMCPToolsManager.Create;
   ResourcesManager := TMCPResourcesManager.Create;
+  if not Settings.ExposeDiagnosticsResources then
+  begin
+    ResourcesManager.RemoveResource('logs://recent');
+    ResourcesManager.RemoveResource('server://status');
+    ResourcesManager.RemoveResourceTemplate('logs://{level}');
+  end;
   PromptsManager := TMCPPromptsManager.Create;
   CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
   SubscriptionsManager := TMCPSubscriptionsManager.Create;
