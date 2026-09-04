@@ -23,6 +23,7 @@ type
     [Test] procedure Origin_AllowListMatchesSchemeHostAndPort;
     [Test] procedure Origin_PortWildcardAndAllowAll;
     [Test] procedure Origin_DefaultPortEqualsExplicitPort;
+    [Test] procedure Host_AllowList_MatchesNameAndPort;
     [Test] procedure NestingDepth_CountsObjectsAndArraysOutsideStrings;
   end;
 
@@ -152,6 +153,20 @@ begin
   Assert.IsTrue(TMCPOriginPolicy.IsAllowed('http://app.example:80', ['http://app.example']));
   Assert.IsFalse(TMCPOriginPolicy.IsAllowed('http://app.example:8080', ['http://app.example']));
   Assert.IsFalse(TMCPOriginPolicy.IsAllowed('http://app.example:443', ['https://app.example']));
+end;
+
+procedure THttpHeadersTests.Host_AllowList_MatchesNameAndPort;
+begin
+  Assert.IsTrue(TMCPHostPolicy.IsAllowed('anything.example:3000', nil), 'empty list allows every host');
+  Assert.IsTrue(TMCPHostPolicy.IsAllowed('mcp.example:3000', ['mcp.example']));
+  Assert.IsTrue(TMCPHostPolicy.IsAllowed('MCP.example', ['mcp.example']));
+  Assert.IsTrue(TMCPHostPolicy.IsAllowed('mcp.example:3000', ['mcp.example:3000']));
+  Assert.IsTrue(TMCPHostPolicy.IsAllowed('mcp.example:3000', ['mcp.example:*']));
+  Assert.IsTrue(TMCPHostPolicy.IsAllowed('[::1]:3000', ['[::1]']));
+  Assert.IsTrue(TMCPHostPolicy.IsAllowed('evil.example', ['*']));
+  Assert.IsFalse(TMCPHostPolicy.IsAllowed('mcp.example:3001', ['mcp.example:3000']));
+  Assert.IsFalse(TMCPHostPolicy.IsAllowed('evil.example', ['mcp.example', 'localhost']));
+  Assert.IsFalse(TMCPHostPolicy.IsAllowed('', ['mcp.example']));
 end;
 
 procedure THttpHeadersTests.NestingDepth_CountsObjectsAndArraysOutsideStrings;

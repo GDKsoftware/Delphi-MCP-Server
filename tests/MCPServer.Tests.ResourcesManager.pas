@@ -68,6 +68,7 @@ type
     [Test] procedure Read_TemplateMismatch_IsNotFound;
     [Test] procedure Read_ViaTemplate_PercentDecodes_KeepsPlusLiteral;
     [Test] procedure Read_ViaTemplate_ConcurrentReads_Succeed;
+    [Test] procedure RemoveResourceTemplate_StopsMatching;
   end;
 
 implementation
@@ -353,6 +354,18 @@ begin
         Json.Free;
       end;
     end);
+end;
+
+procedure TResourcesManagerTests.RemoveResourceTemplate_StopsMatching;
+begin
+  FManager.RemoveResourceTemplate('echo://{value}');
+  try
+    Read('echo://hello', TMCPProtocolEra.Modern).Free;
+    Assert.Fail('the template is gone');
+  except
+    on E: EMCPError do
+      Assert.AreEqual(JSONRPC_INVALID_PARAMS, E.Code);
+  end;
 end;
 
 procedure TResourcesManagerTests.Read_TemplateMismatch_IsNotFound;

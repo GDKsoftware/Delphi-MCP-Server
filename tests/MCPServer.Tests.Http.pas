@@ -90,6 +90,7 @@ type
     [Test] procedure Auth_PreflightAndMetadata_NeedNoToken;
     [Test] procedure Auth_ScopedTool_Is403_WithInsufficientScope;
     [Test] procedure Auth_ScopedTool_OnOpenServer_Is403;
+    [Test] procedure Host_NotAllowed_Is403;
   end;
 
 implementation
@@ -725,6 +726,17 @@ begin
   FHarness.ToolsManager.AddTool(TScopedTool.Create);
   var Reply := Post('{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"test_scoped","arguments":{}}}', []);
   Assert.AreEqual(403, Reply.Status, 'nobody holds a scope on an open server');
+end;
+
+procedure THttpTransportTests.Host_NotAllowed_Is403;
+begin
+  FSettings.AllowedHosts := 'mcp.example, localhost';
+  var Denied := Post(LEGACY_PING, []);
+  Assert.AreEqual(403, Denied.Status, 'the client sends Host: 127.0.0.1');
+  Assert.IsTrue(Denied.Body.Contains('Host not allowed'), Denied.Body);
+
+  FSettings.AllowedHosts := '127.0.0.1:*';
+  Assert.AreEqual(200, Post(LEGACY_PING, []).Status);
 end;
 
 end.
