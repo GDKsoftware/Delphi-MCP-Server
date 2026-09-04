@@ -61,11 +61,20 @@ const
     'resources/read'
   );
 
+  MCP_METHOD_NOTIFICATIONS_MESSAGE = 'notifications/message';
+  MCP_LOG_LEVELS: array[0..7] of string = (
+    'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
+
 function IsLegacyProtocolVersion(const Version: string): Boolean;
 function IsModernProtocolVersion(const Version: string): Boolean;
 function NegotiateLegacyProtocolVersion(const Requested: string): string;
 
 type
+  TMCPLogLevel = record
+    class function Rank(const Level: string): Integer; static;
+    class function IsKnown(const Level: string): Boolean; static;
+  end;
+
   OptionalAttribute = class(TCustomAttribute)
   end;
 
@@ -261,6 +270,8 @@ type
     function HasProgressToken: Boolean;
     procedure ReportProgress(const Progress: Double; const Total: Double = -1; const Message: string = '');
     function TryGetInputResponse(const Key: string; out Response: TJSONObject): Boolean;
+    procedure Log(const Level, Text: string; const Logger: string = '');
+    procedure LogJson(const Level: string; const Data: TJSONValue; const Logger: string = '');
 
     property Era: TMCPProtocolEra read GetEra;
     property ProtocolVersion: string read GetProtocolVersion;
@@ -409,6 +420,21 @@ type
 function IsJsonString(const Value: TJSONValue): Boolean;
 
 implementation
+
+class function TMCPLogLevel.Rank(const Level: string): Integer;
+begin
+  for var I := Low(MCP_LOG_LEVELS) to High(MCP_LOG_LEVELS) do
+  begin
+    if MCP_LOG_LEVELS[I] = Level then
+      Exit(I);
+  end;
+  Result := -1;
+end;
+
+class function TMCPLogLevel.IsKnown(const Level: string): Boolean;
+begin
+  Result := Rank(Level) >= 0;
+end;
 
 function IsJsonString(const Value: TJSONValue): Boolean;
 begin
