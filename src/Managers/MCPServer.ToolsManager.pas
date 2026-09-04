@@ -31,6 +31,7 @@ type
     function CreateToolJSON(const Tool: IMCPTool): TJSONObject;
     procedure CheckCursor(const Params: TJSONObject);
     procedure ValidateToolName(const Name: string);
+    procedure CheckRequiredScopes(const Tool: IMCPTool);
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
   private
     procedure RegisterTool(const Tool: IMCPTool);
@@ -66,6 +67,7 @@ uses
   System.RegularExpressions,
   MCPServer.Registration,
   MCPServer.RequestContext,
+  MCPServer.Authorization,
   MCPServer.Errors,
   MCPServer.Mrtr,
   MCPServer.Tool.Result,
@@ -154,6 +156,26 @@ begin
     Result := CallTool(Params, EraOf(Context))
   else
     raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+end;
+
+procedure TMCPToolsManager.CheckRequiredScopes(const Tool: IMCPTool);
+begin
+  var Context := TMCPRequestContext.Current;
+  var RttiContext := TRttiContext.Create;
+  try
+    var ToolType := RttiContext.GetType((Tool as TObject).ClassType);
+    for var Attribute in ToolType.GetAttributes do
+    begin
+      if not (Attribute is RequiresScopeAttribute) then
+        Continue;
+      var Scope := RequiresScopeAttribute(Attribute).Scope;
+      var Granted := Assigned(Context) and Context.HasScope(Scope);
+      if not Granted then
+        raise EMCPError.InsufficientScope(Scope);
+    end;
+  finally
+    RttiContext.Free;
+  end;
 end;
 
 procedure TMCPToolsManager.ValidateToolName(const Name: string);
@@ -410,6 +432,7 @@ begin
 
   if not TryGetTool(ToolName, Tool) then
     raise EMCPError.UnknownTool(ToolName);
+  CheckRequiredScopes(Tool);
 
   TLogger.Info('MCP CallTool called for tool: ' + ToolName);
   Result := TValue.From<TJSONObject>(ExecuteTool(Tool, Arguments, Era));

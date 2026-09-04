@@ -38,7 +38,12 @@ type
     FSecurityAllowedOrigins: string;
     FRequestStateKey: string;
     FRequestStateTtlSeconds: Integer;
+    FBearerTokens: string;
+    FAuthorizationServers: string;
+    FResourceUri: string;
+    FScopesSupported: string;
     function GetProtocol: string;
+    function SplitList(const Value: string): TArray<string>;
     function GetAllowedOrigins: string;
 
     procedure LoadDefaults;
@@ -83,6 +88,13 @@ type
     property AllowedOrigins: string read GetAllowedOrigins;
     property RequestStateKey: string read FRequestStateKey write FRequestStateKey;
     property RequestStateTtlSeconds: Integer read FRequestStateTtlSeconds write FRequestStateTtlSeconds;
+    property BearerTokens: string read FBearerTokens write FBearerTokens;
+    property AuthorizationServers: string read FAuthorizationServers write FAuthorizationServers;
+    property ResourceUri: string read FResourceUri write FResourceUri;
+    property ScopesSupported: string read FScopesSupported write FScopesSupported;
+    function BearerTokenList: TArray<string>;
+    function AuthorizationServerList: TArray<string>;
+    function ScopesSupportedList: TArray<string>;
 
     const DEFAULT_MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
     const DEFAULT_MAX_JSON_DEPTH = 64;
@@ -151,6 +163,35 @@ begin
   FSecurityAllowedOrigins := '';
   FRequestStateKey := '';
   FRequestStateTtlSeconds := DEFAULT_REQUEST_STATE_TTL_SECONDS;
+  FBearerTokens := '';
+  FAuthorizationServers := '';
+  FResourceUri := '';
+  FScopesSupported := '';
+end;
+
+function TMCPSettings.SplitList(const Value: string): TArray<string>;
+begin
+  Result := nil;
+  for var Item in Value.Split([',']) do
+  begin
+    if Item.Trim <> '' then
+      Result := Result + [Item.Trim];
+  end;
+end;
+
+function TMCPSettings.BearerTokenList: TArray<string>;
+begin
+  Result := SplitList(FBearerTokens);
+end;
+
+function TMCPSettings.AuthorizationServerList: TArray<string>;
+begin
+  Result := SplitList(FAuthorizationServers);
+end;
+
+function TMCPSettings.ScopesSupportedList: TArray<string>;
+begin
+  Result := SplitList(FScopesSupported);
 end;
 
 function TMCPSettings.GetAllowedOrigins: string;
@@ -200,6 +241,13 @@ begin
     IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
     IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
+    IniFile.WriteString('Auth', '; Bearer tokens accepted on the HTTP endpoint (comma-separated; empty = open server)', '');
+    IniFile.WriteString('Auth', 'BearerTokens', FBearerTokens);
+    IniFile.WriteString('Auth', '; OAuth authorization servers published in the protected resource metadata', '');
+    IniFile.WriteString('Auth', 'AuthorizationServers', FAuthorizationServers);
+    IniFile.WriteString('Auth', 'ResourceUri', FResourceUri);
+    IniFile.WriteString('Auth', 'ScopesSupported', FScopesSupported);
+
     IniFile.WriteString('Protocol', '; Protocol options (1 = on, 0 = off)', '');
     IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
     IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
@@ -248,6 +296,11 @@ begin
     FSecurityAllowedOrigins := IniFile.ReadString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
     FRequestStateKey := IniFile.ReadString('Security', 'RequestStateKey', FRequestStateKey);
     FRequestStateTtlSeconds := IniFile.ReadInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
+
+    FBearerTokens := IniFile.ReadString('Auth', 'BearerTokens', FBearerTokens);
+    FAuthorizationServers := IniFile.ReadString('Auth', 'AuthorizationServers', FAuthorizationServers);
+    FResourceUri := IniFile.ReadString('Auth', 'ResourceUri', FResourceUri);
+    FScopesSupported := IniFile.ReadString('Auth', 'ScopesSupported', FScopesSupported);
 
     FLenientModernPing := IniFile.ReadBool('Protocol', 'LenientModernPing', FLenientModernPing);
     FDiscoverListsLegacyVersions := IniFile.ReadBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
@@ -302,6 +355,11 @@ begin
     IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
     IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
     IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
+
+    IniFile.WriteString('Auth', 'BearerTokens', FBearerTokens);
+    IniFile.WriteString('Auth', 'AuthorizationServers', FAuthorizationServers);
+    IniFile.WriteString('Auth', 'ResourceUri', FResourceUri);
+    IniFile.WriteString('Auth', 'ScopesSupported', FScopesSupported);
 
     IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
     IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);

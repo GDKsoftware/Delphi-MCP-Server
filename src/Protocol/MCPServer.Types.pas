@@ -62,6 +62,7 @@ const
   );
 
   MCP_METHOD_NOTIFICATIONS_MESSAGE = 'notifications/message';
+  MCP_SCOPE_ANY = '*';
   MCP_METHOD_SUBSCRIPTIONS_LISTEN = 'subscriptions/listen';
   MCP_METHOD_NOTIFICATIONS_SUBSCRIPTIONS_ACKNOWLEDGED = 'notifications/subscriptions/acknowledged';
   MCP_METHOD_NOTIFICATIONS_TOOLS_LIST_CHANGED = 'notifications/tools/list_changed';
@@ -79,6 +80,10 @@ type
   TMCPLogLevel = record
     class function Rank(const Level: string): Integer; static;
     class function IsKnown(const Level: string): Boolean; static;
+  end;
+
+  TMCPConstantTime = record
+    class function SameBytes(const A, B: TBytes): Boolean; static;
   end;
 
   OptionalAttribute = class(TCustomAttribute)
@@ -283,8 +288,11 @@ type
     function GetInputResponses: TJSONObject;
     function GetRequestState: TJSONObject;
     function GetSink: IMCPMessageSink;
+    function GetPrincipal: string;
+    function GetScopes: TArray<string>;
 
     function HasClientCapability(const Path: string): Boolean;
+    function HasScope(const Scope: string): Boolean;
     procedure RequireClientCapability(const Path: string);
     function IsCancelled: Boolean;
     procedure CheckCancelled;
@@ -309,6 +317,8 @@ type
     property InputResponses: TJSONObject read GetInputResponses;
     property RequestState: TJSONObject read GetRequestState;
     property Sink: IMCPMessageSink read GetSink;
+    property Principal: string read GetPrincipal;
+    property Scopes: TArray<string> read GetScopes;
   end;
 
   IMCPRequestTracker = interface
@@ -457,6 +467,25 @@ end;
 class function TMCPLogLevel.IsKnown(const Level: string): Boolean;
 begin
   Result := Rank(Level) >= 0;
+end;
+
+class function TMCPConstantTime.SameBytes(const A, B: TBytes): Boolean;
+begin
+  var Difference := Length(A) xor Length(B);
+  var Longest := Length(A);
+  if Length(B) > Longest then
+    Longest := Length(B);
+  for var I := 0 to Longest - 1 do
+  begin
+    var Left := 0;
+    var Right := 0;
+    if I < Length(A) then
+      Left := A[I];
+    if I < Length(B) then
+      Right := B[I];
+    Difference := Difference or (Left xor Right);
+  end;
+  Result := Difference = 0;
 end;
 
 function IsJsonString(const Value: TJSONValue): Boolean;

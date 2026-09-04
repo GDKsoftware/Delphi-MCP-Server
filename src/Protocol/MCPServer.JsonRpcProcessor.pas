@@ -22,6 +22,7 @@ type
     Era: TMCPProtocolEra;
     IsNotification: Boolean;
     Cancelled: Boolean;
+    RequiredScope: string;
   end;
 
   TMCPJsonRpcProcessor = class
@@ -40,6 +41,9 @@ type
     function ClientInputResponses(const Params: TJSONObject): TJSONObject;
     function OpenClientRequestState(const Method: string; const Params: TJSONObject;
       const Hints: TMCPTransportHints): TJSONObject;
+    function NewContext(Era: TMCPProtocolEra; const Version, Method: string; const RequestId: TMCPRequestId;
+      const Meta: TJSONObject; const Hints: TMCPTransportHints; const InputResponses: TJSONObject = nil;
+      const RequestState: TJSONObject = nil): IMCPRequestContext;
     function InputRequiredResult(const Context: IMCPRequestContext; const Params: TJSONObject;
       const Hints: TMCPTransportHints; const Required: EMCPInputRequired): TMCPProcessResult;
     function EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
@@ -319,6 +323,14 @@ begin
       [Decoded, BodyValue]));
 end;
 
+function TMCPJsonRpcProcessor.NewContext(Era: TMCPProtocolEra; const Version, Method: string;
+  const RequestId: TMCPRequestId; const Meta: TJSONObject; const Hints: TMCPTransportHints;
+  const InputResponses: TJSONObject; const RequestState: TJSONObject): IMCPRequestContext;
+begin
+  Result := TMCPRequestContext.Create(Era, Version, Method, RequestId, Meta, Hints.LegacySession, FManagerRegistry,
+    Hints.Sink, InputResponses, RequestState, Hints.Principal, Hints.Scopes);
+end;
+
 function TMCPJsonRpcProcessor.BuildRequestContext(const Method: string; const Params: TJSONObject;
   const RequestId: TMCPRequestId; const Hints: TMCPTransportHints): IMCPRequestContext;
 var
@@ -366,8 +378,7 @@ begin
       InputResponses := ClientInputResponses(Params);
       RequestState := OpenClientRequestState(Method, Params, Hints);
     end;
-    Exit(TMCPRequestContext.Create(TMCPProtocolEra.Modern, Version, Method, RequestId, Meta,
-      Hints.LegacySession, FManagerRegistry, Hints.Sink, InputResponses, RequestState));
+    Exit(NewContext(TMCPProtocolEra.Modern, Version, Method, RequestId, Meta, Hints, InputResponses, RequestState));
   end;
 
   if Method = 'initialize' then
@@ -379,8 +390,7 @@ begin
       if IsJsonString(RequestedValue) then
         Requested := TJSONString(RequestedValue).Value;
     end;
-    Exit(TMCPRequestContext.Create(TMCPProtocolEra.Legacy, NegotiateLegacyProtocolVersion(Requested),
-      Method, RequestId, Meta, Hints.LegacySession, FManagerRegistry, Hints.Sink));
+    Exit(NewContext(TMCPProtocolEra.Legacy, NegotiateLegacyProtocolVersion(Requested), Method, RequestId, Meta, Hints));
   end;
 
   if IsModernOnlyMethod(Method) then
@@ -398,8 +408,7 @@ begin
       raise EMCPError.Create(JSONRPC_INVALID_REQUEST,
         'Unsupported MCP-Protocol-Version header: ' + Header, nil, HTTP_STATUS_BAD_REQUEST);
 
-    Exit(TMCPRequestContext.Create(TMCPProtocolEra.Legacy, Header, Method, RequestId, Meta,
-      Hints.LegacySession, FManagerRegistry, Hints.Sink));
+    Exit(NewContext(TMCPProtocolEra.Legacy, Header, Method, RequestId, Meta, Hints));
   end;
 
   Version := '';
@@ -408,8 +417,7 @@ begin
   if Version = '' then
     Version := MCP_LATEST_LEGACY_PROTOCOL_VERSION;
 
-  Result := TMCPRequestContext.Create(TMCPProtocolEra.Legacy, Version, Method, RequestId, Meta,
-    Hints.LegacySession, FManagerRegistry, Hints.Sink);
+  Result := NewContext(TMCPProtocolEra.Legacy, Version, Method, RequestId, Meta, Hints);
 end;
 
 function TMCPJsonRpcProcessor.ProcessNotification(const Method: string; const Params: TJSONObject;
@@ -607,8 +615,8 @@ function TMCPJsonRpcProcessor.StatusForError(Era: TMCPProtocolEra; const Error: 
 begin
   if Era = TMCPProtocolEra.Legacy then
   begin
-    if Error.HttpStatus = HTTP_STATUS_BAD_REQUEST then
-      Exit(HTTP_STATUS_BAD_REQUEST);
+    if (Error.HttpStatus = HTTP_STATUS_BAD_REQUEST) or (Error.HttpStatus = HTTP_STATUS_FORBIDDEN) then
+      Exit(Error.HttpStatus);
     Exit(HTTP_STATUS_OK);
   end;
 
@@ -631,6 +639,9 @@ function TMCPJsonRpcProcessor.ErrorResult(Era: TMCPProtocolEra; const RequestId:
   const Error: EMCPError): TMCPProcessResult;
 begin
   TLogger.Error('Error processing request: ' + Error.Message);
+  var RequiredScope := '';
+  if Error.HttpStatus = HTTP_STATUS_FORBIDDEN then
+    RequiredScope := Error.RequiredScope;
 
   var Response := TJSONObject.Create;
   try
@@ -652,6 +663,8 @@ begin
   Result.HttpStatus := StatusForError(Era, Error);
   Result.Era := Era;
   Result.IsNotification := False;
+  Result.Cancelled := False;
+  Result.RequiredScope := RequiredScope;
 end;
 
 function TMCPJsonRpcProcessor.ExceptionToError(Era: TMCPProtocolEra; const E: Exception): EMCPError;

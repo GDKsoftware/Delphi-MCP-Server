@@ -23,6 +23,7 @@ uses
   MCPServer.ContentBlocks in 'Protocol\MCPServer.ContentBlocks.pas',
   MCPServer.Logger in 'Core\MCPServer.Logger.pas',
   MCPServer.Settings in 'Core\MCPServer.Settings.pas',
+  MCPServer.Authorization in 'Core\MCPServer.Authorization.pas',
   MCPServer.Registration in 'Core\MCPServer.Registration.pas',
   MCPServer.ManagerRegistry in 'Core\MCPServer.ManagerRegistry.pas',
   MCPServer.Tool.Base in 'Tools\MCPServer.Tool.Base.pas',
@@ -126,6 +127,8 @@ begin
     Server.Settings := Settings;
     Server.ManagerRegistry := ManagerRegistry;
     Server.CoreManager := CoreManager;
+    if Length(Settings.BearerTokenList) > 0 then
+      Server.Authorizer := TMCPStaticBearerAuthorizer.Create(Settings.BearerTokenList);
 
     Server.Start;
 

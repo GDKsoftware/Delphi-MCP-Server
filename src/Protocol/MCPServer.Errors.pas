@@ -31,6 +31,8 @@ type
     class function UnknownTool(const Name: string): EMCPError;
     class function UnknownPrompt(const Name: string): EMCPError;
     class function ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
+    class function InsufficientScope(const Scope: string): EMCPError;
+    function RequiredScope: string;
 
     property Code: Integer read FCode;
     property Data: TJSONValue read FData;
@@ -46,6 +48,7 @@ type
 
 const
   HTTP_STATUS_OK = 200;
+  HTTP_STATUS_FORBIDDEN = 403;
   HTTP_STATUS_ACCEPTED = 202;
   HTTP_STATUS_BAD_REQUEST = 400;
   HTTP_STATUS_NOT_FOUND = 404;
@@ -139,6 +142,20 @@ begin
   var Data := TJSONObject.Create;
   Data.AddPair('name', Name);
   Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown prompt: ' + Name, Data);
+end;
+
+function EMCPError.RequiredScope: string;
+begin
+  Result := '';
+  if Data is TJSONObject then
+    Result := TJSONObject(Data).GetValue<string>('requiredScope', '');
+end;
+
+class function EMCPError.InsufficientScope(const Scope: string): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair('requiredScope', Scope);
+  Result := EMCPError.Create(JSONRPC_INVALID_REQUEST, Format('The %s scope is required', [Scope]), Data, HTTP_STATUS_FORBIDDEN);
 end;
 
 class function EMCPError.ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
