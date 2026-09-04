@@ -1,11 +1,11 @@
 HTTP/1.1 200 OK
 Connection: keep-alive
 Content-Type: application/json
-Content-Length: 371
+Content-Length: 367
 Access-Control-Allow-Origin: *
 Access-Control-Allow-Methods: POST, OPTIONS
 Access-Control-Allow-Headers: Accept, Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID
 Access-Control-Expose-Headers: Mcp-Session-Id, WWW-Authenticate
 Access-Control-Max-Age: 86400
 
-{"jsonrpc":"2.0","id":"d1","result":{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false},"prompts":{"listChanged":false},"completions":{}},"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"delphi-mcp-server","version":"1.0.0"}},"ttlMs":0,"cacheScope":"public"}}
+{"jsonrpc":"2.0","id":"d1","result":{"resultType":"complete","supportedVersions":["2026-07-28"],"capabilities":{"tools":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true},"prompts":{"listChanged":true},"completions":{}},"_meta":{"io.modelcontextprotocol/serverInfo":{"name":"delphi-mcp-server","version":"1.0.0"}},"ttlMs":0,"cacheScope":"public"}}

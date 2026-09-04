@@ -62,6 +62,12 @@ const
   );
 
   MCP_METHOD_NOTIFICATIONS_MESSAGE = 'notifications/message';
+  MCP_METHOD_SUBSCRIPTIONS_LISTEN = 'subscriptions/listen';
+  MCP_METHOD_NOTIFICATIONS_SUBSCRIPTIONS_ACKNOWLEDGED = 'notifications/subscriptions/acknowledged';
+  MCP_METHOD_NOTIFICATIONS_TOOLS_LIST_CHANGED = 'notifications/tools/list_changed';
+  MCP_METHOD_NOTIFICATIONS_PROMPTS_LIST_CHANGED = 'notifications/prompts/list_changed';
+  MCP_METHOD_NOTIFICATIONS_RESOURCES_LIST_CHANGED = 'notifications/resources/list_changed';
+  MCP_METHOD_NOTIFICATIONS_RESOURCES_UPDATED = 'notifications/resources/updated';
   MCP_LOG_LEVELS: array[0..7] of string = (
     'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
 
@@ -246,6 +252,21 @@ type
     procedure Send(const Json: string);
   end;
 
+  IMCPKeepAlive = interface
+    ['{9C2E4A6B-1D3F-4E5A-B7C9-0D2E4F6A8B1C}']
+    procedure KeepAlive;
+  end;
+
+  IMCPSubscriptionHub = interface
+    ['{3E5A7C9B-2D4F-4A6B-8C1E-5F7A9B0C2D4E}']
+    procedure ToolsListChanged;
+    procedure PromptsListChanged;
+    procedure ResourcesListChanged;
+    procedure ResourceUpdated(const Uri: string);
+    procedure CloseAll(const Reason: string);
+    function ActiveCount: Integer;
+  end;
+
   IMCPRequestContext = interface
     ['{7E3A9C1B-5D2F-4A6E-8B0C-3D4E5F6A7B8C}']
     function GetEra: TMCPProtocolEra;
@@ -261,6 +282,7 @@ type
     function GetManagerRegistry: IMCPManagerRegistry;
     function GetInputResponses: TJSONObject;
     function GetRequestState: TJSONObject;
+    function GetSink: IMCPMessageSink;
 
     function HasClientCapability(const Path: string): Boolean;
     procedure RequireClientCapability(const Path: string);
@@ -286,6 +308,7 @@ type
     property ManagerRegistry: IMCPManagerRegistry read GetManagerRegistry;
     property InputResponses: TJSONObject read GetInputResponses;
     property RequestState: TJSONObject read GetRequestState;
+    property Sink: IMCPMessageSink read GetSink;
   end;
 
   IMCPRequestTracker = interface

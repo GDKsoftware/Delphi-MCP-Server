@@ -184,6 +184,22 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   request's own stream, only when the request carries
   `_meta.io.modelcontextprotocol/logLevel` and the level is at or above it;
   `TMCPLogLevel` and `MCP_LOG_LEVELS` in `MCPServer.Types`.
+- `subscriptions/listen` (`MCPServer.SubscriptionsManager`): long-lived
+  change notification streams with the acknowledgement first, the honoured
+  filter, `_meta.io.modelcontextprotocol/subscriptionId` on every message,
+  SSE keep-alive comments over HTTP, a dedicated thread over stdio,
+  cancellation by closing the stream or `notifications/cancelled`, and a
+  completion response when the server closes the subscription.
+  `IMCPSubscriptionHub` and `IMCPKeepAlive` in `MCPServer.Types`.
+- `ChangeNotifier` on `TMCPToolsManager`, `TMCPPromptsManager` and
+  `TMCPResourcesManager`: with a hub assigned the modern capabilities announce
+  `listChanged` and `resources.subscribe`, and `AddTool`, `RemoveTool`,
+  `AddPrompt`, `RemovePrompt`, `AddResource`, `RemoveResource`,
+  `AddResourceTemplate` and `ResourceUpdated` notify the subscribed clients.
+  `HasTool` and `HasPrompt`. The managers' lists are lock-guarded.
+- Example tools `test_trigger_tool_change`, `test_trigger_prompt_change` and
+  `test_trigger_resource_change` (`MCPServer.Tool.SubscriptionSamples`), the
+  diagnostic hooks of the conformance suite's subscription checks.
 - Example tools `test_logging_tool` (`MCPServer.Tool.ContentSamples`) and
   `test_streaming_elicitation` (`MCPServer.Tool.InputRequiredSamples`), the
   diagnostic tools of the conformance suite's stateless scenario.

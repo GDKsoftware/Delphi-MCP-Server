@@ -9,6 +9,7 @@ uses
   MCPServer.ToolsManager,
   MCPServer.ResourcesManager,
   MCPServer.PromptsManager,
+  MCPServer.SubscriptionsManager,
   MCPServer.JsonRpcProcessor;
 
 type
@@ -20,6 +21,7 @@ type
     FToolsManager: TMCPToolsManager;
     FResourcesManager: TMCPResourcesManager;
     FPromptsManager: TMCPPromptsManager;
+    FSubscriptionsManager: TMCPSubscriptionsManager;
     FProcessor: TMCPJsonRpcProcessor;
   public
     constructor Create;
@@ -33,6 +35,7 @@ type
     property ToolsManager: TMCPToolsManager read FToolsManager;
     property ResourcesManager: TMCPResourcesManager read FResourcesManager;
     property PromptsManager: TMCPPromptsManager read FPromptsManager;
+    property SubscriptionsManager: TMCPSubscriptionsManager read FSubscriptionsManager;
   end;
 
 implementation
@@ -55,12 +58,17 @@ begin
   FToolsManager := TMCPToolsManager.Create;
   FResourcesManager := TMCPResourcesManager.Create;
   FPromptsManager := TMCPPromptsManager.Create;
+  FSubscriptionsManager := TMCPSubscriptionsManager.Create;
+  FToolsManager.ChangeNotifier := FSubscriptionsManager;
+  FResourcesManager.ChangeNotifier := FSubscriptionsManager;
+  FPromptsManager.ChangeNotifier := FSubscriptionsManager;
 
   FManagerRegistry.RegisterManager(FCoreManager);
   FManagerRegistry.RegisterManager(FToolsManager);
   FManagerRegistry.RegisterManager(FResourcesManager);
   FManagerRegistry.RegisterManager(FPromptsManager);
   FManagerRegistry.RegisterManager(TMCPCompletionManager.Create(FPromptsManager, FResourcesManager));
+  FManagerRegistry.RegisterManager(FSubscriptionsManager);
 
   FProcessor := TMCPJsonRpcProcessor.Create(FManagerRegistry);
 end;

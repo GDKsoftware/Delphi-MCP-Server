@@ -62,6 +62,7 @@ type
     procedure SendJsonRpcError(ResponseInfo: TIdHTTPResponseInfo; Status, Code: Integer; const Message: string);
     procedure SendMethodNotAllowed(ResponseInfo: TIdHTTPResponseInfo);
     function HeaderPresent(RequestInfo: TIdHTTPRequestInfo; const Name: string): Boolean;
+    procedure CloseSubscriptions;
     function HeaderValue(RequestInfo: TIdHTTPRequestInfo; const Name: string): string;
   public
     constructor Create(Owner: TComponent); override;
@@ -92,6 +93,9 @@ const
   HTTP_FORBIDDEN = 403;
   HTTP_METHOD_NOT_ALLOWED = 405;
   HTTP_PAYLOAD_TOO_LARGE = 413;
+
+  SUBSCRIPTION_CLOSE_GRACE_MS = 1000;
+  SUBSCRIPTION_CLOSE_POLL_MS = 10;
 
   CORS_MAX_AGE = 86400;
   CORS_ALLOW_METHODS = 'POST, OPTIONS';
@@ -173,11 +177,29 @@ begin
   TLogger.Info('MCP Server listening on ' + string.Join(', ', BoundAddresses));
 end;
 
+procedure TMCPIdHTTPServer.CloseSubscriptions;
+var
+  Hub: IMCPSubscriptionHub;
+begin
+  if not Assigned(FManagerRegistry)
+    or not Supports(FManagerRegistry.GetManagerForMethod(MCP_METHOD_SUBSCRIPTIONS_LISTEN), IMCPSubscriptionHub, Hub) then
+    Exit;
+
+  var Deadline := TThread.GetTickCount64 + SUBSCRIPTION_CLOSE_GRACE_MS;
+  repeat
+    Hub.CloseAll('server stopping');
+    if Hub.ActiveCount = 0 then
+      Break;
+    Sleep(SUBSCRIPTION_CLOSE_POLL_MS);
+  until TThread.GetTickCount64 >= Deadline;
+end;
+
 procedure TMCPIdHTTPServer.Stop;
 begin
   if not FActive then
     Exit;
 
+  CloseSubscriptions;
   FHTTPServer.Active := False;
   FActive := False;
   TLogger.Info('MCP Server stopped');

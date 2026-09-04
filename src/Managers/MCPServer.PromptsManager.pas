@@ -5,6 +5,7 @@ interface
 uses
   System.SysUtils,
   System.Classes,
+  System.SyncObjs,
   System.JSON,
   System.Rtti,
   System.Generics.Collections,
@@ -17,8 +18,11 @@ type
   strict private
     FPrompts: TDictionary<string, IMCPPrompt>;
     FOrder: TList<string>;
+    FLock: TCriticalSection;
     FListTtlMs: Integer;
     FListCacheScope: string;
+    FChangeNotifier: IMCPSubscriptionHub;
+    procedure NotifyListChanged;
     procedure RegisterPrompt(const Prompt: IMCPPrompt);
     procedure RegisterBuiltInPrompts;
     procedure CheckCursor(const Params: TJSONObject);
@@ -29,6 +33,8 @@ type
     destructor Destroy; override;
 
     procedure AddPrompt(const Prompt: IMCPPrompt);
+    procedure RemovePrompt(const Name: string);
+    function HasPrompt(const Name: string): Boolean;
     function TryGetPrompt(const Name: string; out Prompt: IMCPPrompt): Boolean;
 
     function GetCapabilityName: string;
@@ -45,6 +51,7 @@ type
 
     property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
     property ListCacheScope: string read FListCacheScope write FListCacheScope;
+    property ChangeNotifier: IMCPSubscriptionHub read FChangeNotifier write FChangeNotifier;
   end;
 
 implementation
@@ -59,6 +66,7 @@ uses
 constructor TMCPPromptsManager.Create;
 begin
   inherited;
+  FLock := TCriticalSection.Create;
   FPrompts := TDictionary<string, IMCPPrompt>.Create;
   FOrder := TList<string>.Create;
   FListTtlMs := 0;
@@ -70,6 +78,7 @@ destructor TMCPPromptsManager.Destroy;
 begin
   FPrompts.Free;
   FOrder.Free;
+  FLock.Free;
   inherited;
 end;
 
@@ -85,8 +94,9 @@ end;
 
 procedure TMCPPromptsManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 begin
+  var Announces := Assigned(FChangeNotifier) and (Era = TMCPProtocolEra.Modern);
   var Prompts := TJSONObject.Create;
-  Prompts.AddPair('listChanged', TJSONBool.Create(False));
+  Prompts.AddPair('listChanged', TJSONBool.Create(Announces));
   Capabilities.AddPair('prompts', Prompts);
 end;
 
@@ -116,9 +126,41 @@ end;
 
 procedure TMCPPromptsManager.RegisterPrompt(const Prompt: IMCPPrompt);
 begin
-  if not FPrompts.ContainsKey(Prompt.Name) then
-    FOrder.Add(Prompt.Name);
-  FPrompts.AddOrSetValue(Prompt.Name, Prompt);
+  FLock.Enter;
+  try
+    if not FPrompts.ContainsKey(Prompt.Name) then
+      FOrder.Add(Prompt.Name);
+    FPrompts.AddOrSetValue(Prompt.Name, Prompt);
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TMCPPromptsManager.RemovePrompt(const Name: string);
+begin
+  FLock.Enter;
+  try
+    if not FPrompts.ContainsKey(Name) then
+      Exit;
+    FPrompts.Remove(Name);
+    FOrder.Remove(Name);
+  finally
+    FLock.Leave;
+  end;
+  NotifyListChanged;
+end;
+
+function TMCPPromptsManager.HasPrompt(const Name: string): Boolean;
+var
+  Prompt: IMCPPrompt;
+begin
+  Result := TryGetPrompt(Name, Prompt);
+end;
+
+procedure TMCPPromptsManager.NotifyListChanged;
+begin
+  if Assigned(FChangeNotifier) then
+    FChangeNotifier.PromptsListChanged;
 end;
 
 procedure TMCPPromptsManager.RegisterBuiltInPrompts;
@@ -130,11 +172,17 @@ end;
 procedure TMCPPromptsManager.AddPrompt(const Prompt: IMCPPrompt);
 begin
   RegisterPrompt(Prompt);
+  NotifyListChanged;
 end;
 
 function TMCPPromptsManager.TryGetPrompt(const Name: string; out Prompt: IMCPPrompt): Boolean;
 begin
-  Result := FPrompts.TryGetValue(Name, Prompt);
+  FLock.Enter;
+  try
+    Result := FPrompts.TryGetValue(Name, Prompt);
+  finally
+    FLock.Leave;
+  end;
 end;
 
 procedure TMCPPromptsManager.CheckCursor(const Params: TJSONObject);
@@ -188,8 +236,15 @@ begin
   try
     var PromptsArray := TJSONArray.Create;
     ResultJSON.AddPair('prompts', PromptsArray);
-    for var Name in FOrder do
-      PromptsArray.AddElement(CreatePromptJSON(FPrompts[Name]));
+    FLock.Enter;
+    try
+      for var Name in FOrder do
+      begin
+        PromptsArray.AddElement(CreatePromptJSON(FPrompts[Name]));
+      end;
+    finally
+      FLock.Leave;
+    end;
 
     if Era = TMCPProtocolEra.Modern then
     begin
@@ -234,7 +289,7 @@ begin
   end;
 
   try
-    if not FPrompts.TryGetValue(PromptName, Prompt) then
+    if not TryGetPrompt(PromptName, Prompt) then
       raise EMCPError.UnknownPrompt(PromptName);
 
     TLogger.Info('MCP GetPrompt called for prompt: ' + PromptName);

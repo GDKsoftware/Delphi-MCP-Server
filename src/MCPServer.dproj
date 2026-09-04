@@ -151,6 +151,7 @@
         <DCCReference Include="Managers\MCPServer.ResourcesManager.pas"/>
         <DCCReference Include="Managers\MCPServer.PromptsManager.pas"/>
         <DCCReference Include="Managers\MCPServer.CompletionManager.pas"/>
+        <DCCReference Include="Managers\MCPServer.SubscriptionsManager.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.GetTime.pas"/>
@@ -162,6 +163,7 @@
         <DCCReference Include="Server\MCPServer.StdioChannel.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.InputRequiredSamples.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.SubscriptionSamples.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Samples.pas"/>
         <DCCReference Include="Prompts\MCPServer.Prompt.SummarizeLogs.pas"/>
         <DCCReference Include="Prompts\MCPServer.Prompt.ContentSamples.pas"/>

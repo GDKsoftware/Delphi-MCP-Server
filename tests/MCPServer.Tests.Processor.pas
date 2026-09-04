@@ -214,8 +214,8 @@ begin
     var Versions := Response.FindValue('result.supportedVersions') as TJSONArray;
     Assert.AreEqual(1, Versions.Count);
     Assert.AreEqual('2026-07-28', Versions.Items[0].Value);
-    Assert.IsFalse(Response.GetValue<Boolean>('result.capabilities.tools.listChanged'));
-    Assert.IsFalse(Response.GetValue<Boolean>('result.capabilities.resources.subscribe'));
+    Assert.IsTrue(Response.GetValue<Boolean>('result.capabilities.tools.listChanged'));
+    Assert.IsTrue(Response.GetValue<Boolean>('result.capabilities.resources.subscribe'));
     Assert.IsNull(Response.FindValue('result.capabilities.logging'));
     Assert.AreEqual('public', Response.GetValue<string>('result.cacheScope'));
     Assert.AreEqual(0, Response.GetValue<Integer>('result.ttlMs'));

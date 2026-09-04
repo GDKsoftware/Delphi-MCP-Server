@@ -71,11 +71,14 @@ type
     [Test] procedure Log_OnlyWithLogLevel_InMeta;
     [Test] procedure InputRequired_StreamsAsFinalEvent;
     [Test] procedure StreamedError_IsFinalEvent;
+    [Test] procedure Listen_StreamsAckAndChanges_UntilStopped;
+    [Test] procedure Listen_WithoutEventStreamAccept_IsInvalidRequest;
   end;
 
 implementation
 
 uses
+  System.Threading,
   MCPServer.Types;
 
 const
@@ -549,6 +552,53 @@ begin
   var Events := Reply.Body.Split([#10#10], TStringSplitOptions.ExcludeEmpty);
   Assert.AreEqual(2, Integer(Length(Events)), Reply.Body);
   Assert.IsTrue(Events[1].Contains('"code":-32021'), Events[1]);
+end;
+
+procedure THttpTransportTests.Listen_StreamsAckAndChanges_UntilStopped;
+const
+  LISTEN = '{"jsonrpc":"2.0","id":"sub-1","method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true,"resourceSubscriptions":["test://static-text"]},' + MODERN_META + '}}';
+  TRIGGER = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"%s","arguments":{},' + MODERN_META + '}}';
+begin
+  StartServer;
+  var Listener := TTask.Future<THttpReply>(
+    function: THttpReply
+    begin
+      Result := Post(LISTEN, ['Accept: application/json, text/event-stream', MODERN_VERSION_HEADER, 'Mcp-Method: subscriptions/listen']);
+    end);
+
+  var Deadline := TThread.GetTickCount64 + 2000;
+  while (FHarness.SubscriptionsManager.ActiveCount = 0) and (TThread.GetTickCount64 < Deadline) do
+    Sleep(10);
+  Assert.AreEqual(1, FHarness.SubscriptionsManager.ActiveCount, 'the subscription is open');
+
+  Post(Format(TRIGGER, ['test_trigger_tool_change']), [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_trigger_tool_change']);
+  Post(Format(TRIGGER, ['test_trigger_prompt_change']), [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_trigger_prompt_change']);
+  Post(Format(TRIGGER, ['test_trigger_resource_change']), [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_trigger_resource_change']);
+  FServer.Stop;
+
+  var Reply := Listener.Value;
+  Assert.AreEqual(200, Reply.Status);
+  var Events := Reply.Body.Split([#10#10], TStringSplitOptions.ExcludeEmpty);
+  Assert.AreEqual(4, Integer(Length(Events)), Reply.Body);
+  Assert.IsTrue(Events[0].Contains('"method":"notifications/subscriptions/acknowledged"'), Events[0]);
+  Assert.IsTrue(Events[0].Contains('"toolsListChanged":true'), Events[0]);
+  Assert.IsTrue(Events[0].Contains('"resourceSubscriptions":["test://static-text"]'), Events[0]);
+  Assert.IsTrue(Events[0].Contains('"io.modelcontextprotocol/subscriptionId":"sub-1"'), Events[0]);
+  Assert.IsTrue(Events[1].Contains('"method":"notifications/tools/list_changed"'), Events[1]);
+  Assert.IsTrue(Events[2].Contains('"method":"notifications/resources/updated"'), Events[2]);
+  Assert.IsTrue(Events[2].Contains('"uri":"test://static-text"'), Events[2]);
+  Assert.IsFalse(Reply.Body.Contains('prompts/list_changed'), 'not requested');
+  Assert.IsTrue(Events[3].Contains('"id":"sub-1"'), Events[3]);
+  Assert.IsTrue(Events[3].Contains('"resultType":"complete"'), Events[3]);
+  Assert.IsTrue(Events[3].Contains('"io.modelcontextprotocol/subscriptionId":"sub-1"'), Events[3]);
+end;
+
+procedure THttpTransportTests.Listen_WithoutEventStreamAccept_IsInvalidRequest;
+begin
+  var Reply := Post('{"jsonrpc":"2.0","id":1,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true},' + MODERN_META + '}}',
+    [MODERN_VERSION_HEADER, 'Mcp-Method: subscriptions/listen']);
+  Assert.AreEqual(400, Reply.Status);
+  Assert.IsTrue(Reply.Body.Contains('-32600'), Reply.Body);
 end;
 
 end.

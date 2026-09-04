@@ -10,7 +10,7 @@ uses
   MCPServer.Types;
 
 type
-  TMCPHttpResponseStream = class(TInterfacedObject, IMCPMessageSink, IMCPRequestTracker)
+  TMCPHttpResponseStream = class(TInterfacedObject, IMCPMessageSink, IMCPRequestTracker, IMCPKeepAlive)
   public
     const MEDIA_TYPE_EVENT_STREAM = 'text/event-stream';
   strict private
@@ -29,6 +29,7 @@ type
     destructor Destroy; override;
 
     procedure Send(const Json: string);
+    procedure KeepAlive;
     procedure Track(const Context: IMCPRequestContext);
     procedure Untrack(const Context: IMCPRequestContext);
     function TryCancel(const RequestId: TMCPRequestId; const Reason: string): Boolean;
@@ -44,12 +45,14 @@ implementation
 
 uses
   IdGlobal,
+  MCPServer.Errors,
   MCPServer.Logger;
 
 const
   SSE_EVENT_PREFIX = 'event: message'#10'data: ';
   SSE_EVENT_SUFFIX = #10#10;
   CHUNK_TERMINATOR = '0'#13#10#13#10;
+  SSE_KEEP_ALIVE_COMMENT = ': keep-alive'#10#10;
   CHARSET_UTF8 = 'utf-8';
   HTTP_STATUS_OK = 200;
 
@@ -120,6 +123,25 @@ begin
       if not FOpened then
         OpenStream;
       WriteEvent(Json);
+    except
+      on E: Exception do
+        MarkBroken(E.Message);
+    end;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TMCPHttpResponseStream.KeepAlive;
+begin
+  FLock.Enter;
+  try
+    if FBroken or not FOpened then
+      Exit;
+    try
+      if not FConnection.Connection.Connected then
+        raise EMCPTransportError.Create('connection closed');
+      WriteChunk(SSE_KEEP_ALIVE_COMMENT);
     except
       on E: Exception do
         MarkBroken(E.Message);

@@ -53,10 +53,10 @@ begin
       Assert.AreEqual('resources', Capabilities.Pairs[1].JsonString.Value);
       Assert.AreEqual('prompts', Capabilities.Pairs[2].JsonString.Value);
       Assert.AreEqual('completions', Capabilities.Pairs[3].JsonString.Value);
-      Assert.IsFalse(Capabilities.GetValue<Boolean>('tools.listChanged'));
-      Assert.IsFalse(Capabilities.GetValue<Boolean>('resources.subscribe'));
-      Assert.IsFalse(Capabilities.GetValue<Boolean>('resources.listChanged'));
-      Assert.IsFalse(Capabilities.GetValue<Boolean>('prompts.listChanged'));
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('tools.listChanged'));
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('resources.subscribe'));
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('resources.listChanged'));
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('prompts.listChanged'));
       Assert.IsTrue(Capabilities.GetValue('completions') is TJSONObject);
     finally
       Capabilities.Free;

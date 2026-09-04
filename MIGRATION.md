@@ -162,6 +162,28 @@ at startup. `RequestStateTtlSeconds` bounds the replay window (600 s).
 nine new example tools plus one example prompt ship with the executable;
 they are only registered when their units are in the project.
 
+## Subscriptions
+
+**`subscriptions/listen` replaces `resources/subscribe` and the GET stream.**
+The shipped executable registers `TMCPSubscriptionsManager` and assigns it as
+`ChangeNotifier` of the tools, prompts and resources managers, so
+`server/discover` now announces `tools.listChanged`, `prompts.listChanged`,
+`resources.listChanged` and `resources.subscribe` to modern clients (the
+`initialize` result for legacy clients still says `false`: those clients have
+no stream to receive the notifications on). A library that registers the
+managers itself keeps the old behaviour until it does the same.
+
+**Adding or removing a tool, prompt or resource at run time notifies
+subscribed clients.** `AddTool`, `AddPrompt`, `AddResource` and
+`AddResourceTemplate` were already there; `RemoveTool`, `RemovePrompt`,
+`RemoveResource`, `HasTool`, `HasPrompt` and
+`TMCPResourcesManager.ResourceUpdated` are new. The managers guard their
+lists with a lock now, so run-time changes are safe from any thread.
+
+**Shutdown waits for subscriptions.** `TMCPIdHTTPServer.Stop` and the end of
+stdin close the open subscriptions with a completion response before the
+transport goes down (up to one second, or the stdio drain time).
+
 ## Library use
 
 - `TMCPJsonRpcProcessor.ProcessRequest` and the manager interfaces are
