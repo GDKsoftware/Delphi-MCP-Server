@@ -140,6 +140,7 @@
         <DCCReference Include="Protocol\MCPServer.ContentBlocks.pas"/>
         <DCCReference Include="Core\MCPServer.Logger.pas"/>
         <DCCReference Include="Core\MCPServer.Settings.pas"/>
+        <DCCReference Include="Core\MCPServer.Authorization.pas"/>
         <DCCReference Include="Core\MCPServer.Registration.pas"/>
         <DCCReference Include="Core\MCPServer.ManagerRegistry.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.Base.pas"/>

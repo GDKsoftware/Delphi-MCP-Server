@@ -22,6 +22,7 @@ type
     NameHeader: string;
     RemoteAddress: string;
     Principal: string;
+    Scopes: TArray<string>;
     LegacySession: TMCPLegacySession;
     Sink: IMCPMessageSink;
     Tracker: IMCPRequestTracker;
@@ -45,6 +46,8 @@ type
     FSink: IMCPMessageSink;
     FInputResponses: TJSONObject;
     FRequestState: TJSONObject;
+    FPrincipal: string;
+    FScopes: TArray<string>;
     FCancelled: Integer;
     FProgressSent: Boolean;
     FLastProgress: Double;
@@ -55,7 +58,8 @@ type
       const RequestId: TMCPRequestId; const Meta: TJSONObject;
       const LegacySession: TMCPLegacySession; const ManagerRegistry: IMCPManagerRegistry;
       const Sink: IMCPMessageSink = nil; const InputResponses: TJSONObject = nil;
-      const RequestState: TJSONObject = nil);
+      const RequestState: TJSONObject = nil; const Principal: string = '';
+      const Scopes: TArray<string> = nil);
     destructor Destroy; override;
 
     function GetEra: TMCPProtocolEra;
@@ -72,7 +76,10 @@ type
     function GetInputResponses: TJSONObject;
     function GetRequestState: TJSONObject;
     function GetSink: IMCPMessageSink;
+    function GetPrincipal: string;
+    function GetScopes: TArray<string>;
     function HasClientCapability(const Path: string): Boolean;
+    function HasScope(const Scope: string): Boolean;
     procedure RequireClientCapability(const Path: string);
     function IsCancelled: Boolean;
     procedure CheckCancelled;
@@ -129,7 +136,7 @@ end;
 constructor TMCPRequestContext.Create(Era: TMCPProtocolEra; const ProtocolVersion, Method: string;
   const RequestId: TMCPRequestId; const Meta: TJSONObject; const LegacySession: TMCPLegacySession;
   const ManagerRegistry: IMCPManagerRegistry; const Sink: IMCPMessageSink; const InputResponses: TJSONObject;
-  const RequestState: TJSONObject);
+  const RequestState: TJSONObject; const Principal: string; const Scopes: TArray<string>);
 begin
   inherited Create;
   FEra := Era;
@@ -144,6 +151,8 @@ begin
   if Assigned(InputResponses) then
     FInputResponses := TJSONObject(InputResponses.Clone);
   FRequestState := RequestState;
+  FPrincipal := Principal;
+  FScopes := Scopes;
 end;
 
 destructor TMCPRequestContext.Destroy;
@@ -241,6 +250,26 @@ end;
 function TMCPRequestContext.GetSink: IMCPMessageSink;
 begin
   Result := FSink;
+end;
+
+function TMCPRequestContext.GetPrincipal: string;
+begin
+  Result := FPrincipal;
+end;
+
+function TMCPRequestContext.GetScopes: TArray<string>;
+begin
+  Result := FScopes;
+end;
+
+function TMCPRequestContext.HasScope(const Scope: string): Boolean;
+begin
+  for var Granted in FScopes do
+  begin
+    if (Granted = Scope) or (Granted = MCP_SCOPE_ANY) then
+      Exit(True);
+  end;
+  Result := False;
 end;
 
 function TMCPRequestContext.TryGetInputResponse(const Key: string; out Response: TJSONObject): Boolean;

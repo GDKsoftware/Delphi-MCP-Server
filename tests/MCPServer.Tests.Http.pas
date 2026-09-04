@@ -8,8 +8,12 @@ uses
   System.Classes,
   System.JSON,
   IdHTTP,
+  MCPServer.Types,
   MCPServer.Settings,
+  MCPServer.Authorization,
   MCPServer.IdHTTPServer,
+  MCPServer.Tool.Base,
+  MCPServer.Tool.ContentSamples,
   MCPServer.Tests.Harness;
 
 type
@@ -20,6 +24,12 @@ type
     RawHeaders: string;
     function Header(const Name: string): string;
     function Json: TJSONObject;
+  end;
+
+  [RequiresScope('admin')]
+  TScopedTool = class(TSimpleTextTool)
+  public
+    constructor Create; override;
   end;
 
   [TestFixture]
@@ -73,13 +83,19 @@ type
     [Test] procedure StreamedError_IsFinalEvent;
     [Test] procedure Listen_StreamsAckAndChanges_UntilStopped;
     [Test] procedure Listen_WithoutEventStreamAccept_IsInvalidRequest;
+    [Test] procedure Auth_MissingToken_Is401WithChallenge;
+    [Test] procedure Auth_WrongToken_Is401_InvalidToken;
+    [Test] procedure Auth_MalformedHeader_Is400;
+    [Test] procedure Auth_ValidToken_IsServed;
+    [Test] procedure Auth_PreflightAndMetadata_NeedNoToken;
+    [Test] procedure Auth_ScopedTool_Is403_WithInsufficientScope;
+    [Test] procedure Auth_ScopedTool_OnOpenServer_Is403;
   end;
 
 implementation
 
 uses
-  System.Threading,
-  MCPServer.Types;
+  System.Threading;
 
 const
   MODERN_VERSION_HEADER = 'MCP-Protocol-Version: 2026-07-28';
@@ -104,6 +120,14 @@ function THttpReply.Json: TJSONObject;
 begin
   Result := TJSONObject.ParseJSONValue(Body) as TJSONObject;
   Assert.IsNotNull(Result, 'body is not a JSON object: ' + Body);
+end;
+
+{ TScopedTool }
+
+constructor TScopedTool.Create;
+begin
+  inherited;
+  FName := 'test_scoped';
 end;
 
 { THttpTransportTests }
@@ -145,7 +169,8 @@ begin
   var Request := TStringStream.Create(Body, TEncoding.UTF8);
   var Response := TMemoryStream.Create;
   try
-    Http.HTTPOptions := Http.HTTPOptions + [hoNoProtocolErrorException, hoWantProtocolErrorContent];
+    Http.HTTPOptions := Http.HTTPOptions + [hoNoProtocolErrorException, hoWantProtocolErrorContent] - [hoInProcessAuth];
+    Http.MaxAuthRetries := 0;
     Http.Request.ContentType := 'application/json';
     Http.Request.Accept := 'application/json';
     for var Header in Headers do
@@ -599,6 +624,107 @@ begin
     [MODERN_VERSION_HEADER, 'Mcp-Method: subscriptions/listen']);
   Assert.AreEqual(400, Reply.Status);
   Assert.IsTrue(Reply.Body.Contains('-32600'), Reply.Body);
+end;
+
+procedure THttpTransportTests.Auth_MissingToken_Is401WithChallenge;
+begin
+  FSettings.AuthorizationServers := 'https://auth.example';
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  var Reply := Post(LEGACY_PING, []);
+  Assert.AreEqual(401, Reply.Status);
+  Assert.AreEqual(Format('Bearer resource_metadata="http://localhost:%d/.well-known/oauth-protected-resource/mcp"', [FServer.Port]),
+    Reply.Header('WWW-Authenticate'));
+  Assert.IsTrue(Reply.Body.Contains('-32600'), Reply.Body);
+  Assert.IsFalse(Reply.Body.Contains('"id"'), 'the challenge body carries no id');
+end;
+
+procedure THttpTransportTests.Auth_WrongToken_Is401_InvalidToken;
+begin
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  var Reply := Post(LEGACY_PING, ['Authorization: Bearer nope']);
+  Assert.AreEqual(401, Reply.Status);
+  Assert.AreEqual('Bearer error="invalid_token", error_description="The bearer token is not recognised"',
+    Reply.Header('WWW-Authenticate'));
+end;
+
+procedure THttpTransportTests.Auth_MalformedHeader_Is400;
+begin
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  var Reply := Post(LEGACY_PING, ['Authorization: Basic abc']);
+  Assert.AreEqual(400, Reply.Status);
+  Assert.IsTrue(Reply.Header('WWW-Authenticate').Contains('error="invalid_request"'), Reply.Header('WWW-Authenticate'));
+  var Empty := Post(LEGACY_PING, ['Authorization: Bearer']);
+  Assert.AreEqual(400, Empty.Status);
+end;
+
+procedure THttpTransportTests.Auth_ValidToken_IsServed;
+begin
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  var Reply := Post(LEGACY_PING, ['Authorization: bearer s3cret']);
+  Assert.AreEqual(200, Reply.Status);
+  Assert.AreEqual('', Reply.Header('WWW-Authenticate'));
+  var Modern := Post('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{' + MODERN_META + '}}',
+    [MODERN_VERSION_HEADER, 'Mcp-Method: tools/list', 'Authorization: Bearer s3cret']);
+  Assert.AreEqual(200, Modern.Status);
+end;
+
+procedure THttpTransportTests.Auth_PreflightAndMetadata_NeedNoToken;
+begin
+  FSettings.CorsEnabled := True;
+  FSettings.AuthorizationServers := 'https://auth.example, https://auth2.example';
+  FSettings.ScopesSupported := 'read,offline_access';
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  Assert.AreEqual(204, Send('OPTIONS', '/mcp', '', ['Origin: http://localhost:5173']).Status);
+
+  for var Path in ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'] do
+  begin
+    var Reply := Send('GET', Path, '', []);
+    Assert.AreEqual(200, Reply.Status, Path);
+    Assert.AreEqual('max-age=3600', Reply.Header('Cache-Control'));
+    var Json := Reply.Json;
+    try
+      Assert.AreEqual(Format('http://localhost:%d/mcp', [FServer.Port]), Json.GetValue<string>('resource'));
+      Assert.AreEqual('https://auth2.example', Json.GetValue<string>('authorization_servers[1]'));
+      Assert.AreEqual(1, (Json.GetValue('scopes_supported') as TJSONArray).Count, 'offline_access is dropped');
+      Assert.AreEqual('header', Json.GetValue<string>('bearer_methods_supported[0]'));
+    finally
+      Json.Free;
+    end;
+  end;
+
+  Assert.AreEqual(404, Send('GET', '/.well-known/other', '', []).Status);
+  Assert.AreEqual(401, Send('GET', '/mcp', '', []).Status, 'GET on the endpoint is authenticated before 405');
+end;
+
+procedure THttpTransportTests.Auth_ScopedTool_Is403_WithInsufficientScope;
+const
+  CALL = '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"test_scoped","arguments":{}}}';
+begin
+  FHarness.ToolsManager.AddTool(TScopedTool.Create);
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['reader'], ['read']);
+  var Denied := Post(CALL, ['Authorization: Bearer reader']);
+  Assert.AreEqual(403, Denied.Status);
+  Assert.AreEqual('Bearer error="insufficient_scope", scope="admin"', Denied.Header('WWW-Authenticate'));
+  var Json := Denied.Json;
+  try
+    Assert.AreEqual(4, Json.GetValue<Integer>('id'));
+    Assert.AreEqual(-32600, Json.GetValue<Integer>('error.code'));
+    Assert.AreEqual('admin', Json.GetValue<string>('error.data.requiredScope'));
+  finally
+    Json.Free;
+  end;
+
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['admin-token'], ['read', 'admin']);
+  var Allowed := Post(CALL, ['Authorization: Bearer admin-token']);
+  Assert.AreEqual(200, Allowed.Status);
+  Assert.IsTrue(Allowed.Body.Contains('This is a simple text response'), Allowed.Body);
+end;
+
+procedure THttpTransportTests.Auth_ScopedTool_OnOpenServer_Is403;
+begin
+  FHarness.ToolsManager.AddTool(TScopedTool.Create);
+  var Reply := Post('{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"test_scoped","arguments":{}}}', []);
+  Assert.AreEqual(403, Reply.Status, 'nobody holds a scope on an open server');
 end;
 
 end.

@@ -42,6 +42,22 @@ RequestStateKey=
 ; Seconds a requestState token stays valid
 RequestStateTtlSeconds=600
 
+[Auth]
+; Pre-shared bearer tokens for the HTTP endpoint, comma-separated. Empty = no
+; authentication (the default for a loopback-only server). With tokens set,
+; every request except OPTIONS and the protected resource metadata must carry
+; "Authorization: Bearer <token>"; otherwise it gets 401.
+BearerTokens=
+; OAuth 2.1 authorization server issuer URLs, comma-separated, published in
+; /.well-known/oauth-protected-resource so clients can discover where to get a
+; token. Leave empty for pre-shared tokens only.
+AuthorizationServers=
+; Canonical URI of this server as bound into token audiences (RFC 8707).
+; Empty = <Protocol>://<Host>:<Port><Endpoint>
+ResourceUri=
+; Scopes clients may ask for, comma-separated, published in the metadata
+ScopesSupported=
+
 [Protocol]
 ; Boolean values: use 1 (true) or 0 (false)
 ; Answer ping for MCP 2026-07-28 requests although that revision removed it

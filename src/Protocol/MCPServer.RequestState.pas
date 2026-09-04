@@ -18,7 +18,6 @@ type
     function Signature(const Payload: TBytes): TBytes;
     class function Base64Url(const Bytes: TBytes): string; static;
     class function TryFromBase64Url(const Text: string; out Bytes: TBytes): Boolean; static;
-    class function SameBytes(const A, B: TBytes): Boolean; static;
     class function CanonicalJson(const Value: TJSONValue): string; static;
   public
     constructor Create(const Key: string; TtlSeconds: Integer = DEFAULT_TTL_SECONDS);
@@ -41,6 +40,7 @@ uses
   System.NetEncoding,
   System.Generics.Collections,
   System.Generics.Defaults,
+  MCPServer.Types,
   MCPServer.Errors,
   MCPServer.Logger;
 
@@ -108,25 +108,6 @@ begin
   except
     Result := False;
   end;
-end;
-
-class function TMCPRequestStateSealer.SameBytes(const A, B: TBytes): Boolean;
-begin
-  var Difference := Length(A) xor Length(B);
-  var Longest := Length(A);
-  if Length(B) > Longest then
-    Longest := Length(B);
-  for var I := 0 to Longest - 1 do
-  begin
-    var Left := 0;
-    var Right := 0;
-    if I < Length(A) then
-      Left := A[I];
-    if I < Length(B) then
-      Right := B[I];
-    Difference := Difference or (Left xor Right);
-  end;
-  Result := Difference = 0;
 end;
 
 class function TMCPRequestStateSealer.CanonicalJson(const Value: TJSONValue): string;
@@ -233,7 +214,7 @@ begin
   var Separator := Token.LastIndexOf(TOKEN_SEPARATOR);
   if (Separator <= 0) or not TryFromBase64Url(Token.Substring(0, Separator), PayloadBytes)
     or not TryFromBase64Url(Token.Substring(Separator + 1), SignatureBytes)
-    or not SameBytes(SignatureBytes, Signature(PayloadBytes)) then
+    or not TMCPConstantTime.SameBytes(SignatureBytes, Signature(PayloadBytes)) then
     raise EMCPError.InvalidParams('requestState failed integrity verification');
 
   var Payload := TJSONObject.ParseJSONValue(TEncoding.UTF8.GetString(PayloadBytes)) as TJSONObject;

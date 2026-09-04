@@ -26,6 +26,7 @@ uses
   IdServerIOHandler,
   MCPServer.Types,
   MCPServer.Settings,
+  MCPServer.Authorization,
   MCPServer.RequestContext,
   MCPServer.JsonRpcProcessor;
 
@@ -44,16 +45,28 @@ type
     FPort: Word;
     FActive: Boolean;
     FSettings: TMCPSettings;
+    FAuthorizer: IMCPAuthorizer;
     procedure ConfigureSSL;
     procedure ConfigureBindings;
     procedure AddBinding(const IP: string; IPVersion: TIdIPVersion);
     procedure HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean);
+    procedure HandleParseAuthentication(Context: TIdContext; const AuthType, AuthData: string;
+      var VUsername, VPassword: string; var VHandled: Boolean);
     procedure HandleHTTPRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     function AllowedOrigins: TArray<string>;
     function ValidateOrigin(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
     procedure ApplyCorsHeaders(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     procedure HandleEndpointInfo(ResponseInfo: TIdHTTPResponseInfo);
-    procedure HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
+    function IsProtectedResourceMetadataPath(const Document: string): Boolean;
+    function ResourceUri: string;
+    function ResourceMetadataUrl: string;
+    procedure HandleProtectedResourceMetadata(ResponseInfo: TIdHTTPResponseInfo);
+    function Authenticate(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+      out Principal: TMCPPrincipal): Boolean;
+    procedure SendChallenge(ResponseInfo: TIdHTTPResponseInfo; Status: Integer; const Challenge: TMCPAuthChallenge;
+      const Message: string);
+    procedure HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+      const Principal: TMCPPrincipal);
     function BuildTransportHints(RequestInfo: TIdHTTPRequestInfo): TMCPTransportHints;
     procedure EchoLegacySessionId(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     procedure SendEmpty(ResponseInfo: TIdHTTPResponseInfo; Status: Integer);
@@ -75,6 +88,7 @@ type
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry write FManagerRegistry;
     property CoreManager: IMCPCapabilityManager read FCoreManager write FCoreManager;
     property Settings: TMCPSettings read FSettings write FSettings;
+    property Authorizer: IMCPAuthorizer read FAuthorizer write FAuthorizer;
   end;
 
 implementation
@@ -90,6 +104,7 @@ const
   DEFAULT_MCP_PORT = 3000;
 
   HTTP_NO_CONTENT = 204;
+  HTTP_UNAUTHORIZED = 401;
   HTTP_FORBIDDEN = 403;
   HTTP_METHOD_NOT_ALLOWED = 405;
   HTTP_PAYLOAD_TOO_LARGE = 413;
@@ -104,6 +119,10 @@ const
   ALLOW_HEADER = 'POST, OPTIONS';
 
   HEADER_ORIGIN = 'Origin';
+  HEADER_AUTHORIZATION = 'Authorization';
+  HEADER_WWW_AUTHENTICATE = 'WWW-Authenticate';
+  BEARER_PREFIX = 'Bearer ';
+  METADATA_CACHE_CONTROL = 'max-age=3600';
   HEADER_ACCEPT = 'Accept';
   HEADER_SESSION_ID = 'Mcp-Session-Id';
   HEADER_PROTOCOL_VERSION = 'MCP-Protocol-Version';
@@ -132,6 +151,7 @@ begin
   FHTTPServer.OnCommandGet := HandleHTTPRequest;
   FHTTPServer.OnCommandOther := HandleHTTPRequest;
   FHTTPServer.OnQuerySSLPort := HandleQuerySSLPort;
+  FHTTPServer.OnParseAuthentication := HandleParseAuthentication;
   FSSLHandler := nil;
 end;
 
@@ -165,6 +185,9 @@ begin
     if FSettings.SSLEnabled then
       ConfigureSSL;
   end;
+
+  if Assigned(FAuthorizer) and (not Assigned(FSettings) or (Length(FSettings.AuthorizationServerList) = 0)) then
+    TLogger.Warning('An authorizer is configured without [Auth] AuthorizationServers: clients cannot discover an authorization server, only pre-shared tokens work');
 
   FHTTPServer.DefaultPort := FPort;
   ConfigureBindings;
@@ -304,6 +327,14 @@ begin
     TLogger.Info('Root Certificate: ' + FSettings.SSLRootCertFile);
 end;
 
+procedure TMCPIdHTTPServer.HandleParseAuthentication(Context: TIdContext; const AuthType, AuthData: string;
+  var VUsername, VPassword: string; var VHandled: Boolean);
+begin
+  VUsername := '';
+  VPassword := '';
+  VHandled := True;
+end;
+
 procedure TMCPIdHTTPServer.HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean);
 begin
   VUseSSL := Assigned(FSettings) and FSettings.SSLEnabled and (APort = FPort);
@@ -345,6 +376,13 @@ begin
       Exit;
     end;
 
+    if Assigned(FAuthorizer) and (RequestInfo.CommandType = hcGET)
+      and IsProtectedResourceMetadataPath(RequestInfo.Document) then
+    begin
+      HandleProtectedResourceMetadata(ResponseInfo);
+      Exit;
+    end;
+
     if RequestInfo.Document <> Endpoint then
     begin
       SendEmpty(ResponseInfo, HTTP_STATUS_NOT_FOUND);
@@ -352,9 +390,17 @@ begin
     end;
 
     if RequestInfo.Command = 'OPTIONS' then
-      SendEmpty(ResponseInfo, HTTP_NO_CONTENT)
-    else if RequestInfo.CommandType = hcPOST then
-      HandlePostRequest(Context, RequestInfo, ResponseInfo)
+    begin
+      SendEmpty(ResponseInfo, HTTP_NO_CONTENT);
+      Exit;
+    end;
+
+    var Principal := TMCPPrincipal.None;
+    if Assigned(FAuthorizer) and not Authenticate(RequestInfo, ResponseInfo, Principal) then
+      Exit;
+
+    if RequestInfo.CommandType = hcPOST then
+      HandlePostRequest(Context, RequestInfo, ResponseInfo, Principal)
     else
       SendMethodNotAllowed(ResponseInfo);
   finally
@@ -441,6 +487,90 @@ begin
   end;
 end;
 
+function TMCPIdHTTPServer.IsProtectedResourceMetadataPath(const Document: string): Boolean;
+begin
+  var Endpoint := '/mcp';
+  if Assigned(FSettings) then
+    Endpoint := FSettings.Endpoint;
+  Result := (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH)
+    or (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH + Endpoint);
+end;
+
+function TMCPIdHTTPServer.ResourceUri: string;
+begin
+  Result := '';
+  if Assigned(FSettings) then
+    Result := FSettings.ResourceUri.Trim;
+  if Result <> '' then
+    Exit;
+
+  Result := Format('%s://%s:%d%s', [FSettings.Protocol.ToLower, FSettings.Host.ToLower, FPort, FSettings.Endpoint]);
+end;
+
+function TMCPIdHTTPServer.ResourceMetadataUrl: string;
+begin
+  Result := '';
+  if not Assigned(FSettings) or (Length(FSettings.AuthorizationServerList) = 0) then
+    Exit;
+  Result := Format('%s://%s:%d%s%s', [FSettings.Protocol.ToLower, FSettings.Host.ToLower, FPort,
+    TMCPProtectedResourceMetadata.WELL_KNOWN_PATH, FSettings.Endpoint]);
+end;
+
+procedure TMCPIdHTTPServer.HandleProtectedResourceMetadata(ResponseInfo: TIdHTTPResponseInfo);
+begin
+  var Metadata := TMCPProtectedResourceMetadata.Build(ResourceUri, FSettings.ServerName,
+    FSettings.AuthorizationServerList, FSettings.ScopesSupportedList);
+  try
+    ResponseInfo.CustomHeaders.Values['Cache-Control'] := METADATA_CACHE_CONTROL;
+    SendJson(ResponseInfo, HTTP_STATUS_OK, Metadata.ToJSON);
+  finally
+    Metadata.Free;
+  end;
+end;
+
+procedure TMCPIdHTTPServer.SendChallenge(ResponseInfo: TIdHTTPResponseInfo; Status: Integer;
+  const Challenge: TMCPAuthChallenge; const Message: string);
+begin
+  ResponseInfo.CustomHeaders.Values[HEADER_WWW_AUTHENTICATE] := TMCPBearerChallenge.Build(ResourceMetadataUrl, Challenge);
+  SendJsonRpcError(ResponseInfo, Status, JSONRPC_INVALID_REQUEST, Message);
+end;
+
+function TMCPIdHTTPServer.Authenticate(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+  out Principal: TMCPPrincipal): Boolean;
+var
+  Challenge: TMCPAuthChallenge;
+begin
+  Principal := TMCPPrincipal.None;
+  Result := False;
+
+  var Header := HeaderValue(RequestInfo, HEADER_AUTHORIZATION);
+  if Header = '' then
+  begin
+    SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, TMCPAuthChallenge.None, 'Authorization required');
+    Exit;
+  end;
+  if not Header.StartsWith(BEARER_PREFIX, True) or (Header.Length <= BEARER_PREFIX.Length) then
+  begin
+    SendChallenge(ResponseInfo, HTTP_STATUS_BAD_REQUEST,
+      TMCPAuthChallenge.InvalidRequest('Only the Bearer scheme is supported'), 'Malformed Authorization header');
+    Exit;
+  end;
+
+  var Token := Header.Substring(BEARER_PREFIX.Length).Trim;
+  case FAuthorizer.Authorize(Token, RequestInfo.Command, RequestInfo.Document, Principal, Challenge) of
+    TMCPAuthDecision.Allow:
+      Result := True;
+    TMCPAuthDecision.Unauthorized:
+      SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, Challenge, 'Unauthorized');
+    TMCPAuthDecision.Forbidden:
+      SendChallenge(ResponseInfo, HTTP_FORBIDDEN, Challenge, 'Forbidden');
+    TMCPAuthDecision.BadRequest:
+      SendChallenge(ResponseInfo, HTTP_STATUS_BAD_REQUEST, Challenge, 'Malformed authorization request');
+  else
+    SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, Challenge, 'Unauthorized');
+  end;
+end;
+
 function TMCPIdHTTPServer.BuildTransportHints(RequestInfo: TIdHTTPRequestInfo): TMCPTransportHints;
 begin
   Result := TMCPTransportHints.ForHttp(
@@ -460,7 +590,7 @@ begin
 end;
 
 procedure TMCPIdHTTPServer.HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo;
-  ResponseInfo: TIdHTTPResponseInfo);
+  ResponseInfo: TIdHTTPResponseInfo; const Principal: TMCPPrincipal);
 begin
   var MaxBodyBytes: Integer := TMCPSettings.DEFAULT_MAX_REQUEST_BODY_BYTES;
   var MaxDepth: Integer := TMCPSettings.DEFAULT_MAX_JSON_DEPTH;
@@ -495,6 +625,8 @@ begin
 
   var AcceptsEventStream := TMCPAcceptHeader.Accepts(HeaderValue(RequestInfo, HEADER_ACCEPT), MEDIA_TYPE_EVENT_STREAM);
   var Hints := BuildTransportHints(RequestInfo);
+  Hints.Principal := Principal.Subject;
+  Hints.Scopes := Principal.Scopes;
   var Stream: TMCPHttpResponseStream := nil;
   var StreamRef: IMCPMessageSink := nil;
   if AcceptsEventStream then
@@ -522,6 +654,9 @@ begin
 
   if Outcome.Era = TMCPProtocolEra.Legacy then
     EchoLegacySessionId(RequestInfo, ResponseInfo);
+  if Outcome.RequiredScope <> '' then
+    ResponseInfo.CustomHeaders.Values[HEADER_WWW_AUTHENTICATE] :=
+      TMCPBearerChallenge.Build(ResourceMetadataUrl, TMCPAuthChallenge.InsufficientScope(Outcome.RequiredScope));
 
   if Outcome.Body = '' then
   begin

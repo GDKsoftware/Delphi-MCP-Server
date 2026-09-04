@@ -21,6 +21,7 @@ uses
   MCPServer.ContentBlocks in '..\src\Protocol\MCPServer.ContentBlocks.pas',
   MCPServer.Logger in '..\src\Core\MCPServer.Logger.pas',
   MCPServer.Settings in '..\src\Core\MCPServer.Settings.pas',
+  MCPServer.Authorization in '..\src\Core\MCPServer.Authorization.pas',
   MCPServer.Registration in '..\src\Core\MCPServer.Registration.pas',
   MCPServer.ManagerRegistry in '..\src\Core\MCPServer.ManagerRegistry.pas',
   MCPServer.Tool.Base in '..\src\Tools\MCPServer.Tool.Base.pas',
@@ -77,6 +78,7 @@ uses
   MCPServer.Tests.Prompt in 'MCPServer.Tests.Prompt.pas',
   MCPServer.Tests.Mrtr in 'MCPServer.Tests.Mrtr.pas',
   MCPServer.Tests.Subscriptions in 'MCPServer.Tests.Subscriptions.pas',
+  MCPServer.Tests.Authorization in 'MCPServer.Tests.Authorization.pas',
   MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
   MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas';
 
