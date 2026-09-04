@@ -35,6 +35,12 @@ MaxConcurrentRequests=1
 ; any port), for DNS-rebinding protection. Comma-separated scheme://host[:port];
 ; ":*" allows any port. Empty = the [CORS] AllowedOrigins list below.
 AllowedOrigins=
+; Secret that signs the requestState tokens of multi round-trip requests.
+; Empty = a random key per process: tokens stop verifying after a restart
+; and on other instances. Set the same value on every instance.
+RequestStateKey=
+; Seconds a requestState token stays valid
+RequestStateTtlSeconds=600
 
 [Protocol]
 ; Boolean values: use 1 (true) or 0 (false)

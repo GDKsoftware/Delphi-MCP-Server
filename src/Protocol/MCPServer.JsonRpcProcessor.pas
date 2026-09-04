@@ -9,6 +9,8 @@ uses
   MCPServer.Types,
   MCPServer.Settings,
   MCPServer.RequestContext,
+  MCPServer.RequestState,
+  MCPServer.Mrtr,
   MCPServer.Errors,
   MCPServer.HttpHeaders,
   MCPServer.Logger;
@@ -27,12 +29,19 @@ type
     FManagerRegistry: IMCPManagerRegistry;
     FSettings: TMCPSettings;
     FOwnsSettings: Boolean;
+    FStateSealer: TMCPRequestStateSealer;
     procedure SetSettings(const Value: TMCPSettings);
     function SupportedModernVersions: TArray<string>;
     function BuildServerInfo: TJSONObject;
     function IsLegacyOnlyMethod(const Method: string): Boolean;
     function IsModernOnlyMethod(const Method: string): Boolean;
     function IsCacheableMethod(const Method: string): Boolean;
+    function IsInputRequiredMethod(const Method: string): Boolean;
+    function ClientInputResponses(const Params: TJSONObject): TJSONObject;
+    function OpenClientRequestState(const Method: string; const Params: TJSONObject;
+      const Hints: TMCPTransportHints): TJSONObject;
+    function InputRequiredResult(const Context: IMCPRequestContext; const Params: TJSONObject;
+      const Hints: TMCPTransportHints; const Required: EMCPInputRequired): TMCPProcessResult;
     function EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
     function EraFromMessage(const Method: string; const Params: TJSONObject;
       const Hints: TMCPTransportHints): TMCPProtocolEra;
@@ -84,6 +93,9 @@ const
   LEGACY_ONLY_METHODS: array[0..4] of string = (
     'ping', 'initialize', 'logging/setLevel', 'resources/subscribe', 'resources/unsubscribe');
   MODERN_ONLY_METHODS: array[0..1] of string = ('server/discover', 'subscriptions/listen');
+  INPUT_REQUIRED_METHODS: array[0..2] of string = ('tools/call', 'resources/read', 'prompts/get');
+  PARAM_INPUT_RESPONSES = 'inputResponses';
+  PARAM_REQUEST_STATE = 'requestState';
   LOG_LEVELS: array[0..7] of string = (
     'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
 
@@ -111,6 +123,7 @@ end;
 
 destructor TMCPJsonRpcProcessor.Destroy;
 begin
+  FStateSealer.Free;
   if FOwnsSettings then
     FSettings.Free;
   inherited;
@@ -129,6 +142,9 @@ begin
     FSettings := TMCPSettings.Create('', False);
     FOwnsSettings := True;
   end;
+
+  FreeAndNil(FStateSealer);
+  FStateSealer := TMCPRequestStateSealer.Create(FSettings.RequestStateKey, FSettings.RequestStateTtlSeconds);
 end;
 
 function TMCPJsonRpcProcessor.SupportedModernVersions: TArray<string>;
@@ -169,6 +185,47 @@ end;
 function TMCPJsonRpcProcessor.IsCacheableMethod(const Method: string): Boolean;
 begin
   Result := InArray(Method, MCP_CACHEABLE_METHODS);
+end;
+
+function TMCPJsonRpcProcessor.IsInputRequiredMethod(const Method: string): Boolean;
+begin
+  Result := InArray(Method, INPUT_REQUIRED_METHODS);
+end;
+
+function TMCPJsonRpcProcessor.ClientInputResponses(const Params: TJSONObject): TJSONObject;
+begin
+  Result := nil;
+  if not Assigned(Params) then
+    Exit;
+
+  var Value := Params.GetValue(PARAM_INPUT_RESPONSES);
+  if not Assigned(Value) then
+    Exit;
+  if not (Value is TJSONObject) then
+    raise EMCPError.InvalidParams(Format('params.%s must be an object', [PARAM_INPUT_RESPONSES]));
+
+  for var Pair in TJSONObject(Value) do
+  begin
+    if not (Pair.JsonValue is TJSONObject) then
+      raise EMCPError.InvalidParams(Format('params.%s.%s must be an object', [PARAM_INPUT_RESPONSES, Pair.JsonString.Value]));
+  end;
+  Result := TJSONObject(Value);
+end;
+
+function TMCPJsonRpcProcessor.OpenClientRequestState(const Method: string; const Params: TJSONObject;
+  const Hints: TMCPTransportHints): TJSONObject;
+begin
+  Result := nil;
+  if not Assigned(Params) then
+    Exit;
+
+  var Value := Params.GetValue(PARAM_REQUEST_STATE);
+  if not Assigned(Value) then
+    Exit;
+  if not IsJsonString(Value) then
+    raise EMCPError.InvalidParams(Format('params.%s must be a string', [PARAM_REQUEST_STATE]));
+
+  Result := FStateSealer.Open(TJSONString(Value).Value, Method, TMCPRequestStateSealer.DigestOf(Params), Hints.Principal);
 end;
 
 function TMCPJsonRpcProcessor.EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
@@ -304,8 +361,15 @@ begin
       raise NotFound;
     end;
 
+    var InputResponses: TJSONObject := nil;
+    var RequestState: TJSONObject := nil;
+    if IsInputRequiredMethod(Method) then
+    begin
+      InputResponses := ClientInputResponses(Params);
+      RequestState := OpenClientRequestState(Method, Params, Hints);
+    end;
     Exit(TMCPRequestContext.Create(TMCPProtocolEra.Modern, Version, Method, RequestId, Meta,
-      Hints.LegacySession, FManagerRegistry, Hints.Sink));
+      Hints.LegacySession, FManagerRegistry, Hints.Sink, InputResponses, RequestState));
   end;
 
   if Method = 'initialize' then
@@ -407,6 +471,54 @@ begin
   Result.HttpStatus := HTTP_STATUS_OK;
   Result.Era := Era;
   Result.Cancelled := True;
+end;
+
+function TMCPJsonRpcProcessor.InputRequiredResult(const Context: IMCPRequestContext; const Params: TJSONObject;
+  const Hints: TMCPTransportHints; const Required: EMCPInputRequired): TMCPProcessResult;
+begin
+  if Context.Era = TMCPProtocolEra.Legacy then
+    raise EMCPError.InternalError(Format(
+      '%s needs input from the client, which protocol version %s cannot deliver',
+      [Context.Method, Context.ProtocolVersion]));
+  if not IsInputRequiredMethod(Context.Method) then
+    raise EMCPError.InternalError(Format('%s must not answer with an InputRequiredResult', [Context.Method]));
+  if (Required.Requests.Count = 0) and not Assigned(Required.State) then
+    raise EMCPError.InternalError('An InputRequiredResult needs inputRequests or requestState');
+
+  for var Method in Required.Requests.Methods do
+  begin
+    var Capability := TMCPInputRequests.RequiredCapability(Method);
+    if Capability = '' then
+      raise EMCPError.InternalError(Format('%s is not a request a client can answer', [Method]));
+    Context.RequireClientCapability(Capability);
+  end;
+
+  var ResultObject := TJSONObject.Create;
+  try
+    ResultObject.AddPair('resultType', RESULT_TYPE_INPUT_REQUIRED);
+    if Required.Requests.Count > 0 then
+      ResultObject.AddPair('inputRequests', Required.Requests.ToJson);
+    if Assigned(Required.State) then
+      ResultObject.AddPair(PARAM_REQUEST_STATE, FStateSealer.Seal(Required.State, Context.Method,
+        TMCPRequestStateSealer.DigestOf(Params), Hints.Principal));
+    ApplyModernEnvelope(ResultObject, Context.Method);
+
+    var Response := TJSONObject.Create;
+    try
+      Response.AddPair('jsonrpc', JSONRPC_VERSION);
+      Response.AddPair('id', Context.RequestId.ToJson);
+      Response.AddPair('result', TJSONObject(ResultObject.Clone));
+      Result.Body := Response.ToJSON;
+    finally
+      Response.Free;
+    end;
+  finally
+    ResultObject.Free;
+  end;
+  Result.HttpStatus := HTTP_STATUS_OK;
+  Result.Era := Context.Era;
+  Result.IsNotification := False;
+  Result.Cancelled := False;
 end;
 
 function TMCPJsonRpcProcessor.BuildErrorResponse(const RequestId: TMCPRequestId; const Error: EMCPError): string;
@@ -644,7 +756,12 @@ begin
       if Assigned(Hints.Tracker) then
         Hints.Tracker.Track(Context);
       try
-        ExecuteResult := DispatchRequest(Context, Params);
+        try
+          ExecuteResult := DispatchRequest(Context, Params);
+        except
+          on E: EMCPInputRequired do
+            Exit(InputRequiredResult(Context, Params, Hints, E));
+        end;
       finally
         if Assigned(Hints.Tracker) then
           Hints.Tracker.Untrack(Context);

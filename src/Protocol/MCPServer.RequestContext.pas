@@ -21,6 +21,7 @@ type
     HasNameHeader: Boolean;
     NameHeader: string;
     RemoteAddress: string;
+    Principal: string;
     LegacySession: TMCPLegacySession;
     Sink: IMCPMessageSink;
     Tracker: IMCPRequestTracker;
@@ -42,6 +43,8 @@ type
     FLegacySession: TMCPLegacySession;
     FManagerRegistry: IMCPManagerRegistry;
     FSink: IMCPMessageSink;
+    FInputResponses: TJSONObject;
+    FRequestState: TJSONObject;
     FCancelled: Integer;
     FProgressSent: Boolean;
     FLastProgress: Double;
@@ -51,7 +54,8 @@ type
     constructor Create(Era: TMCPProtocolEra; const ProtocolVersion, Method: string;
       const RequestId: TMCPRequestId; const Meta: TJSONObject;
       const LegacySession: TMCPLegacySession; const ManagerRegistry: IMCPManagerRegistry;
-      const Sink: IMCPMessageSink = nil);
+      const Sink: IMCPMessageSink = nil; const InputResponses: TJSONObject = nil;
+      const RequestState: TJSONObject = nil);
     destructor Destroy; override;
 
     function GetEra: TMCPProtocolEra;
@@ -65,6 +69,8 @@ type
     function GetProgressToken: TJSONValue;
     function GetLegacySession: TMCPLegacySession;
     function GetManagerRegistry: IMCPManagerRegistry;
+    function GetInputResponses: TJSONObject;
+    function GetRequestState: TJSONObject;
     function HasClientCapability(const Path: string): Boolean;
     procedure RequireClientCapability(const Path: string);
     function IsCancelled: Boolean;
@@ -72,6 +78,7 @@ type
     procedure Cancel;
     function HasProgressToken: Boolean;
     procedure ReportProgress(const Progress: Double; const Total: Double = -1; const Message: string = '');
+    function TryGetInputResponse(const Key: string; out Response: TJSONObject): Boolean;
 
     class function Current: IMCPRequestContext;
     class procedure SetCurrent(const Value: IMCPRequestContext);
@@ -118,7 +125,8 @@ end;
 
 constructor TMCPRequestContext.Create(Era: TMCPProtocolEra; const ProtocolVersion, Method: string;
   const RequestId: TMCPRequestId; const Meta: TJSONObject; const LegacySession: TMCPLegacySession;
-  const ManagerRegistry: IMCPManagerRegistry; const Sink: IMCPMessageSink);
+  const ManagerRegistry: IMCPManagerRegistry; const Sink: IMCPMessageSink; const InputResponses: TJSONObject;
+  const RequestState: TJSONObject);
 begin
   inherited Create;
   FEra := Era;
@@ -130,11 +138,16 @@ begin
   FLegacySession := LegacySession;
   FManagerRegistry := ManagerRegistry;
   FSink := Sink;
+  if Assigned(InputResponses) then
+    FInputResponses := TJSONObject(InputResponses.Clone);
+  FRequestState := RequestState;
 end;
 
 destructor TMCPRequestContext.Destroy;
 begin
   FMeta.Free;
+  FInputResponses.Free;
+  FRequestState.Free;
   inherited;
 end;
 
@@ -210,6 +223,28 @@ end;
 function TMCPRequestContext.GetManagerRegistry: IMCPManagerRegistry;
 begin
   Result := FManagerRegistry;
+end;
+
+function TMCPRequestContext.GetInputResponses: TJSONObject;
+begin
+  Result := FInputResponses;
+end;
+
+function TMCPRequestContext.GetRequestState: TJSONObject;
+begin
+  Result := FRequestState;
+end;
+
+function TMCPRequestContext.TryGetInputResponse(const Key: string; out Response: TJSONObject): Boolean;
+begin
+  Response := nil;
+  if not Assigned(FInputResponses) then
+    Exit(False);
+
+  var Value := FInputResponses.GetValue(Key);
+  if Value is TJSONObject then
+    Response := TJSONObject(Value);
+  Result := Assigned(Response);
 end;
 
 function TMCPRequestContext.HasClientCapability(const Path: string): Boolean;
