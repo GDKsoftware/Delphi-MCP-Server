@@ -55,6 +55,7 @@ type
     procedure HandleHTTPRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     function AllowedOrigins: TArray<string>;
     function ValidateOrigin(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
+    function ValidateHost(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
     procedure ApplyCorsHeaders(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     procedure HandleEndpointInfo(ResponseInfo: TIdHTTPResponseInfo);
     function IsProtectedResourceMetadataPath(const Document: string): Boolean;
@@ -357,7 +358,7 @@ begin
   try
     TServerStatusResource.IncrementRequestCount;
 
-    if not ValidateOrigin(RequestInfo, ResponseInfo) then
+    if not ValidateHost(RequestInfo, ResponseInfo) or not ValidateOrigin(RequestInfo, ResponseInfo) then
       Exit;
 
     ApplyCorsHeaders(RequestInfo, ResponseInfo);
@@ -436,6 +437,16 @@ begin
 
   TLogger.Warning('Origin not allowed: ' + Origin);
   SendJsonRpcError(ResponseInfo, HTTP_FORBIDDEN, JSONRPC_INVALID_REQUEST, 'Origin not allowed');
+  Result := False;
+end;
+
+function TMCPIdHTTPServer.ValidateHost(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
+begin
+  if not Assigned(FSettings) or TMCPHostPolicy.IsAllowed(RequestInfo.Host, FSettings.AllowedHostList) then
+    Exit(True);
+
+  TLogger.Warning('Host not allowed: ' + RequestInfo.Host);
+  SendJsonRpcError(ResponseInfo, HTTP_FORBIDDEN, JSONRPC_INVALID_REQUEST, 'Host not allowed');
   Result := False;
 end;
 

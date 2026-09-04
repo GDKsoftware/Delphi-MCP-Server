@@ -42,6 +42,7 @@ type
     procedure RemoveResource(const URI: string);
     procedure ResourceUpdated(const URI: string);
     procedure AddResourceTemplate(const Template: IMCPResourceTemplate);
+    procedure RemoveResourceTemplate(const UriTemplate: string);
     function TryGetResource(const URI: string; out Resource: IMCPResource): Boolean;
     function TryGetResourceTemplate(const UriTemplate: string; out Template: IMCPResourceTemplate): Boolean;
 
@@ -198,6 +199,26 @@ procedure TMCPResourcesManager.AddResource(const Resource: IMCPResource);
 begin
   RegisterResource(Resource);
   NotifyListChanged;
+end;
+
+procedure TMCPResourcesManager.RemoveResourceTemplate(const UriTemplate: string);
+begin
+  var Removed := False;
+  FLock.Enter;
+  try
+    for var I := FTemplates.Count - 1 downto 0 do
+    begin
+      if FTemplates[I].UriTemplate = UriTemplate then
+      begin
+        FTemplates.Delete(I);
+        Removed := True;
+      end;
+    end;
+  finally
+    FLock.Leave;
+  end;
+  if Removed then
+    NotifyListChanged;
 end;
 
 procedure TMCPResourcesManager.AddResourceTemplate(const Template: IMCPResourceTemplate);

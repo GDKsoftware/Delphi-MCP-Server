@@ -27,6 +27,9 @@ MaxRequestBodyBytes=4194304
 MaxJsonDepth=64
 ; Indy connection limit; 0 = unlimited
 MaxConnections=0
+; Serve logs://recent, logs://{level} and server://status; set 0 on a server
+; that strangers can reach, the log buffer and status counters are diagnostics
+ExposeDiagnosticsResources=1
 ; Worker threads of the stdio transport; 1 answers requests in arrival order
 MaxConcurrentRequests=1
 
@@ -35,6 +38,11 @@ MaxConcurrentRequests=1
 ; any port), for DNS-rebinding protection. Comma-separated scheme://host[:port];
 ; ":*" allows any port. Empty = the [CORS] AllowedOrigins list below.
 AllowedOrigins=
+; Host header values the server answers, comma-separated host[:port]; an
+; entry without a port matches any port, * matches everything. Empty = any
+; host. Set it when the server is reachable through a public name so that a
+; rebinding DNS name cannot reach it.
+AllowedHosts=
 ; Secret that signs the requestState tokens of multi round-trip requests.
 ; Empty = a random key per process: tokens stop verifying after a restart
 ; and on other instances. Set the same value on every instance.

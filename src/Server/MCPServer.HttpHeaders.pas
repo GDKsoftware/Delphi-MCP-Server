@@ -28,6 +28,11 @@ type
     class function Matches(const Origin, Pattern: string): Boolean; static;
   end;
 
+  TMCPHostPolicy = record
+    class function IsAllowed(const HostHeader: string; const AllowList: TArray<string>): Boolean; static;
+    class function Matches(const HostHeader, Pattern: string): Boolean; static;
+  end;
+
   TMCPJsonLimits = record
     class function NestingDepth(const Json: string): Integer; static;
   end;
@@ -208,6 +213,34 @@ begin
   for var Pattern in AllowList do
     if Matches(Value, Pattern) then
       Exit(True);
+  Result := False;
+end;
+
+{ TMCPHostPolicy }
+
+class function TMCPHostPolicy.Matches(const HostHeader, Pattern: string): Boolean;
+var
+  Scheme, HostName, HostPort, PatternName, PatternPort: string;
+begin
+  if Pattern.Trim = TMCPOriginPolicy.ALLOW_ALL then
+    Exit(True);
+
+  SplitOrigin('http://' + HostHeader.Trim, Scheme, HostName, HostPort);
+  SplitOrigin('http://' + Pattern.Trim, Scheme, PatternName, PatternPort);
+  if (HostName = '') or (PatternName = '') or (HostName <> PatternName) then
+    Exit(False);
+  Result := (PatternPort = '') or (PatternPort = '*') or (PatternPort = HostPort);
+end;
+
+class function TMCPHostPolicy.IsAllowed(const HostHeader: string; const AllowList: TArray<string>): Boolean;
+begin
+  if Length(AllowList) = 0 then
+    Exit(True);
+  for var Pattern in AllowList do
+  begin
+    if Matches(HostHeader, Pattern) then
+      Exit(True);
+  end;
   Result := False;
 end;
 

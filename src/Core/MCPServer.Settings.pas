@@ -36,6 +36,8 @@ type
     FMaxConnections: Integer;
     FMaxConcurrentRequests: Integer;
     FSecurityAllowedOrigins: string;
+    FAllowedHosts: string;
+    FExposeDiagnosticsResources: Boolean;
     FRequestStateKey: string;
     FRequestStateTtlSeconds: Integer;
     FBearerTokens: string;
@@ -86,6 +88,9 @@ type
     property MaxConcurrentRequests: Integer read FMaxConcurrentRequests write FMaxConcurrentRequests;
     property SecurityAllowedOrigins: string read FSecurityAllowedOrigins write FSecurityAllowedOrigins;
     property AllowedOrigins: string read GetAllowedOrigins;
+    property AllowedHosts: string read FAllowedHosts write FAllowedHosts;
+    property ExposeDiagnosticsResources: Boolean read FExposeDiagnosticsResources write FExposeDiagnosticsResources;
+    function AllowedHostList: TArray<string>;
     property RequestStateKey: string read FRequestStateKey write FRequestStateKey;
     property RequestStateTtlSeconds: Integer read FRequestStateTtlSeconds write FRequestStateTtlSeconds;
     property BearerTokens: string read FBearerTokens write FBearerTokens;
@@ -161,6 +166,8 @@ begin
   FMaxConcurrentRequests := DEFAULT_MAX_CONCURRENT_REQUESTS;
   FMaxConnections := 0;
   FSecurityAllowedOrigins := '';
+  FAllowedHosts := '';
+  FExposeDiagnosticsResources := True;
   FRequestStateKey := '';
   FRequestStateTtlSeconds := DEFAULT_REQUEST_STATE_TTL_SECONDS;
   FBearerTokens := '';
@@ -177,6 +184,11 @@ begin
     if Item.Trim <> '' then
       Result := Result + [Item.Trim];
   end;
+end;
+
+function TMCPSettings.AllowedHostList: TArray<string>;
+begin
+  Result := SplitList(FAllowedHosts);
 end;
 
 function TMCPSettings.BearerTokenList: TArray<string>;
@@ -234,9 +246,13 @@ begin
     IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
     IniFile.WriteInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
     IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
+    IniFile.WriteString('Server', '; Serve logs://recent, logs://{level} and server://status (0 = keep diagnostics private)', '');
+    IniFile.WriteBool('Server', 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
 
     IniFile.WriteString('Security', '; Origins allowed next to the loopback origins (empty = [CORS] AllowedOrigins)', '');
     IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
+    IniFile.WriteString('Security', '; Host header values accepted, comma-separated host[:port] (empty = any)', '');
+    IniFile.WriteString('Security', 'AllowedHosts', FAllowedHosts);
     IniFile.WriteString('Security', '; Secret that signs requestState tokens (empty = random per process)', '');
     IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
     IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
@@ -294,6 +310,8 @@ begin
     FMaxConnections := IniFile.ReadInteger('Server', 'MaxConnections', FMaxConnections);
 
     FSecurityAllowedOrigins := IniFile.ReadString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
+    FAllowedHosts := IniFile.ReadString('Security', 'AllowedHosts', FAllowedHosts);
+    FExposeDiagnosticsResources := IniFile.ReadBool('Server', 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
     FRequestStateKey := IniFile.ReadString('Security', 'RequestStateKey', FRequestStateKey);
     FRequestStateTtlSeconds := IniFile.ReadInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
@@ -351,8 +369,10 @@ begin
     IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
     IniFile.WriteInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
     IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
+    IniFile.WriteBool('Server', 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
 
     IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
+    IniFile.WriteString('Security', 'AllowedHosts', FAllowedHosts);
     IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
     IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
