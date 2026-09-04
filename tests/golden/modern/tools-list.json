@@ -367,6 +367,36 @@
             },
             "additionalProperties": false
           }
+        },
+        {
+          "name": "test_trigger_tool_change",
+          "description": "Adds or removes test_dynamic_tool, which notifies subscribed clients that the tool list changed",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_trigger_prompt_change",
+          "description": "Adds or removes test_dynamic_prompt, which notifies subscribed clients that the prompt list changed",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_trigger_resource_change",
+          "description": "Reports test://static-text as updated to the clients subscribed to it",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
         }
       ],
       "ttlMs": 0,

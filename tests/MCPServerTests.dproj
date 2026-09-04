@@ -96,6 +96,7 @@
         <DCCReference Include="..\src\Managers\MCPServer.ResourcesManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.PromptsManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.CompletionManager.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.SubscriptionsManager.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioChannel.pas"/>
         <DCCReference Include="MCPServer.Tests.StdioChannel.pas"/>
@@ -104,6 +105,7 @@
         <DCCReference Include="MCPServer.Tests.SchemaValidator.pas"/>
         <DCCReference Include="MCPServer.Tests.Prompt.pas"/>
         <DCCReference Include="MCPServer.Tests.Mrtr.pas"/>
+        <DCCReference Include="MCPServer.Tests.Subscriptions.pas"/>
         <DCCReference Include="MCPServer.Tests.PromptsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.CompletionManager.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
@@ -134,6 +136,7 @@
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.InputRequiredSamples.pas"/>
+        <DCCReference Include="..\src\Tools\MCPServer.Tool.SubscriptionSamples.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Samples.pas"/>
         <DCCReference Include="..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas"/>
         <DCCReference Include="..\src\Prompts\MCPServer.Prompt.ContentSamples.pas"/>

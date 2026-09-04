@@ -32,6 +32,7 @@ uses
   MCPServer.ResourcesManager in '..\src\Managers\MCPServer.ResourcesManager.pas',
   MCPServer.PromptsManager in '..\src\Managers\MCPServer.PromptsManager.pas',
   MCPServer.CompletionManager in '..\src\Managers\MCPServer.CompletionManager.pas',
+  MCPServer.SubscriptionsManager in '..\src\Managers\MCPServer.SubscriptionsManager.pas',
   MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
   MCPServer.StdioChannel in '..\src\Server\MCPServer.StdioChannel.pas',
   // The built-in tools and resources register themselves in their
@@ -46,6 +47,7 @@ uses
   MCPServer.Resource.Project in '..\src\Resources\MCPServer.Resource.Project.pas',
   MCPServer.Tool.ContentSamples in '..\src\Tools\MCPServer.Tool.ContentSamples.pas',
   MCPServer.Tool.InputRequiredSamples in '..\src\Tools\MCPServer.Tool.InputRequiredSamples.pas',
+  MCPServer.Tool.SubscriptionSamples in '..\src\Tools\MCPServer.Tool.SubscriptionSamples.pas',
   MCPServer.Resource.Samples in '..\src\Resources\MCPServer.Resource.Samples.pas',
   MCPServer.Prompt.SummarizeLogs in '..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas',
   MCPServer.Prompt.ContentSamples in '..\src\Prompts\MCPServer.Prompt.ContentSamples.pas',
@@ -74,6 +76,7 @@ uses
   MCPServer.Tests.SchemaValidator in 'MCPServer.Tests.SchemaValidator.pas',
   MCPServer.Tests.Prompt in 'MCPServer.Tests.Prompt.pas',
   MCPServer.Tests.Mrtr in 'MCPServer.Tests.Mrtr.pas',
+  MCPServer.Tests.Subscriptions in 'MCPServer.Tests.Subscriptions.pas',
   MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
   MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas';
 

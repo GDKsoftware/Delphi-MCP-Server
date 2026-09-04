@@ -25,14 +25,14 @@
       ],
       "capabilities": {
         "tools": {
-          "listChanged": false
+          "listChanged": true
         },
         "resources": {
-          "subscribe": false,
-          "listChanged": false
+          "subscribe": true,
+          "listChanged": true
         },
         "prompts": {
-          "listChanged": false
+          "listChanged": true
         },
         "completions": {
         }

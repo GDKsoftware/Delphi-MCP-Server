@@ -22,6 +22,7 @@ type
       const Separator: string = #10): TArray<string>;
     function ParseLine(const Line: string): TJSONObject;
     function FindById(const Lines: TArray<string>; const Id: string): TJSONObject;
+    function FindNotification(const Lines: TArray<string>; const Method: string): TJSONObject;
   public
     [Setup]
     procedure Setup;
@@ -38,6 +39,8 @@ type
     [Test] procedure Progress_IsSentBeforeTheResponse;
     [Test] procedure ModernRequest_OverStdio;
     [Test] procedure Eof_WithRunningRequest_ReturnsAfterDrain;
+    [Test] procedure Listen_AckThenCancel_HasNoResponse;
+    [Test] procedure Listen_Eof_ClosesGracefully;
   end;
 
 implementation
@@ -100,6 +103,19 @@ begin
     var Json := ParseLine(Line);
     var IdValue := Json.GetValue('id');
     if Assigned(IdValue) and (IdValue.Value = Id) then
+      Exit(Json);
+    Json.Free;
+  end;
+  Result := nil;
+end;
+
+function TStdioTransportTests.FindNotification(const Lines: TArray<string>; const Method: string): TJSONObject;
+begin
+  for var Line in Lines do
+  begin
+    var Json := ParseLine(Line);
+    var MethodValue := Json.GetValue('method');
+    if IsJsonString(MethodValue) and (TJSONString(MethodValue).Value = Method) then
       Exit(Json);
     Json.Free;
   end;
@@ -256,6 +272,63 @@ begin
     300);
   Assert.AreEqual(0, Integer(Length(Lines)), 'the request was cancelled at shutdown and got no response');
   Assert.IsTrue(FElapsedMs < 3000, 'Run returned after the drain timeout: ' + FElapsedMs.ToString + ' ms');
+end;
+
+procedure TStdioTransportTests.Listen_AckThenCancel_HasNoResponse;
+const
+  LISTEN = '{"jsonrpc":"2.0","id":9,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}';
+  CANCEL = '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":9}}';
+  PING = '{"jsonrpc":"2.0","id":10,"method":"ping"}';
+begin
+  var Lines := Run([LISTEN, PING, CANCEL]);
+  Assert.AreEqual(2, Integer(Length(Lines)), string.Join(' | ', Lines));
+  var Ack := FindNotification(Lines, 'notifications/subscriptions/acknowledged');
+  try
+    Assert.IsNotNull(Ack, 'the subscription is acknowledged');
+    Assert.AreEqual(9, TJSONNumber(TJSONObject(Ack.FindValue('params._meta')).GetValue(MCP_META_SUBSCRIPTION_ID)).AsInt);
+    Assert.IsTrue(Ack.GetValue<Boolean>('params.notifications.toolsListChanged'));
+  finally
+    Ack.Free;
+  end;
+  var Pong := FindById(Lines, '10');
+  try
+    Assert.IsNotNull(Pong, 'ping is answered while a subscription is open');
+  finally
+    Pong.Free;
+  end;
+  var Response := FindById(Lines, '9');
+  Assert.IsNull(Response, 'a cancelled subscription gets no response');
+end;
+
+procedure TStdioTransportTests.Listen_Eof_ClosesGracefully;
+const
+  LISTEN = '{"jsonrpc":"2.0","id":9,"method":"subscriptions/listen","params":{"notifications":{"promptsListChanged":true},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}';
+  TRIGGER = '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"test_trigger_prompt_change","arguments":{},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}';
+  SLOW = '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":3,"stepMs":100}}}';
+begin
+  var Lines := Run([LISTEN, SLOW, TRIGGER]);
+  Assert.IsTrue(Length(Lines) >= 4, string.Join(' | ', Lines));
+  var Ack := FindNotification(Lines, 'notifications/subscriptions/acknowledged');
+  try
+    Assert.IsNotNull(Ack, 'the subscription is acknowledged');
+  finally
+    Ack.Free;
+  end;
+  var Changed := False;
+  for var Line in Lines do
+  begin
+    if Line.Contains('"notifications/prompts/list_changed"') then
+      Changed := True;
+  end;
+  Assert.IsTrue(Changed, 'the prompt change reached the subscription');
+  var Response := FindById(Lines, '9');
+  try
+    Assert.IsNotNull(Response, 'stdin closing ends the subscription with a response');
+    Assert.AreEqual('complete', Response.GetValue<string>('result.resultType'));
+    Assert.AreEqual(9, TJSONNumber(TJSONObject(Response.FindValue('result._meta')).GetValue(MCP_META_SUBSCRIPTION_ID)).AsInt);
+  finally
+    Response.Free;
+  end;
 end;
 
 end.
