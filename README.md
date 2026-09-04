@@ -155,6 +155,32 @@ notifications first and the JSON-RPC response as its last event. A request
 that sends none is answered as before. A client that closes the stream
 cancels the request.
 
+### Change notifications (`subscriptions/listen`)
+
+A modern client that wants to hear about changes opens a long-lived
+`subscriptions/listen` request with a `notifications` filter
+(`toolsListChanged`, `promptsListChanged`, `resourcesListChanged`,
+`resourceSubscriptions`: a list of URIs). `TMCPSubscriptionsManager`
+(`MCPServer.SubscriptionsManager`) answers with
+`notifications/subscriptions/acknowledged` carrying the honoured filter and
+keeps the stream open: over HTTP as an SSE response with a keep-alive comment
+every 15 seconds, over stdio on a thread of its own so the worker threads stay
+free. Every message on the subscription carries
+`_meta.io.modelcontextprotocol/subscriptionId`, the JSON-RPC id of the
+`subscriptions/listen` request. Closing the SSE stream, or sending
+`notifications/cancelled` for that id over stdio, ends the subscription;
+when the server stops (or stdin closes) it answers the request with a
+completion result first.
+
+Assign the manager as `ChangeNotifier` of the tools, prompts and resources
+managers, as `MCPServer.dpr` does, and the `tools`, `prompts` and `resources`
+capabilities announce `listChanged` (and `resources.subscribe`) to modern
+clients. `AddTool`, `RemoveTool`, `AddPrompt`, `RemovePrompt`, `AddResource`,
+`RemoveResource` and `AddResourceTemplate` then notify the subscribed clients,
+and `TMCPResourcesManager.ResourceUpdated(Uri)` reports a changed resource to
+the clients that subscribed to that URI. Without a `ChangeNotifier` nothing is
+announced and nothing is sent.
+
 ## Protocol Versions and Dual-Era Behaviour
 
 The server decides per request which protocol era it is speaking; nothing is negotiated per connection and no session is minted.
@@ -741,6 +767,11 @@ The Inspector provides a web interface to interact with your MCP server, making 
   requires the `sampling` client capability and answers `-32021` without it,
   **test_streaming_elicitation** logs to the response stream and then asks
   for a confirmation
+- **test_trigger_tool_change**, **test_trigger_prompt_change**,
+  **test_trigger_resource_change**: add or remove `test_dynamic_tool` and
+  `test_dynamic_prompt`, or report `test://static-text` as updated, so that
+  clients on `subscriptions/listen` receive the change notifications, from
+  `MCPServer.Tool.SubscriptionSamples`
 
 ## Available Example prompts
 
