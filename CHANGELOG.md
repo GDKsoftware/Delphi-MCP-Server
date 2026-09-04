@@ -184,6 +184,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   request's own stream, only when the request carries
   `_meta.io.modelcontextprotocol/logLevel` and the level is at or above it;
   `TMCPLogLevel` and `MCP_LOG_LEVELS` in `MCPServer.Types`.
+- `[Security] AllowedHosts` (`TMCPHostPolicy`): `Host` header allow-list,
+  `403` for other hosts; `[Server] ExposeDiagnosticsResources` to keep
+  `logs://recent`, `logs://{level}` and `server://status` off a server that
+  strangers can reach; `TMCPResourcesManager.RemoveResourceTemplate`.
 - Authentication (`MCPServer.Authorization`): `IMCPAuthorizer` on
   `TMCPIdHTTPServer.Authorizer`, `TMCPStaticBearerAuthorizer` (constant-time
   comparison), the abstract `TMCPOAuthResourceServerAuthorizer` (mandatory
