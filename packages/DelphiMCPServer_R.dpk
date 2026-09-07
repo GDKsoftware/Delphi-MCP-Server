@@ -1,0 +1,101 @@
+package DelphiMCPServer_R;
+{$R *.res}
+{$IFDEF IMPLICITBUILDING This IFDEF should not be used by users}
+{$ALIGN 8}
+{$ASSERTIONS ON}
+{$BOOLEVAL OFF}
+{$DEBUGINFO OFF}
+{$EXTENDEDSYNTAX ON}
+{$IMPORTEDDATA ON}
+{$IOCHECKS ON}
+{$LOCALSYMBOLS ON}
+{$LONGSTRINGS ON}
+{$OPENSTRINGS ON}
+{$OPTIMIZATION ON}
+{$OVERFLOWCHECKS OFF}
+{$RANGECHECKS OFF}
+{$REFERENCEINFO ON}
+{$SAFEDIVIDE OFF}
+{$STACKFRAMES OFF}
+{$TYPEDADDRESS OFF}
+{$VARSTRINGCHECKS ON}
+{$WRITEABLECONST OFF}
+{$MINENUMSIZE 1}
+{$IMAGEBASE $400000}
+{$DEFINE RELEASE}
+{$ENDIF IMPLICITBUILDING}
+{$DESCRIPTION 'Delphi MCP Server runtime (protocol, server, client)'}
+{$LIBSUFFIX AUTO}
+{$RUNONLY}
+{$IMPLICITBUILD OFF}
+
+// NO_TAURUS_TLS is set in the project options, not here: a conditional defined
+// in a package source file does not reach the units the package contains. The
+// shipped BPL therefore falls back to IdSSLOpenSSL, which comes with Delphi.
+// A host that wants TaurusTLS compiles the sources into its own project instead.
+//
+// The seven self-registering sample tools under src\Tools are deliberately
+// absent, so loading this package seeds no tool into a host registry. The two
+// sample prompt and resource units that use one of them are absent for the same
+// reason: containing them would import the sample tool unit implicitly.
+
+requires
+  rtl,
+  IndySystem,
+  IndyCore,
+  IndyProtocols;
+
+contains
+  MCPClient in '..\src\Client\MCPClient.pas',
+  MCPClient.Errors in '..\src\Client\MCPClient.Errors.pas',
+  MCPClient.Http in '..\src\Client\MCPClient.Http.pas',
+  MCPClient.Interfaces in '..\src\Client\MCPClient.Interfaces.pas',
+  MCPClient.Types in '..\src\Client\MCPClient.Types.pas',
+  MCPServer.Application in '..\src\Core\MCPServer.Application.pas',
+  MCPServer.Authorization in '..\src\Core\MCPServer.Authorization.pas',
+  MCPServer.Capabilities in '..\src\Protocol\MCPServer.Capabilities.pas',
+  MCPServer.CompletionManager in '..\src\Managers\MCPServer.CompletionManager.pas',
+  MCPServer.ContentBlocks in '..\src\Protocol\MCPServer.ContentBlocks.pas',
+  MCPServer.CoreManager in '..\src\Managers\MCPServer.CoreManager.pas',
+  MCPServer.Errors in '..\src\Protocol\MCPServer.Errors.pas',
+  MCPServer.Host in '..\src\Server\MCPServer.Host.pas',
+  MCPServer.Http.Config in '..\src\Http\MCPServer.Http.Config.pas',
+  MCPServer.Http.Executor in '..\src\Http\MCPServer.Http.Executor.pas',
+  MCPServer.Http.Executor.Interfaces in '..\src\Http\MCPServer.Http.Executor.Interfaces.pas',
+  MCPServer.Http.Response in '..\src\Http\MCPServer.Http.Response.pas',
+  MCPServer.Http.Response.Interfaces in '..\src\Http\MCPServer.Http.Response.Interfaces.pas',
+  MCPServer.Http.ResponseParser in '..\src\Http\MCPServer.Http.ResponseParser.pas',
+  MCPServer.Http.ResponseParser.Interfaces in '..\src\Http\MCPServer.Http.ResponseParser.Interfaces.pas',
+  MCPServer.HttpHeaders in '..\src\Server\MCPServer.HttpHeaders.pas',
+  MCPServer.HttpStream in '..\src\Server\MCPServer.HttpStream.pas',
+  MCPServer.IdHTTPServer in '..\src\Server\MCPServer.IdHTTPServer.pas',
+  MCPServer.JsonRpcProcessor in '..\src\Protocol\MCPServer.JsonRpcProcessor.pas',
+  MCPServer.Logger in '..\src\Core\MCPServer.Logger.pas',
+  MCPServer.ManagerRegistry in '..\src\Core\MCPServer.ManagerRegistry.pas',
+  MCPServer.Mrtr in '..\src\Protocol\MCPServer.Mrtr.pas',
+  MCPServer.PathBoundary in '..\src\Core\MCPServer.PathBoundary.pas',
+  MCPServer.Prompt.Base in '..\src\Prompts\MCPServer.Prompt.Base.pas',
+  MCPServer.Prompt.SummarizeLogs in '..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas',
+  MCPServer.PromptsManager in '..\src\Managers\MCPServer.PromptsManager.pas',
+  MCPServer.Registration in '..\src\Core\MCPServer.Registration.pas',
+  MCPServer.RequestContext in '..\src\Protocol\MCPServer.RequestContext.pas',
+  MCPServer.RequestState in '..\src\Protocol\MCPServer.RequestState.pas',
+  MCPServer.Resource.Base in '..\src\Resources\MCPServer.Resource.Base.pas',
+  MCPServer.Resource.Logs in '..\src\Resources\MCPServer.Resource.Logs.pas',
+  MCPServer.Resource.Project in '..\src\Resources\MCPServer.Resource.Project.pas',
+  MCPServer.Resource.Server in '..\src\Resources\MCPServer.Resource.Server.pas',
+  MCPServer.ResourcesManager in '..\src\Managers\MCPServer.ResourcesManager.pas',
+  MCPServer.Schema.Generator in '..\src\Protocol\MCPServer.Schema.Generator.pas',
+  MCPServer.Schema.Validator in '..\src\Protocol\MCPServer.Schema.Validator.pas',
+  MCPServer.Serializer in '..\src\Protocol\MCPServer.Serializer.pas',
+  MCPServer.Settings in '..\src\Core\MCPServer.Settings.pas',
+  MCPServer.StdioChannel in '..\src\Server\MCPServer.StdioChannel.pas',
+  MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
+  MCPServer.SubscriptionsManager in '..\src\Managers\MCPServer.SubscriptionsManager.pas',
+  MCPServer.Tool.Base in '..\src\Tools\MCPServer.Tool.Base.pas',
+  MCPServer.Tool.Method in '..\src\Tools\MCPServer.Tool.Method.pas',
+  MCPServer.Tool.Result in '..\src\Tools\MCPServer.Tool.Result.pas',
+  MCPServer.ToolsManager in '..\src\Managers\MCPServer.ToolsManager.pas',
+  MCPServer.Types in '..\src\Protocol\MCPServer.Types.pas';
+
+end.
