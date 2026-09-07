@@ -68,6 +68,7 @@ uses
   MCPServer.Tests.Capabilities in 'MCPServer.Tests.Capabilities.pas',
   MCPServer.Tests.Golden.Modern in 'MCPServer.Tests.Golden.Modern.pas',
   MCPServer.Tests.HttpHeaders in 'MCPServer.Tests.HttpHeaders.pas',
+  MCPServer.Tests.HeaderEncoding in 'MCPServer.Tests.HeaderEncoding.pas',
   MCPServer.Tests.Http in 'MCPServer.Tests.Http.pas',
   MCPServer.Tests.ToolResult in 'MCPServer.Tests.ToolResult.pas',
   MCPServer.Tests.Serializer in 'MCPServer.Tests.Serializer.pas',

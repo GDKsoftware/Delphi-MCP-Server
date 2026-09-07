@@ -108,6 +108,8 @@ const
   META_PATH_PREFIX = 'params._meta.';
   MESSAGE_PARAMS_NOT_OBJECT = 'params must be an object';
   MESSAGE_HEADER_MISMATCH = 'Header mismatch: %s header value ''%s'' does not match body value ''%s''';
+  MESSAGE_HEADER_MISSING_SUFFIX = ' header is missing';
+  MESSAGE_HEADER_INVALID_SUFFIX = ' header value is not a valid header value';
   RESULT_TYPE_COMPLETE = 'complete';
 
   LEGACY_ONLY_METHODS: array[0..4] of string = (
@@ -306,11 +308,11 @@ var
   Decoded: string;
 begin
   if not Hints.HasMethodHeader then
-    raise EMCPError.HeaderMismatch('Mcp-Method header is missing');
+    raise EMCPError.HeaderMismatch(MCP_HEADER_METHOD + MESSAGE_HEADER_MISSING_SUFFIX);
   const IsNotMethod = (Hints.MethodHeader <> Method);
   if IsNotMethod then
     raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
-      ['Mcp-Method', Hints.MethodHeader, Method]));
+      [MCP_HEADER_METHOD, Hints.MethodHeader, Method]));
 
   var SourceField := '';
   if (Method = MCP_METHOD_TOOLS_CALL) or (Method = MCP_METHOD_PROMPTS_GET) then
@@ -322,9 +324,9 @@ begin
     Exit;
 
   if not Hints.HasNameHeader then
-    raise EMCPError.HeaderMismatch('Mcp-Name header is missing');
+    raise EMCPError.HeaderMismatch(MCP_HEADER_NAME + MESSAGE_HEADER_MISSING_SUFFIX);
   if not TMCPHeaderValue.TryDecode(Hints.NameHeader, Decoded) then
-    raise EMCPError.HeaderMismatch('Mcp-Name header value is not a valid header value');
+    raise EMCPError.HeaderMismatch(MCP_HEADER_NAME + MESSAGE_HEADER_INVALID_SUFFIX);
 
   var BodyValue := '';
   if Assigned(Params) then
@@ -336,7 +338,7 @@ begin
   const IsNotBodyValue = (Decoded <> BodyValue);
   if IsNotBodyValue then
     raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
-      ['Mcp-Name', Decoded, BodyValue]));
+      [MCP_HEADER_NAME, Decoded, BodyValue]));
 end;
 
 function TMCPJsonRpcProcessor.NewContext(Era: TMCPProtocolEra; const Version, Method: string;
@@ -373,11 +375,11 @@ begin
   if Hints.HasHeaderLayer then
   begin
     if not Hints.HasProtocolVersionHeader then
-      raise EMCPError.HeaderMismatch('MCP-Protocol-Version header is missing');
+      raise EMCPError.HeaderMismatch(MCP_HEADER_PROTOCOL_VERSION + MESSAGE_HEADER_MISSING_SUFFIX);
     const IsNotVersion = (Hints.ProtocolVersionHeader <> Version);
     if IsNotVersion then
       raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
-        ['MCP-Protocol-Version', Hints.ProtocolVersionHeader, Version]));
+        [MCP_HEADER_PROTOCOL_VERSION, Hints.ProtocolVersionHeader, Version]));
   end;
 
   if not TMCPProtocolVersion.IsModern(Version) then
