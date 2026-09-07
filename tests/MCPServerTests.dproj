@@ -114,6 +114,7 @@
         <DCCReference Include="MCPServer.Tests.PromptsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.CompletionManager.pas"/>
         <DCCReference Include="MCPServer.Tests.Marshal.pas"/>
+        <DCCReference Include="MCPClient.Tests.Sse.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.GetTime.pas"/>
@@ -147,6 +148,10 @@
         <DCCReference Include="MCPServer.Tests.ResourcesManager.pas"/>
         <DCCReference Include="MCPServer.Tests.Host.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Types.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Errors.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Interfaces.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Http.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.InputRequiredSamples.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.SubscriptionSamples.pas"/>

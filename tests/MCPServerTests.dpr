@@ -56,6 +56,10 @@ uses
   MCPServer.Prompt.SummarizeLogs in '..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas',
   MCPServer.Prompt.ContentSamples in '..\src\Prompts\MCPServer.Prompt.ContentSamples.pas',
   MCPServer.Tool.Result in '..\src\Tools\MCPServer.Tool.Result.pas',
+  MCPClient.Types in '..\src\Client\MCPClient.Types.pas',
+  MCPClient.Errors in '..\src\Client\MCPClient.Errors.pas',
+  MCPClient.Interfaces in '..\src\Client\MCPClient.Interfaces.pas',
+  MCPClient.Http in '..\src\Client\MCPClient.Http.pas',
   MCPServer.Tests.Support in 'MCPServer.Tests.Support.pas',
   MCPServer.Tests.Harness in 'MCPServer.Tests.Harness.pas',
   MCPServer.Tests.Golden in 'MCPServer.Tests.Golden.pas',
@@ -91,7 +95,8 @@ uses
   MCPServer.Tests.Authorization in 'MCPServer.Tests.Authorization.pas',
   MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
   MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas',
-  MCPServer.Tests.Host in 'MCPServer.Tests.Host.pas';
+  MCPServer.Tests.Host in 'MCPServer.Tests.Host.pas',
+  MCPClient.Tests.Sse in 'MCPClient.Tests.Sse.pas';
 
 procedure RunTests;
 begin
