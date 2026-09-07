@@ -22,12 +22,13 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - [Available Example Prompts](#available-example-prompts)
 - [Available Example Resources](#available-example-resources)
 - [Configuration](#configuration)
-- [Authentication](#authentication)
-- [Network and Security](#network-and-security)
+  - [Authentication](#authentication)
+  - [Network and Security](#network-and-security)
 - [License](#license)
 - [Contributing](#contributing)
 - [About GDK Software](#about-gdk-software)
 - [Support](#support)
+- [Commercial Support](#commercial-support)
 
 ## Features
 
@@ -38,7 +39,7 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - **Resource Management**: Modular resource system supporting various content types
 - **Security**: `Origin` and `Host` validation against DNS rebinding on every request, loopback binding by default, CORS headers for browser clients, request size and nesting limits, opt-in bearer authentication with OAuth 2.1 resource-server discovery
 - **Multi round-trip requests, streaming and subscriptions**: `InputRequiredResult` with signed `requestState`, progress and log notifications on the response stream, `subscriptions/listen` for change notifications
-- **High Performance**: Native implementation using Indy HTTP Server with keep-alive support
+- **Native HTTP stack**: Indy HTTP server with keep-alive, no external runtime
 - **Optional Parameters**: Support for optional tool parameters using custom attributes
 - **Cross-Platform**: Supports Windows (Win32/Win64) and Linux (x64)
 
@@ -751,7 +752,7 @@ The easiest way to test and debug your MCP server is using the official MCP Insp
 
 The Inspector provides a web interface to interact with your MCP server, making it perfect for development and debugging.
 
-## Available Example tools
+## Available Example Tools
 
 - **echo**: Echo a message back to the user
 - **get_time**: Get the current server time
@@ -781,7 +782,7 @@ The Inspector provides a web interface to interact with your MCP server, making 
   clients on `subscriptions/listen` receive the change notifications, from
   `MCPServer.Tool.SubscriptionSamples`
 
-## Available Example prompts
+## Available Example Prompts
 
 - **summarize_logs**: summarizes the server's recent log entries, optionally
   filtered by level (argument completion suggests the levels actually
@@ -793,7 +794,7 @@ The Inspector provides a web interface to interact with your MCP server, making 
 - **test_input_required_result_prompt**: asks the client for a context
   through an elicitation input request before it renders
 
-## Available Example resources
+## Available Example Resources
 
 The server provides six resources and two resource templates, accessible via URIs:
 
