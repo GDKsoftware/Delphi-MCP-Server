@@ -15,6 +15,7 @@ uses
   MCPServer.Serializer in 'Protocol\MCPServer.Serializer.pas',
   MCPServer.Schema.Generator in 'Protocol\MCPServer.Schema.Generator.pas',
   MCPServer.Logger in 'Core\MCPServer.Logger.pas',
+  MCPServer.PathBoundary in 'Core\MCPServer.PathBoundary.pas',
   MCPServer.Settings in 'Core\MCPServer.Settings.pas',
   MCPServer.Registration in 'Core\MCPServer.Registration.pas',
   MCPServer.ManagerRegistry in 'Core\MCPServer.ManagerRegistry.pas',

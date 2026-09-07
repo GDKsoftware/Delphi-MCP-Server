@@ -132,6 +132,7 @@
         <DCCReference Include="Protocol\MCPServer.Serializer.pas"/>
         <DCCReference Include="Protocol\MCPServer.Schema.Generator.pas"/>
         <DCCReference Include="Core\MCPServer.Logger.pas"/>
+        <DCCReference Include="Core\MCPServer.PathBoundary.pas"/>
         <DCCReference Include="Core\MCPServer.Settings.pas"/>
         <DCCReference Include="Core\MCPServer.Registration.pas"/>
         <DCCReference Include="Core\MCPServer.ManagerRegistry.pas"/>
