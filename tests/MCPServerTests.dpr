@@ -99,7 +99,9 @@ uses
   MCPServer.Tests.Host in 'MCPServer.Tests.Host.pas',
   MCPClient.Tests.Sse in 'MCPClient.Tests.Sse.pas',
   MCPClient.Tests.Legacy in 'MCPClient.Tests.Legacy.pas',
-  MCPClient.Tests.Modern in 'MCPClient.Tests.Modern.pas';
+  MCPClient.Tests.Modern in 'MCPClient.Tests.Modern.pas',
+  MCPClient.Tests.Auth in 'MCPClient.Tests.Auth.pas',
+  MCPClient.Tests.Mrtr in 'MCPClient.Tests.Mrtr.pas';
 
 procedure RunTests;
 begin
