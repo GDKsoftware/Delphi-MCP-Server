@@ -48,6 +48,10 @@ type
     function Snapshot: TArray<IMCPSubscription>;
     procedure Deliver(const Method, Uri: string);
     function Listen(const Params: TJSONObject; const Context: IMCPRequestContext): TValue;
+    function NewSubscription(const Context: IMCPRequestContext; const Notifications: TJSONValue): IMCPSubscription;
+    procedure Add(const Subscription: IMCPSubscription);
+    procedure Remove(const Subscription: IMCPSubscription);
+    procedure WaitUntilClosed(const Context: IMCPRequestContext; const Subscription: IMCPSubscription);
     procedure Acknowledge(const Subscription: IMCPSubscription);
     function CompletionResult(const Subscription: IMCPSubscription): TJSONObject;
   public
@@ -295,8 +299,6 @@ begin
 end;
 
 function TMCPSubscriptionsManager.Listen(const Params: TJSONObject; const Context: IMCPRequestContext): TValue;
-var
-  KeepAlive: IMCPKeepAlive;
 begin
   if not Assigned(Context) or not Assigned(Context.Sink) then
     raise EMCPError.InvalidRequest(Format(
@@ -308,46 +310,69 @@ begin
   if Assigned(Notifications) and not (Notifications is TJSONObject) then
     raise EMCPError.InvalidParams(Format('params.%s must be an object', [PARAM_NOTIFICATIONS]));
 
-  var Id := Context.RequestId.ToJson;
-  var Subscription: IMCPSubscription;
+  const Subscription = NewSubscription(Context, Notifications);
+  Add(Subscription);
   try
-    Subscription := TMCPSubscription.Create(Id, TMCPSubscriptionFilter.FromJson(Notifications), Context.Sink);
+    Acknowledge(Subscription);
+    TLogger.Info(Format('Subscription %s opened', [Context.RequestId.AsText]));
+    WaitUntilClosed(Context, Subscription);
+  finally
+    Remove(Subscription);
+  end;
+
+  TLogger.Info(Format('Subscription %s closed', [Context.RequestId.AsText]));
+  Result := TValue.From<TJSONObject>(CompletionResult(Subscription));
+end;
+
+function TMCPSubscriptionsManager.NewSubscription(const Context: IMCPRequestContext;
+  const Notifications: TJSONValue): IMCPSubscription;
+begin
+  const Id = Context.RequestId.ToJson;
+  try
+    const Filter = TMCPSubscriptionFilter.FromJson(Notifications);
+    Result := TMCPSubscription.Create(Id, Filter, Context.Sink);
   finally
     Id.Free;
   end;
+end;
 
+procedure TMCPSubscriptionsManager.Add(const Subscription: IMCPSubscription);
+begin
   FLock.Enter;
   try
     FSubscriptions.Add(Subscription);
   finally
     FLock.Leave;
   end;
-  try
-    Acknowledge(Subscription);
-    TLogger.Info(Format('Subscription %s opened', [Context.RequestId.AsText]));
+end;
 
-    Supports(Context.Sink, IMCPKeepAlive, KeepAlive);
-    var SinceKeepAlive := 0;
-    while not Context.IsCancelled and (Subscription.Closed.WaitFor(POLL_INTERVAL_MS) = TWaitResult.wrTimeout) do
-    begin
-      Inc(SinceKeepAlive, POLL_INTERVAL_MS);
-      if Assigned(KeepAlive) and (SinceKeepAlive >= FKeepAliveIntervalMs) then
-      begin
-        SinceKeepAlive := 0;
-        KeepAlive.KeepAlive;
-      end;
-    end;
+procedure TMCPSubscriptionsManager.Remove(const Subscription: IMCPSubscription);
+begin
+  FLock.Enter;
+  try
+    FSubscriptions.Remove(Subscription);
   finally
-    FLock.Enter;
-    try
-      FSubscriptions.Remove(Subscription);
-    finally
-      FLock.Leave;
+    FLock.Leave;
+  end;
+end;
+
+procedure TMCPSubscriptionsManager.WaitUntilClosed(const Context: IMCPRequestContext;
+  const Subscription: IMCPSubscription);
+var
+  KeepAlive: IMCPKeepAlive;
+begin
+  Supports(Context.Sink, IMCPKeepAlive, KeepAlive);
+  var SinceKeepAlive := 0;
+  while not Context.IsCancelled and (Subscription.Closed.WaitFor(POLL_INTERVAL_MS) = TWaitResult.wrTimeout) do
+  begin
+    Inc(SinceKeepAlive, POLL_INTERVAL_MS);
+    const IsQuietTooLong = (Assigned(KeepAlive) and (SinceKeepAlive >= FKeepAliveIntervalMs));
+    if IsQuietTooLong then
+    begin
+      SinceKeepAlive := 0;
+      KeepAlive.KeepAlive;
     end;
   end;
-
-  TLogger.Info(Format('Subscription %s closed', [Context.RequestId.AsText]));
-  Result := TValue.From<TJSONObject>(CompletionResult(Subscription));
 end;
 
 procedure TMCPSubscriptionsManager.Deliver(const Method, Uri: string);

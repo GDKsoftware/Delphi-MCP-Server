@@ -90,7 +90,10 @@ function TSummarizeLogsPrompt.Complete(const ArgumentName, Value: string;
   const Context: TArray<TPair<string, string>>): TMCPCompletion;
 begin
   if ArgumentName <> 'level' then
-    Exit(TMCPCompletion.Create(nil));
+    begin
+      Result := TMCPCompletion.Create(nil);
+      Exit;
+    end;
 
   var Levels := TStringList.Create;
   try

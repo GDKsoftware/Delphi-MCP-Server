@@ -23,6 +23,7 @@ uses
   MCPServer.ContentBlocks in 'Protocol\MCPServer.ContentBlocks.pas',
   MCPServer.Logger in 'Core\MCPServer.Logger.pas',
   MCPServer.Settings in 'Core\MCPServer.Settings.pas',
+  MCPServer.Application in 'Core\MCPServer.Application.pas',
   MCPServer.Authorization in 'Core\MCPServer.Authorization.pas',
   MCPServer.Registration in 'Core\MCPServer.Registration.pas',
   MCPServer.ManagerRegistry in 'Core\MCPServer.ManagerRegistry.pas',
@@ -55,15 +56,6 @@ uses
   MCPServer.Prompt.ContentSamples in 'Prompts\MCPServer.Prompt.ContentSamples.pas';
 
 var
-  Server: TMCPIdHTTPServer;
-  Settings: TMCPSettings;
-  ManagerRegistry: IMCPManagerRegistry;
-  CoreManager: IMCPCapabilityManager;
-  ToolsManager: TMCPToolsManager;
-  ResourcesManager: TMCPResourcesManager;
-  PromptsManager: TMCPPromptsManager;
-  CompletionManager: IMCPCapabilityManager;
-  SubscriptionsManager: TMCPSubscriptionsManager;
   ShutdownEvent: TEvent;
 
 {$IFDEF MSWINDOWS}
@@ -94,107 +86,16 @@ begin
 end;
 {$ENDIF}
   
-procedure RunHTTPServer;
+procedure RunServer(const UseStdio: Boolean);
 begin
-  Settings := TMCPSettings.Create;
-
-  TLogger.Info('Delphi MCP Server v' + Settings.ServerVersion);
-  TLogger.Info('================================');
-  TLogger.Info('Model Context Protocol Server');
-  TLogger.Info('Transport: HTTP');
-  TLogger.Info('Listening on port ' + Settings.Port.ToString);
-
-  ManagerRegistry := TMCPManagerRegistry.Create;
-  CoreManager := TMCPCoreManager.Create(Settings);
-  ToolsManager := TMCPToolsManager.Create;
-  ResourcesManager := TMCPResourcesManager.Create;
-  if not Settings.ExposeDiagnosticsResources then
-  begin
-    ResourcesManager.RemoveResource('logs://recent');
-    ResourcesManager.RemoveResource('server://status');
-    ResourcesManager.RemoveResourceTemplate('logs://{level}');
-  end;
-  PromptsManager := TMCPPromptsManager.Create;
-  CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
-  SubscriptionsManager := TMCPSubscriptionsManager.Create;
-  ToolsManager.ChangeNotifier := SubscriptionsManager;
-  ResourcesManager.ChangeNotifier := SubscriptionsManager;
-  PromptsManager.ChangeNotifier := SubscriptionsManager;
-
-  ManagerRegistry.RegisterManager(CoreManager);
-  ManagerRegistry.RegisterManager(ToolsManager);
-  ManagerRegistry.RegisterManager(ResourcesManager);
-  ManagerRegistry.RegisterManager(PromptsManager);
-  ManagerRegistry.RegisterManager(CompletionManager);
-  ManagerRegistry.RegisterManager(SubscriptionsManager);
-
-  Server := TMCPIdHTTPServer.Create(nil);
+  const Application = TMCPServerApplication.Create(not UseStdio);
   try
-    Server.Settings := Settings;
-    Server.ManagerRegistry := ManagerRegistry;
-    Server.CoreManager := CoreManager;
-    if Length(Settings.BearerTokenList) > 0 then
-      Server.Authorizer := TMCPStaticBearerAuthorizer.Create(Settings.BearerTokenList);
-
-    Server.Start;
-
-    TLogger.Info('Server started. Press CTRL+C to stop...');
-
-    ShutdownEvent.WaitFor(INFINITE);
-
-    TLogger.Info('Shutting down server...');
-    Server.Stop;
-    TLogger.Info('Server stopped successfully');
+    if UseStdio then
+      Application.RunStdio
+    else
+      Application.RunHttp(ShutdownEvent);
   finally
-    Server.Free;
-    Settings.Free;
-  end;
-end;
-
-procedure RunStdioServer;
-var
-  StdioTransport: TMCPStdioTransport;
-begin
-  // A stdio server is spawned by its client; it reads settings.ini when
-  // present but never writes one next to the executable.
-  Settings := TMCPSettings.Create('', False);
-
-  TLogger.Info('Delphi MCP Server v' + Settings.ServerVersion);
-  TLogger.Info('================================');
-  TLogger.Info('Model Context Protocol Server');
-  TLogger.Info('Transport: STDIO');
-
-  ManagerRegistry := TMCPManagerRegistry.Create;
-  CoreManager := TMCPCoreManager.Create(Settings);
-  ToolsManager := TMCPToolsManager.Create;
-  ResourcesManager := TMCPResourcesManager.Create;
-  if not Settings.ExposeDiagnosticsResources then
-  begin
-    ResourcesManager.RemoveResource('logs://recent');
-    ResourcesManager.RemoveResource('server://status');
-    ResourcesManager.RemoveResourceTemplate('logs://{level}');
-  end;
-  PromptsManager := TMCPPromptsManager.Create;
-  CompletionManager := TMCPCompletionManager.Create(PromptsManager, ResourcesManager);
-  SubscriptionsManager := TMCPSubscriptionsManager.Create;
-  ToolsManager.ChangeNotifier := SubscriptionsManager;
-  ResourcesManager.ChangeNotifier := SubscriptionsManager;
-  PromptsManager.ChangeNotifier := SubscriptionsManager;
-
-  ManagerRegistry.RegisterManager(CoreManager);
-  ManagerRegistry.RegisterManager(ToolsManager);
-  ManagerRegistry.RegisterManager(ResourcesManager);
-  ManagerRegistry.RegisterManager(PromptsManager);
-  ManagerRegistry.RegisterManager(CompletionManager);
-  ManagerRegistry.RegisterManager(SubscriptionsManager);
-
-  StdioTransport := TMCPStdioTransport.Create(ManagerRegistry, CoreManager);
-  try
-    StdioTransport.Settings := Settings;
-    StdioTransport.Run;
-  finally
-    StdioTransport.Free;
-    Settings.Free;
+    Application.Free;
   end;
 end;
 
@@ -216,26 +117,17 @@ begin
 end;
 
 begin
-  // Check if running in STDIO mode before any logging
   if HasStdioFlag then
     TLogger.UseStdErr := True;
-
-  // Configure logger
   TLogger.LogToConsole := True;
   TLogger.MinLogLevel := TLogLevel.Info;
 
   {$IFDEF DEBUG}
-  // The leak report is a dialog on Windows; a stdio server has no place for it.
   ReportMemoryLeaksOnShutdown := not HasStdioFlag;
   {$ENDIF}
   IsMultiThread := True;
-  
-  // Create shutdown event
   ShutdownEvent := TEvent.Create(nil, True, False, '');
   try
-    // Set up signal handlers. Over stdio the client ends the server by
-    // closing stdin; a signal keeps its default meaning (terminate) instead
-    // of setting an event nobody waits on.
     {$IFDEF MSWINDOWS}
     if not HasStdioFlag then
       SetConsoleCtrlHandler(@ConsoleCtrlHandler, True);
@@ -251,10 +143,7 @@ begin
     
     try
     
-      if HasStdioFlag then
-        RunStdioServer
-      else
-        RunHTTPServer;
+      RunServer(HasStdioFlag);
 
     except
       on E: Exception do

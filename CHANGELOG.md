@@ -220,6 +220,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `MCPServer.Application` holds the wiring the executable used to repeat for
+  each transport: `TMCPServerApplication.RunHttp` and `RunStdio` build the
+  managers once and the program file is the command-line entry point only.
 - The content block helpers, the protocol version helpers and the redaction
   helpers are class functions on `TMCPContentBlock`, `TMCPProtocolVersion` and
   `TLogger`; `MCPServer.Schema.Generator` keeps its RTTI context in a class

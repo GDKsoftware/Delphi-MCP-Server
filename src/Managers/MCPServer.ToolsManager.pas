@@ -275,7 +275,10 @@ begin
   begin
     var ToolResult := ResultValue.AsType<TMCPToolResult>;
     try
-      Exit(ToolResult.ToJson(Era));
+      begin
+        Result := ToolResult.ToJson(Era);
+        Exit;
+      end;
     finally
       ToolResult.Free;
     end;
@@ -330,9 +333,15 @@ begin
       ResultValue := Tool.Execute(EffectiveArguments);
     except
       on E: EMCPToolError do
-        Exit(ErrorResult(E.Message, Era));
+        begin
+          Result := ErrorResult(E.Message, Era);
+          Exit;
+        end;
       on E: EArgumentException do
-        Exit(ErrorResult('Invalid arguments: ' + E.Message, Era));
+        begin
+          Result := ErrorResult('Invalid arguments: ' + E.Message, Era);
+          Exit;
+        end;
       on E: EMCPError do
         raise;
       on E: EMCPRequestCancelled do
@@ -340,7 +349,10 @@ begin
       on E: EMCPInputRequired do
         raise;
       on E: Exception do
-        Exit(ErrorResult('Error executing tool: ' + E.Message, Era));
+        begin
+          Result := ErrorResult('Error executing tool: ' + E.Message, Era);
+          Exit;
+        end;
     end;
     Result := ResultToJson(ResultValue, Era);
     {$IFDEF DEBUG}

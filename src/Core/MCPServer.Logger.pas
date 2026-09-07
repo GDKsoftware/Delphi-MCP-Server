@@ -327,7 +327,10 @@ class function TLogger.RedactJson(const Json: string): string;
 begin
   var Parsed := TJSONObject.ParseJSONValue(Json);
   if not Assigned(Parsed) then
-    Exit(Format('<%d characters, not JSON>', [Length(Json)]));
+    begin
+      Result := Format('<%d characters, not JSON>', [Length(Json)]);
+      Exit;
+    end;
 
   try
     RedactValue(Parsed);

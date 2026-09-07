@@ -365,7 +365,10 @@ begin
   if not Assigned(Token) then
     Exit(False);
   if Token is TJSONNumber then
-    Exit(Frac(TJSONNumber(Token).AsDouble) = 0);
+    begin
+      Result := Frac(TJSONNumber(Token).AsDouble) = 0;
+      Exit;
+    end;
   Result := Token is TJSONString;
 end;
 
