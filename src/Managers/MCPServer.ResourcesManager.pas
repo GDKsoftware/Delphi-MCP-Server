@@ -234,20 +234,32 @@ end;
 
 function TMCPResourcesManager.TryGetResource(const URI: string; out Resource: IMCPResource): Boolean;
 begin
-  Result := FResources.TryGetValue(URI, Resource);
+  FLock.Enter;
+  try
+    Result := FResources.TryGetValue(URI, Resource);
+  finally
+    FLock.Leave;
+  end;
 end;
 
 function TMCPResourcesManager.TryGetResourceTemplate(const UriTemplate: string;
   out Template: IMCPResourceTemplate): Boolean;
 begin
-  for var Candidate in FTemplates do
-    if Candidate.UriTemplate = UriTemplate then
-    begin
-      Template := Candidate;
-      Exit(True);
-    end;
   Template := nil;
   Result := False;
+  FLock.Enter;
+  try
+    for var Candidate in FTemplates do
+    begin
+      if Candidate.UriTemplate = UriTemplate then
+      begin
+        Template := Candidate;
+        Exit(True);
+      end;
+    end;
+  finally
+    FLock.Leave;
+  end;
 end;
 
 function TMCPResourcesManager.FindResource(const URI: string): IMCPResource;

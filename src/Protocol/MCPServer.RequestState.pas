@@ -7,6 +7,9 @@ uses
   System.JSON;
 
 type
+  EMCPRequestStateKey = class(Exception)
+  end;
+
   TMCPRequestStateSealer = class
   public
     const DEFAULT_TTL_SECONDS = 600;
@@ -16,6 +19,8 @@ type
     FTtlSeconds: Integer;
     FKeyIsEphemeral: Boolean;
     function Signature(const Payload: TBytes): TBytes;
+    class function NewRandomKey: TBytes; static;
+    class function QuotedName(const Value: string): string; static;
     class function Base64Url(const Bytes: TBytes): string; static;
     class function TryFromBase64Url(const Text: string; out Bytes: TBytes): Boolean; static;
     class function CanonicalJson(const Value: TJSONValue): string; static;
@@ -34,6 +39,9 @@ type
 implementation
 
 uses
+{$IFDEF MSWINDOWS}
+  Winapi.Windows,
+{$ENDIF}
   System.Classes,
   System.Hash,
   System.DateUtils,
@@ -46,6 +54,7 @@ uses
 
 const
   KEY_BYTES = 32;
+  URANDOM_DEVICE = '/dev/urandom';
   TOKEN_SEPARATOR = '.';
   PAYLOAD_VERSION = 'v';
   PAYLOAD_METHOD = 'm';
@@ -55,7 +64,45 @@ const
   PAYLOAD_STATE = 's';
   EXCLUDED_MEMBERS: array[0..2] of string = ('_meta', 'inputResponses', 'requestState');
 
+{$IFDEF MSWINDOWS}
+const
+  BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
+  STATUS_SUCCESS = 0;
+
+function BCryptGenRandom(Algorithm: Pointer; Buffer: PByte; BufferLength: ULONG;
+  Flags: ULONG): Integer; stdcall; external 'bcrypt.dll' name 'BCryptGenRandom';
+{$ENDIF}
+
 { TMCPRequestStateSealer }
+
+class function TMCPRequestStateSealer.NewRandomKey: TBytes;
+var
+  Generated: Boolean;
+begin
+  SetLength(Result, KEY_BYTES);
+{$IFDEF MSWINDOWS}
+  Generated := BCryptGenRandom(nil, PByte(Result), KEY_BYTES, BCRYPT_USE_SYSTEM_PREFERRED_RNG) = STATUS_SUCCESS;
+{$ELSE}
+  const Device = TFileStream.Create(URANDOM_DEVICE, fmOpenRead or fmShareDenyNone);
+  try
+    Generated := Device.Read(Result[0], KEY_BYTES) = KEY_BYTES;
+  finally
+    Device.Free;
+  end;
+{$ENDIF}
+  if not Generated then
+    raise EMCPRequestStateKey.Create('The operating system did not provide a random key for requestState');
+end;
+
+class function TMCPRequestStateSealer.QuotedName(const Value: string): string;
+begin
+  const Quoted = TJSONString.Create(Value);
+  try
+    Result := Quoted.ToJSON;
+  finally
+    Quoted.Free;
+  end;
+end;
 
 constructor TMCPRequestStateSealer.Create(const Key: string; TtlSeconds: Integer);
 begin
@@ -65,10 +112,7 @@ begin
     FKey := TEncoding.UTF8.GetBytes(Key)
   else
   begin
-    SetLength(FKey, KEY_BYTES);
-    Randomize;
-    for var I := 0 to High(FKey) do
-      FKey[I] := Byte(Random(256));
+    FKey := NewRandomKey;
     FKeyIsEphemeral := True;
     TLogger.Warning('[Security] RequestStateKey is not set: requestState tokens are sealed with a random key ' +
       'and stop verifying after a restart or on another instance');
@@ -130,8 +174,10 @@ begin
         begin
           if I > 0 then
             Parts.Append(',');
-          Parts.Append(TJSONString.Create(Names[I]).ToJSON).Append(':')
-            .Append(CanonicalJson(TJSONObject(Value).GetValue(Names[I])));
+          const Member = TJSONObject(Value).GetValue(Names[I]);
+          Parts.Append(QuotedName(Names[I]));
+          Parts.Append(':');
+          Parts.Append(CanonicalJson(Member));
         end;
         Parts.Append('}');
         Result := Parts.ToString;
@@ -217,9 +263,15 @@ begin
     or not TMCPConstantTime.SameBytes(SignatureBytes, Signature(PayloadBytes)) then
     raise EMCPError.InvalidParams('requestState failed integrity verification');
 
-  var Payload := TJSONObject.ParseJSONValue(TEncoding.UTF8.GetString(PayloadBytes)) as TJSONObject;
-  if not Assigned(Payload) then
+  const Parsed = TJSONObject.ParseJSONValue(TEncoding.UTF8.GetString(PayloadBytes));
+  const IsPayloadObject = (Parsed is TJSONObject);
+  if not IsPayloadObject then
+  begin
+    Parsed.Free;
     raise EMCPError.InvalidParams('requestState failed integrity verification');
+  end;
+
+  const Payload = TJSONObject(Parsed);
   try
     if Payload.GetValue<Integer>(PAYLOAD_VERSION, 0) <> TOKEN_VERSION then
       raise EMCPError.InvalidParams('requestState has an unsupported version');

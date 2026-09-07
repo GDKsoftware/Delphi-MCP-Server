@@ -14,6 +14,7 @@ uses
   IdHTTPServer,
   IdContext,
   IdCustomHTTPServer,
+  IdHeaderList,
   IdGlobal,
   IdGlobalProtocols,
   IdSocketHandle,
@@ -31,6 +32,11 @@ uses
   MCPServer.JsonRpcProcessor;
 
 type
+  TMCPDiscardedBody = class(TMemoryStream)
+  public
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
   TMCPIdHTTPServer = class(TComponent)
   private
     FHTTPServer: TIdHTTPServer;
@@ -78,6 +84,9 @@ type
     function HeaderPresent(RequestInfo: TIdHTTPRequestInfo; const Name: string): Boolean;
     procedure CloseSubscriptions;
     function HeaderValue(RequestInfo: TIdHTTPRequestInfo; const Name: string): string;
+    function IsListedHeader(const List, Name: string): Boolean;
+    procedure HandleCreatePostStream(Context: TIdContext; Headers: TIdHeaderList; var VPostStream: TStream);
+    function MaxBodyBytes: Integer;
   public
     constructor Create(Owner: TComponent); override;
     destructor Destroy; override;
@@ -138,6 +147,13 @@ const
   ANY_IPV4 = '0.0.0.0';
   ANY_IPV6 = '::';
 
+{ TMCPDiscardedBody }
+
+function TMCPDiscardedBody.Write(const Buffer; Count: Longint): Longint;
+begin
+  Result := Count;
+end;
+
 { TMCPIdHTTPServer }
 
 constructor TMCPIdHTTPServer.Create(Owner: TComponent);
@@ -153,6 +169,7 @@ begin
   FHTTPServer.OnCommandOther := HandleHTTPRequest;
   FHTTPServer.OnQuerySSLPort := HandleQuerySSLPort;
   FHTTPServer.OnParseAuthentication := HandleParseAuthentication;
+  FHTTPServer.OnCreatePostStream := HandleCreatePostStream;
   FSSLHandler := nil;
 end;
 
@@ -351,6 +368,32 @@ begin
   Result := Trim(RequestInfo.RawHeaders.Values[Name]);
 end;
 
+function TMCPIdHTTPServer.IsListedHeader(const List, Name: string): Boolean;
+begin
+  for var Listed in List.Split([',']) do
+  begin
+    if SameText(Listed.Trim, Name) then
+      Exit(True);
+  end;
+  Result := False;
+end;
+
+function TMCPIdHTTPServer.MaxBodyBytes: Integer;
+begin
+  Result := TMCPSettings.DEFAULT_MAX_REQUEST_BODY_BYTES;
+  if Assigned(FSettings) then
+    Result := FSettings.MaxRequestBodyBytes;
+end;
+
+procedure TMCPIdHTTPServer.HandleCreatePostStream(Context: TIdContext; Headers: TIdHeaderList;
+  var VPostStream: TStream);
+begin
+  const Declared = StrToInt64Def(Headers.Values['Content-Length'], 0);
+  const TooLarge = (Declared > MaxBodyBytes);
+  if TooLarge then
+    VPostStream := TMCPDiscardedBody.Create;
+end;
+
 procedure TMCPIdHTTPServer.HandleHTTPRequest(Context: TIdContext;
   RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
 begin
@@ -358,10 +401,10 @@ begin
   try
     TServerStatusResource.IncrementRequestCount;
 
+    ApplyCorsHeaders(RequestInfo, ResponseInfo);
+
     if not ValidateHost(RequestInfo, ResponseInfo) or not ValidateOrigin(RequestInfo, ResponseInfo) then
       Exit;
-
-    ApplyCorsHeaders(RequestInfo, ResponseInfo);
 
     var Endpoint := '/mcp';
     var EndpointInfoPath := '';
@@ -469,9 +512,10 @@ begin
   var AllowHeaders := CORS_ALLOW_HEADERS;
   for var Requested in HeaderValue(RequestInfo, 'Access-Control-Request-Headers').Split([',']) do
   begin
-    var Name := Requested.Trim;
-    if (Name <> '') and (Pos(LowerCase(Name), LowerCase(AllowHeaders)) = 0) then
-      AllowHeaders := AllowHeaders + ', ' + Name;
+    const Name = Requested.Trim;
+    const IsNew = ((Name <> '') and not IsListedHeader(AllowHeaders, Name));
+    if IsNew then
+      AllowHeaders := Format('%s, %s', [AllowHeaders, Name]);
   end;
 
   ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Methods'] := CORS_ALLOW_METHODS;
@@ -603,18 +647,17 @@ end;
 procedure TMCPIdHTTPServer.HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo; const Principal: TMCPPrincipal);
 begin
-  var MaxBodyBytes: Integer := TMCPSettings.DEFAULT_MAX_REQUEST_BODY_BYTES;
   var MaxDepth: Integer := TMCPSettings.DEFAULT_MAX_JSON_DEPTH;
   if Assigned(FSettings) then
-  begin
-    MaxBodyBytes := FSettings.MaxRequestBodyBytes;
     MaxDepth := FSettings.MaxJsonDepth;
-  end;
 
-  if Assigned(RequestInfo.PostStream) and (RequestInfo.PostStream.Size > MaxBodyBytes) then
+  const Limit = MaxBodyBytes;
+  const BodyTooLarge = Assigned(RequestInfo.PostStream)
+    and ((RequestInfo.PostStream is TMCPDiscardedBody) or (RequestInfo.PostStream.Size > Limit));
+  if BodyTooLarge then
   begin
     SendJsonRpcError(ResponseInfo, HTTP_PAYLOAD_TOO_LARGE, JSONRPC_INVALID_REQUEST,
-      Format('Request body exceeds %d bytes', [MaxBodyBytes]));
+      Format('Request body exceeds %d bytes', [Limit]));
     Exit;
   end;
 

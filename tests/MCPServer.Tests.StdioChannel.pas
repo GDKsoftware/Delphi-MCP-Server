@@ -20,6 +20,7 @@ type
     [Test] procedure Reader_DecodesUtf8;
     [Test] procedure Reader_ReportsOverlongLine_AndContinues;
     [Test] procedure Reader_ReportsInvalidUtf8_AndContinues;
+    [Test] procedure Reader_ReportsReplacedUtf8_AsInvalid;
     [Test] procedure Reader_OverlongLineWithoutNewline_EndsStream;
     [Test] procedure Reader_OverlongLineBeyondChunk_IsSkippedUpToNewline;
     [Test] procedure Reader_EmptyStream_HasNoLines;
@@ -140,6 +141,20 @@ begin
   Assert.AreEqual(2, Integer(Length(Lines)));
   Assert.IsTrue(Statuses[0] = TMCPLineStatus.InvalidUtf8, 'first line is not UTF-8');
   Assert.AreEqual('ok', Lines[1]);
+end;
+
+procedure TStdioChannelTests.Reader_ReportsReplacedUtf8_AsInvalid;
+var
+  Statuses: TArray<TMCPLineStatus>;
+begin
+  var Truncated := TBytes.Create($41, $C3) + TEncoding.UTF8.GetBytes(#10);
+  var Overlong := TBytes.Create($C0, $AF) + TEncoding.UTF8.GetBytes(#10'ok'#10);
+  var Lines := ReadAll(Truncated + Overlong, 1024, Statuses);
+  Assert.AreEqual(3, Integer(Length(Lines)));
+  Assert.IsTrue(Statuses[0] = TMCPLineStatus.InvalidUtf8, 'a truncated sequence is not UTF-8');
+  Assert.IsTrue(Statuses[1] = TMCPLineStatus.InvalidUtf8, 'an overlong sequence is not UTF-8');
+  Assert.IsTrue(Statuses[2] = TMCPLineStatus.Ok);
+  Assert.AreEqual('ok', Lines[2]);
 end;
 
 procedure TStdioChannelTests.Reader_EmptyStream_HasNoLines;

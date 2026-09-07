@@ -13,6 +13,7 @@ uses
   MCPServer.Mrtr,
   MCPServer.Errors,
   MCPServer.HttpHeaders,
+  MCPServer.Registration,
   MCPServer.Logger;
 
 type
@@ -423,7 +424,7 @@ end;
 function TMCPJsonRpcProcessor.ProcessNotification(const Method: string; const Params: TJSONObject;
   const Hints: TMCPTransportHints): TMCPProcessResult;
 begin
-  Result.Body := '';
+  Result := Default(TMCPProcessResult);
   Result.HttpStatus := HTTP_STATUS_ACCEPTED;
   Result.Era := EraFromHeaders(Hints);
   Result.IsNotification := True;
@@ -509,7 +510,7 @@ begin
         TMCPRequestStateSealer.DigestOf(Params), Hints.Principal));
     ApplyModernEnvelope(ResultObject, Context.Method);
 
-    var Response := TJSONObject.Create;
+    const Response = TJSONObject.Create;
     try
       Response.AddPair('jsonrpc', JSONRPC_VERSION);
       Response.AddPair('id', Context.RequestId.ToJson);
@@ -543,14 +544,14 @@ begin
   if not Assigned(Manager) then
     raise EMCPError.MethodNotFound(Context.Method);
 
-  TMCPRequestContext.SetCurrent(Context);
+  const Previous = TMCPRequestContext.SetCurrent(Context);
   try
     if Supports(Manager, IMCPCapabilityManagerEx, ManagerEx) then
       Result := ManagerEx.ExecuteMethodWithContext(Context.Method, Params, Context)
     else
       Result := Manager.ExecuteMethod(Context.Method, Params);
   finally
-    TMCPRequestContext.SetCurrent(nil);
+    TMCPRequestContext.SetCurrent(Previous);
   end;
 end;
 
@@ -593,7 +594,12 @@ begin
     else if Value.IsType<string> then
       Result := TJSONString.Create(Value.AsString)
     else
+    begin
+      if Value.IsObject then
+        raise EMCPError.InternalError(Format('%s answered with a %s instead of a JSON object',
+          [Context.Method, Value.AsObject.ClassName]));
       Result := TJSONString.Create(Value.ToString);
+    end;
     Exit;
   end;
 
@@ -602,6 +608,9 @@ begin
     ResultObject := Value.AsType<TJSONObject>
   else
   begin
+    if Value.IsObject then
+      raise EMCPError.InternalError(Format('%s answered with a %s instead of a JSON object',
+        [Context.Method, Value.AsObject.ClassName]));
     ResultObject := TJSONObject.Create;
     if not Value.IsEmpty then
       ResultObject.AddPair('value', Value.ToString);
@@ -669,7 +678,7 @@ end;
 
 function TMCPJsonRpcProcessor.ExceptionToError(Era: TMCPProtocolEra; const E: Exception): EMCPError;
 begin
-  if (Era = TMCPProtocolEra.Legacy) and (Pos('not found', E.Message) > 0) then
+  if E is EMCPRegistryNotFound then
     Result := EMCPError.Create(JSONRPC_METHOD_NOT_FOUND, E.Message)
   else
     Result := EMCPError.InternalError(E.Message);
@@ -733,7 +742,7 @@ begin
         begin
           if Era = TMCPProtocolEra.Modern then
             raise EMCPError.InvalidRequest('JSON-RPC responses are not accepted');
-          Result.Body := '';
+          Result := Default(TMCPProcessResult);
           Result.HttpStatus := HTTP_STATUS_ACCEPTED;
           Result.Era := Era;
           Result.IsNotification := True;

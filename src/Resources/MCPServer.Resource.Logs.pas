@@ -221,17 +221,21 @@ begin
 end;
 
 function TLogsRecentResource.GetResourceData: TLogEntries;
-var
-  Logs: TObjectList<TLogEntry>;
 begin
-  Result := TLogEntries.Create;
-
-  Logs := TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES);
+  const Logs = TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES);
   try
-    Result.Entries.AddRange(Logs);
-    Result.TotalCount := Logs.Count;
-    Result.FilteredCount := Logs.Count;
-    Logs.OwnsObjects := False;
+    const Entries = TLogEntries.Create;
+    try
+      Entries.Entries.AddRange(Logs);
+      Entries.TotalCount := Logs.Count;
+      Entries.FilteredCount := Logs.Count;
+      Logs.OwnsObjects := False;
+    except
+      Entries.Entries.OwnsObjects := False;
+      Entries.Free;
+      raise;
+    end;
+    Result := Entries;
   finally
     Logs.Free;
   end;
@@ -252,17 +256,21 @@ begin
 end;
 
 function TLogsByLevelResource.GetResourceData: TLogEntries;
-var
-  Logs: TObjectList<TLogEntry>;
 begin
-  Result := TLogEntries.Create;
-
-  Logs := TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES, FLevel);
+  const Logs = TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES, FLevel);
   try
-    Result.Entries.AddRange(Logs);
-    Result.TotalCount := Logs.Count;
-    Result.FilteredCount := Logs.Count;
-    Logs.OwnsObjects := False;
+    const Entries = TLogEntries.Create;
+    try
+      Entries.Entries.AddRange(Logs);
+      Entries.TotalCount := Logs.Count;
+      Entries.FilteredCount := Logs.Count;
+      Logs.OwnsObjects := False;
+    except
+      Entries.Entries.OwnsObjects := False;
+      Entries.Free;
+      raise;
+    end;
+    Result := Entries;
   finally
     Logs.Free;
   end;

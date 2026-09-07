@@ -250,8 +250,7 @@ begin
     {$ENDIF}
     
     try
-      TServerStatusResource.Initialize;
-
+    
       if HasStdioFlag then
         RunStdioServer
       else

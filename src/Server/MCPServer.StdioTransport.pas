@@ -44,6 +44,7 @@ type
     const SHUTDOWN_CANCEL_GRACE_MS = 500;
     const QUEUE_DEPTH = 1024;
     const LISTENER_POLL_MS = 10;
+    const QUEUE_PUSH_TIMEOUT_MS = 1000;
   strict private
     FManagerRegistry: IMCPManagerRegistry;
     FCoreManager: IMCPCapabilityManager;
@@ -57,6 +58,7 @@ type
     FShutdownDrainMs: Integer;
     FWorkerStuck: Boolean;
     FListeners: Integer;
+    FStartedWorkers: Integer;
     function GetSettings: TMCPSettings;
     procedure SetSettings(const Value: TMCPSettings);
     function Hints: TMCPTransportHints;
@@ -330,20 +332,30 @@ begin
           SendError(RequestId, JSONRPC_INVALID_REQUEST, Format('Request id %s is still in flight', [RequestId.AsText]));
           Exit;
         end;
-        if Method = MCP_METHOD_SUBSCRIPTIONS_LISTEN then
-        begin
-          StartListener(Message);
+        try
+          if Method = MCP_METHOD_SUBSCRIPTIONS_LISTEN then
+          begin
+            StartListener(Message);
+            Queued := True;
+            Exit;
+          end;
+          const Accepted = (FQueue.PushItem(Message) = TWaitResult.wrSignaled);
+          if not Accepted then
+          begin
+            FTracker.Release(RequestId);
+            SendError(RequestId, JSONRPC_INTERNAL_ERROR, 'Server is shutting down');
+            Exit;
+          end;
           Queued := True;
           Exit;
+        except
+          on E: Exception do
+          begin
+            FTracker.Release(RequestId);
+            SendError(RequestId, JSONRPC_INTERNAL_ERROR, Format('Request could not be started: %s', [E.Message]));
+            Exit;
+          end;
         end;
-        if FQueue.PushItem(Message) <> TWaitResult.wrSignaled then
-        begin
-          FTracker.Release(RequestId);
-          SendError(RequestId, JSONRPC_INTERNAL_ERROR, 'Server is shutting down');
-          Exit;
-        end;
-        Queued := True;
-        Exit;
       end;
     end;
 
@@ -428,27 +440,33 @@ end;
 
 procedure TMCPStdioTransport.StartWorkers;
 begin
-  var Count := WorkerCount;
-  FQueue := TThreadedQueue<TJSONValue>.Create(QUEUE_DEPTH, INFINITE, INFINITE);
-  FWorkersDone := TCountdownEvent.Create(Count);
-  for var I := 1 to Count do
+  FStartedWorkers := WorkerCount;
+  FQueue := TThreadedQueue<TJSONValue>.Create(QUEUE_DEPTH, QUEUE_PUSH_TIMEOUT_MS, INFINITE);
+  FWorkersDone := TCountdownEvent.Create(FStartedWorkers);
+  for var WorkerNumber := 1 to FStartedWorkers do
+  begin
     TMCPStdioWorker.Create(Self);
-  TLogger.Info(Format('STDIO transport started: %d worker thread(s), logging to stderr', [Count]));
+  end;
+  TLogger.Info(Format('STDIO transport started: %d worker thread(s), logging to stderr', [FStartedWorkers]));
 end;
 
 procedure TMCPStdioTransport.DrainAndStop;
 begin
-  for var I := 1 to WorkerCount do
+  for var WorkerNumber := 1 to FStartedWorkers do
+  begin
     FQueue.PushItem(nil);
+  end;
 
-  if FWorkersDone.WaitFor(Cardinal(FShutdownDrainMs)) <> TWaitResult.wrSignaled then
+  const Drained = (FWorkersDone.WaitFor(Cardinal(FShutdownDrainMs)) = TWaitResult.wrSignaled);
+  if not Drained then
   begin
     FTracker.CancelAll('stdin closed');
     FWorkersDone.WaitFor(SHUTDOWN_CANCEL_GRACE_MS);
   end;
   CloseSubscriptions;
 
-  if FWorkersDone.IsSet then
+  const AllStopped = (FWorkersDone.IsSet and (AtomicCmpExchange(FListeners, 0, 0) = 0));
+  if AllStopped then
   begin
     FWorkersDone.Free;
     FQueue.Free;

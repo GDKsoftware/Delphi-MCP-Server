@@ -27,6 +27,7 @@ type
     FEndOfStream: Boolean;
     function Fill: Boolean;
     function DecodeLine(Start, Count: Integer; out Line: string): TMCPLineStatus;
+    function RoundTrips(const Line: string; const Start, Count: Integer): Boolean;
   public
     constructor Create(Stream: TStream; MaxLineBytes: Integer);
     function ReadLine(out Line: string; out Status: TMCPLineStatus): Boolean;
@@ -111,6 +112,17 @@ begin
   Result := True;
 end;
 
+function TMCPLineReader.RoundTrips(const Line: string; const Start, Count: Integer): Boolean;
+begin
+  const Encoded = TEncoding.UTF8.GetBytes(Line);
+  const SameLength = (Length(Encoded) = Count);
+  if not SameLength then
+    Exit(False);
+  if Count = 0 then
+    Exit(True);
+  Result := CompareMem(@Encoded[0], @FPending[Start], Count);
+end;
+
 function TMCPLineReader.DecodeLine(Start, Count: Integer; out Line: string): TMCPLineStatus;
 begin
   if (Count > 0) and (FPending[Start + Count - 1] = 13) then
@@ -128,8 +140,13 @@ begin
     Line := '';
     Exit(TMCPLineStatus.InvalidUtf8);
   end;
-  if (Line = '') and (Count > 0) then
+
+  const IsValidUtf8 = RoundTrips(Line, Start, Count);
+  if not IsValidUtf8 then
+  begin
+    Line := '';
     Exit(TMCPLineStatus.InvalidUtf8);
+  end;
   Result := TMCPLineStatus.Ok;
 end;
 

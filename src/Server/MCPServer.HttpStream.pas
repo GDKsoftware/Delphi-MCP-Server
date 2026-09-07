@@ -19,6 +19,7 @@ type
     FLock: TCriticalSection;
     FOpened: Boolean;
     FBroken: Boolean;
+    FClosed: Boolean;
     FRequest: IMCPRequestContext;
     procedure OpenStream;
     procedure WriteChunk(const Text: string);
@@ -38,6 +39,7 @@ type
     class function EventText(const Json: string): string; static;
 
     property Opened: Boolean read FOpened;
+    property Closed: Boolean read FClosed;
     property Broken: Boolean read FBroken;
   end;
 
@@ -117,7 +119,8 @@ procedure TMCPHttpResponseStream.Send(const Json: string);
 begin
   FLock.Enter;
   try
-    if FBroken then
+    const CanWrite = not FBroken and not FClosed;
+    if not CanWrite then
       Exit;
     try
       if not FOpened then
@@ -136,7 +139,8 @@ procedure TMCPHttpResponseStream.KeepAlive;
 begin
   FLock.Enter;
   try
-    if FBroken or not FOpened then
+    const CanWrite = FOpened and not FBroken and not FClosed;
+    if not CanWrite then
       Exit;
     try
       if not FConnection.Connection.Connected then
@@ -180,8 +184,10 @@ procedure TMCPHttpResponseStream.Finish(const FinalJson: string);
 begin
   FLock.Enter;
   try
-    if not FOpened or FBroken then
+    const CanWrite = FOpened and not FBroken and not FClosed;
+    if not CanWrite then
       Exit;
+    FClosed := True;
     try
       if FinalJson <> '' then
         WriteEvent(FinalJson);

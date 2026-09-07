@@ -91,6 +91,7 @@ type
     [Test] procedure Auth_ScopedTool_Is403_WithInsufficientScope;
     [Test] procedure Auth_ScopedTool_OnOpenServer_Is403;
     [Test] procedure Host_NotAllowed_Is403;
+    [Test] procedure Rejection_CarriesCorsHeaders;
   end;
 
 implementation
@@ -737,6 +738,15 @@ begin
 
   FSettings.AllowedHosts := '127.0.0.1:*';
   Assert.AreEqual(200, Post(LEGACY_PING, []).Status);
+end;
+
+procedure THttpTransportTests.Rejection_CarriesCorsHeaders;
+begin
+  FSettings.CorsEnabled := True;
+  var Denied := Post(LEGACY_PING, ['Origin: http://evil.example']);
+  Assert.AreEqual(403, Denied.Status);
+  Assert.AreEqual('http://evil.example', Denied.Header('Access-Control-Allow-Origin'), 'a browser can read the error');
+  Assert.IsTrue(Denied.Header('Access-Control-Expose-Headers').Contains('WWW-Authenticate'));
 end;
 
 end.

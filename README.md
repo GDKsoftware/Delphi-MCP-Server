@@ -176,6 +176,10 @@ free. Every message on the subscription carries
 when the server stops (or stdin closes) it answers the request with a
 completion result first.
 
+Notifications are delivered synchronously on the thread that causes the
+change, so a subscriber that stops reading can hold up that thread until its
+socket buffer drains.
+
 Assign the manager as `ChangeNotifier` of the tools, prompts and resources
 managers, as `MCPServer.dpr` does, and the `tools`, `prompts` and `resources`
 capabilities announce `listChanged` (and `resources.subscribe`) to modern

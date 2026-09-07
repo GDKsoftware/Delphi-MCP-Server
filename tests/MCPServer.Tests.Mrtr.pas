@@ -4,6 +4,7 @@ interface
 
 uses
   DUnitX.TestFramework,
+  System.SysUtils,
   System.JSON,
   MCPServer.Types,
   MCPServer.RequestContext,
@@ -14,6 +15,8 @@ uses
 type
   [TestFixture]
   TRequestStateSealerTests = class
+  private
+    function Base64Url(const Bytes: TBytes): string;
   public
     [Test] procedure Seal_Open_RoundTripsState;
     [Test] procedure Open_TamperedToken_Fails;
@@ -22,6 +25,8 @@ type
     [Test] procedure Open_OtherKey_Fails;
     [Test] procedure DigestOf_IgnoresMetaInputResponsesAndRequestState;
     [Test] procedure EmptyKey_IsEphemeral;
+    [Test] procedure EmptyKey_DiffersPerInstance;
+    [Test] procedure Open_PayloadIsNotAnObject_IsInvalidParams;
   end;
 
   [TestFixture]
@@ -72,8 +77,9 @@ type
 implementation
 
 uses
-  System.SysUtils,
   System.Classes,
+  System.Hash,
+  System.NetEncoding,
   MCPServer.Errors,
   MCPServer.Mrtr;
 
@@ -83,6 +89,12 @@ const
   PRINCIPAL_A = 'alice';
 
 { TRequestStateSealerTests }
+
+function TRequestStateSealerTests.Base64Url(const Bytes: TBytes): string;
+begin
+  Result := TNetEncoding.Base64.EncodeBytesToString(Bytes)
+    .Replace(#13, '').Replace(#10, '').Replace('+', '-').Replace('/', '_').TrimRight(['=']);
+end;
 
 procedure TRequestStateSealerTests.Seal_Open_RoundTripsState;
 begin
@@ -210,6 +222,43 @@ begin
     Sealer.Open(Token, 'tools/call', DIGEST_A, PRINCIPAL_A).Free;
   finally
     Fixed.Free;
+    Sealer.Free;
+  end;
+end;
+
+procedure TRequestStateSealerTests.EmptyKey_DiffersPerInstance;
+begin
+  var First := TMCPRequestStateSealer.Create('');
+  var Second := TMCPRequestStateSealer.Create('');
+  try
+    var FirstToken := First.Seal(nil, 'tools/call', DIGEST_A, PRINCIPAL_A);
+    var SecondToken := Second.Seal(nil, 'tools/call', DIGEST_A, PRINCIPAL_A);
+    Assert.AreNotEqual(FirstToken, SecondToken, 'a random key is not derived from the clock');
+    Assert.WillRaise(
+      procedure
+      begin
+        Second.Open(FirstToken, 'tools/call', DIGEST_A, PRINCIPAL_A).Free;
+      end, EMCPError, 'another instance cannot open the token');
+  finally
+    Second.Free;
+    First.Free;
+  end;
+end;
+
+procedure TRequestStateSealerTests.Open_PayloadIsNotAnObject_IsInvalidParams;
+begin
+  var Sealer := TMCPRequestStateSealer.Create(SEALER_KEY);
+  try
+    var Payload := TEncoding.UTF8.GetBytes('"a signed string, not an object"');
+    var Signature := THashSHA2.GetHMACAsBytes(Payload, TEncoding.UTF8.GetBytes(SEALER_KEY),
+      THashSHA2.TSHA2Version.SHA256);
+    var Token := Base64Url(Payload) + '.' + Base64Url(Signature);
+    Assert.WillRaise(
+      procedure
+      begin
+        Sealer.Open(Token, 'tools/call', DIGEST_A, PRINCIPAL_A).Free;
+      end, EMCPError);
+  finally
     Sealer.Free;
   end;
 end;
