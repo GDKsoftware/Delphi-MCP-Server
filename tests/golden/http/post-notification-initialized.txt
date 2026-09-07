@@ -1,9 +1,0 @@
-HTTP/1.1 202 Accepted
-Connection: keep-alive
-Content-Type: text/html; charset=utf-8
-Content-Length: 0
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: POST, OPTIONS
-Access-Control-Allow-Headers: Accept, Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID
-Access-Control-Expose-Headers: Mcp-Session-Id, WWW-Authenticate
-Access-Control-Max-Age: 86400
