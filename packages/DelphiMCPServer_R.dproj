@@ -1,0 +1,176 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{6F3C1A54-9D2E-4C77-8B4E-2E0A7C15D901}</ProjectGuid>
+        <MainSource>DelphiMCPServer_R.dpk</MainSource>
+        <ProjectVersion>20.3</ProjectVersion>
+        <FrameworkType>None</FrameworkType>
+        <Base>True</Base>
+        <Config Condition="'$(Config)'==''">Debug</Config>
+        <Platform Condition="'$(Platform)'==''">Win64</Platform>
+        <TargetedPlatforms>3</TargetedPlatforms>
+        <AppType>Package</AppType>
+        <ProjectName Condition="'$(ProjectName)'==''">DelphiMCPServer_R</ProjectName>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Base)'=='true') or '$(Base_Win32)'!=''">
+        <Base_Win32>true</Base_Win32>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Base)'=='true') or '$(Base_Win64)'!=''">
+        <Base_Win64>true</Base_Win64>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Debug' or '$(Cfg_1)'!=''">
+        <Cfg_1>true</Cfg_1>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Release' or '$(Cfg_2)'!=''">
+        <Cfg_2>true</Cfg_2>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base)'!=''">
+        <SanitizedProjectName>DelphiMCPServer_R</SanitizedProjectName>
+        <DCC_DcuOutput>.\$(Platform)\$(Config)</DCC_DcuOutput>
+        <DCC_BplOutput>$(BDSCOMMONDIR)\Bpl</DCC_BplOutput>
+        <DCC_DcpOutput>$(BDSCOMMONDIR)\Dcp</DCC_DcpOutput>
+        <DCC_UnitSearchPath>..\src;..\src\Client;..\src\Core;..\src\Http;..\src\Managers;..\src\Prompts;..\src\Protocol;..\src\Resources;..\src\Server;..\src\Tools;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_IncludePath>..\src;$(DCC_IncludePath)</DCC_IncludePath>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;$(DCC_Namespace)</DCC_Namespace>
+        <DCC_Define>NO_TAURUS_TLS;$(DCC_Define)</DCC_Define>
+        <DCC_ImageBase>00400000</DCC_ImageBase>
+        <GenDll>true</GenDll>
+        <GenPackage>true</GenPackage>
+        <DllSuffix>$(Auto)</DllSuffix>
+        <RuntimeOnlyPackage>true</RuntimeOnlyPackage>
+        <DCC_E>false</DCC_E>
+        <DCC_N>false</DCC_N>
+        <DCC_S>false</DCC_S>
+        <DCC_F>false</DCC_F>
+        <DCC_K>false</DCC_K>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <DCC_Description>Delphi MCP Server runtime (protocol, server, client)</DCC_Description>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win32)'!=''">
+        <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
+        <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win64)'!=''">
+        <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;$(DCC_Namespace)</DCC_Namespace>
+        <DCC_BplOutput>$(BDSCOMMONDIR)\Bpl\$(Platform)</DCC_BplOutput>
+        <DCC_DcpOutput>$(BDSCOMMONDIR)\Dcp\$(Platform)</DCC_DcpOutput>
+        <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Keys>CompanyName=;FileDescription=$(MSBuildProjectName);FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProgramID=com.embarcadero.$(MSBuildProjectName);ProductName=$(MSBuildProjectName);ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1)'!=''">
+        <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
+        <DCC_DebugDCUs>true</DCC_DebugDCUs>
+        <DCC_Optimize>false</DCC_Optimize>
+        <DCC_GenerateStackFrames>true</DCC_GenerateStackFrames>
+        <DCC_DebugInfoInExe>true</DCC_DebugInfoInExe>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2)'!=''">
+        <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
+        <DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
+        <DCC_SymbolReferenceInfo>0</DCC_SymbolReferenceInfo>
+        <DCC_DebugInformation>0</DCC_DebugInformation>
+    </PropertyGroup>
+    <ItemGroup>
+        <DelphiCompile Include="$(MainSource)">
+            <MainSource>MainSource</MainSource>
+        </DelphiCompile>
+        <DCCReference Include="rtl.dcp"/>
+        <DCCReference Include="IndySystem.dcp"/>
+        <DCCReference Include="IndyCore.dcp"/>
+        <DCCReference Include="IndyProtocols.dcp"/>
+        <DCCReference Include="..\src\Client\MCPClient.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Errors.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Http.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Interfaces.pas"/>
+        <DCCReference Include="..\src\Client\MCPClient.Types.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.Application.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.Authorization.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Capabilities.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.CompletionManager.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.ContentBlocks.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.CoreManager.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Errors.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.Host.pas"/>
+        <DCCReference Include="..\src\Http\MCPServer.Http.Config.pas"/>
+        <DCCReference Include="..\src\Http\MCPServer.Http.Executor.pas"/>
+        <DCCReference Include="..\src\Http\MCPServer.Http.Executor.Interfaces.pas"/>
+        <DCCReference Include="..\src\Http\MCPServer.Http.Response.pas"/>
+        <DCCReference Include="..\src\Http\MCPServer.Http.Response.Interfaces.pas"/>
+        <DCCReference Include="..\src\Http\MCPServer.Http.ResponseParser.pas"/>
+        <DCCReference Include="..\src\Http\MCPServer.Http.ResponseParser.Interfaces.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.HttpHeaders.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.HttpStream.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.IdHTTPServer.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.JsonRpcProcessor.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.Logger.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.ManagerRegistry.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Mrtr.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.PathBoundary.pas"/>
+        <DCCReference Include="..\src\Prompts\MCPServer.Prompt.Base.pas"/>
+        <DCCReference Include="..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.PromptsManager.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.Registration.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.RequestContext.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.RequestState.pas"/>
+        <DCCReference Include="..\src\Resources\MCPServer.Resource.Base.pas"/>
+        <DCCReference Include="..\src\Resources\MCPServer.Resource.Logs.pas"/>
+        <DCCReference Include="..\src\Resources\MCPServer.Resource.Project.pas"/>
+        <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.ResourcesManager.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Schema.Generator.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Schema.Validator.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Serializer.pas"/>
+        <DCCReference Include="..\src\Core\MCPServer.Settings.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.StdioChannel.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.SubscriptionsManager.pas"/>
+        <DCCReference Include="..\src\Tools\MCPServer.Tool.Base.pas"/>
+        <DCCReference Include="..\src\Tools\MCPServer.Tool.Method.pas"/>
+        <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.ToolsManager.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Types.pas"/>
+        <BuildConfiguration Include="Base">
+            <Key>Base</Key>
+        </BuildConfiguration>
+        <BuildConfiguration Include="Debug">
+            <Key>Cfg_1</Key>
+            <CfgParent>Base</CfgParent>
+        </BuildConfiguration>
+        <BuildConfiguration Include="Release">
+            <Key>Cfg_2</Key>
+            <CfgParent>Base</CfgParent>
+        </BuildConfiguration>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Delphi.Personality.12</Borland.Personality>
+        <Borland.ProjectType>Package</Borland.ProjectType>
+        <BorlandProject>
+            <Delphi.Personality>
+                <Source>
+                    <Source Name="MainSource">DelphiMCPServer_R.dpk</Source>
+                </Source>
+            </Delphi.Personality>
+            <Platforms>
+                <Platform value="Linux64">False</Platform>
+                <Platform value="Win32">True</Platform>
+                <Platform value="Win64">True</Platform>
+            </Platforms>
+        </BorlandProject>
+        <ProjectFileVersion>12</ProjectFileVersion>
+    </ProjectExtensions>
+    <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
+    <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
+</Project>
