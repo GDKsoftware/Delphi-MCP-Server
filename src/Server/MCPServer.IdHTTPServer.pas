@@ -231,8 +231,8 @@ procedure TMCPIdHTTPServer.CloseSubscriptions;
 var
   Hub: IMCPSubscriptionHub;
 begin
-  if not Assigned(FManagerRegistry)
-    or not Supports(FManagerRegistry.GetManagerForMethod(MCP_METHOD_SUBSCRIPTIONS_LISTEN), IMCPSubscriptionHub, Hub) then
+  if not Assigned(FManagerRegistry) or
+    not Supports(FManagerRegistry.GetManagerForMethod(MCP_METHOD_SUBSCRIPTIONS_LISTEN), IMCPSubscriptionHub, Hub) then
     Exit;
 
   var Deadline := TThread.GetTickCount64 + SUBSCRIPTION_CLOSE_GRACE_MS;
@@ -261,7 +261,8 @@ begin
   for var I := 0 to FHTTPServer.Bindings.Count - 1 do
   begin
     var Binding := FHTTPServer.Bindings[I];
-    if Binding.IPVersion = Id_IPv6 then
+    const IsId_IPv6 = (Binding.IPVersion = Id_IPv6);
+    if IsId_IPv6 then
       Result := Result + [Format('[%s]:%d', [Binding.IP, Binding.Port])]
     else
       Result := Result + [Format('%s:%d', [Binding.IP, Binding.Port])];
@@ -288,7 +289,8 @@ begin
     Host := FSettings.Host.Trim;
   end;
 
-  if Address <> '' then
+  const HasAddress = (Address <> '');
+  if HasAddress then
   begin
     if (Address = ANY_IPV4) or (Address = ANY_IPV6) then
       TLogger.Warning('BindAddress ' + Address + ': the server is reachable from every network interface');
@@ -350,7 +352,8 @@ begin
   TLogger.Info('SSL configured successfully');
   TLogger.Info('Certificate: ' + FSettings.SSLCertFile);
   TLogger.Info('Private Key: ' + FSettings.SSLKeyFile);
-  if FSettings.SSLRootCertFile <> '' then
+  const HasSSLRootCertFile = (FSettings.SSLRootCertFile <> '');
+  if HasSSLRootCertFile then
     TLogger.Info('Root Certificate: ' + FSettings.SSLRootCertFile);
 end;
 
@@ -429,14 +432,15 @@ begin
       Exit;
     end;
 
-    if Assigned(FAuthorizer) and (RequestInfo.CommandType = hcGET)
-      and IsProtectedResourceMetadataPath(RequestInfo.Document) then
+    if Assigned(FAuthorizer) and (RequestInfo.CommandType = hcGET) and
+      IsProtectedResourceMetadataPath(RequestInfo.Document) then
     begin
       HandleProtectedResourceMetadata(ResponseInfo);
       Exit;
     end;
 
-    if RequestInfo.Document <> Endpoint then
+    const IsNotEndpoint = (RequestInfo.Document <> Endpoint);
+    if IsNotEndpoint then
     begin
       SendEmpty(ResponseInfo, HTTP_STATUS_NOT_FOUND);
       Exit;
@@ -468,7 +472,8 @@ begin
     Exit;
 
   var List := FSettings.AllowedOrigins;
-  if List.Trim = '' then
+  const ListIsEmpty = (List.Trim = '');
+  if ListIsEmpty then
     Exit;
 
   for var Entry in List.Split([',']) do
@@ -542,9 +547,13 @@ begin
     var Versions := TJSONArray.Create;
     Info.AddPair('protocolVersions', Versions);
     for var Version in MCP_MODERN_PROTOCOL_VERSIONS do
+    begin
       Versions.Add(Version);
+    end;
     for var Version in MCP_LEGACY_PROTOCOL_VERSIONS do
+    begin
       Versions.Add(Version);
+    end;
     SendJson(ResponseInfo, HTTP_STATUS_OK, Info.ToJSON);
   finally
     Info.Free;
@@ -556,8 +565,8 @@ begin
   var Endpoint := DEFAULT_ENDPOINT;
   if Assigned(FSettings) then
     Endpoint := FSettings.Endpoint;
-  Result := (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH)
-    or (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH + Endpoint);
+  Result := (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH) or
+    (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH + Endpoint);
 end;
 
 function TMCPIdHTTPServer.ResourceUri: string;
@@ -565,7 +574,8 @@ begin
   Result := '';
   if Assigned(FSettings) then
     Result := FSettings.ResourceUri.Trim;
-  if Result <> '' then
+  const HasResult = (Result <> '');
+  if HasResult then
     Exit;
 
   Result := Format('%s://%s:%d%s', [FSettings.Protocol.ToLower, FSettings.Host.ToLower, FPort, FSettings.Endpoint]);
@@ -720,8 +730,8 @@ function TMCPIdHTTPServer.IsBodyWithinLimits(RequestInfo: TIdHTTPRequestInfo; Re
   const Body: string): Boolean;
 begin
   const Limit = MaxBodyBytes;
-  const IsTooLarge = Assigned(RequestInfo.PostStream)
-    and ((RequestInfo.PostStream is TMCPDiscardedBody) or (RequestInfo.PostStream.Size > Limit));
+  const IsTooLarge = Assigned(RequestInfo.PostStream) and
+    ((RequestInfo.PostStream is TMCPDiscardedBody) or (RequestInfo.PostStream.Size > Limit));
   if IsTooLarge then
   begin
     SendJsonRpcError(ResponseInfo, HTTP_PAYLOAD_TOO_LARGE, JSONRPC_INVALID_REQUEST,
@@ -745,7 +755,8 @@ procedure TMCPIdHTTPServer.SendOutcome(RequestInfo: TIdHTTPRequestInfo; Response
 begin
   if Outcome.Era = TMCPProtocolEra.Legacy then
     EchoLegacySessionId(RequestInfo, ResponseInfo);
-  if Outcome.RequiredScope <> '' then
+  const HasRequiredScope = (Outcome.RequiredScope <> '');
+  if HasRequiredScope then
     ResponseInfo.CustomHeaders.Values[HEADER_WWW_AUTHENTICATE] :=
       TMCPBearerChallenge.Build(ResourceMetadataUrl, TMCPAuthChallenge.InsufficientScope(Outcome.RequiredScope));
 

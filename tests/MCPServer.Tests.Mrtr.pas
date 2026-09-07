@@ -18,24 +18,48 @@ type
   private
     function Base64Url(const Bytes: TBytes): string;
   public
-    [Test] procedure Seal_Open_RoundTripsState;
-    [Test] procedure Open_TamperedToken_Fails;
-    [Test] procedure Open_OtherMethodOrDigestOrPrincipal_Fails;
-    [Test] procedure Open_Expired_Fails;
-    [Test] procedure Open_OtherKey_Fails;
-    [Test] procedure DigestOf_IgnoresMetaInputResponsesAndRequestState;
-    [Test] procedure EmptyKey_IsEphemeral;
-    [Test] procedure EmptyKey_DiffersPerInstance;
-    [Test] procedure Open_PayloadIsNotAnObject_IsInvalidParams;
+    [Test]
+    procedure Seal_Open_RoundTripsState;
+
+    [Test]
+    procedure Open_TamperedToken_Fails;
+
+    [Test]
+    procedure Open_OtherMethodOrDigestOrPrincipal_Fails;
+
+    [Test]
+    procedure Open_Expired_Fails;
+
+    [Test]
+    procedure Open_OtherKey_Fails;
+
+    [Test]
+    procedure DigestOf_IgnoresMetaInputResponsesAndRequestState;
+
+    [Test]
+    procedure EmptyKey_IsEphemeral;
+
+    [Test]
+    procedure EmptyKey_DiffersPerInstance;
+
+    [Test]
+    procedure Open_PayloadIsNotAnObject_IsInvalidParams;
   end;
 
   [TestFixture]
   TInputRequestsTests = class
   public
-    [Test] procedure ToJson_HasMethodAndParamsPerKey;
-    [Test] procedure RequiredCapability_PerMethod;
-    [Test] procedure FieldSchema_IsObjectWithRequiredField;
-    [Test] procedure InputResponse_Readers;
+    [Test]
+    procedure ToJson_HasMethodAndParamsPerKey;
+
+    [Test]
+    procedure RequiredCapability_PerMethod;
+
+    [Test]
+    procedure FieldSchema_IsObjectWithRequiredField;
+
+    [Test]
+    procedure InputResponse_Readers;
   end;
 
   [TestFixture]
@@ -53,25 +77,62 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Elicitation_RoundOne_IsInputRequired_WithResultType;
-    [Test] procedure Elicitation_RoundTwo_Completes;
-    [Test] procedure Elicitation_WrongKey_ReRequests;
-    [Test] procedure Elicitation_ExtraKeys_AreIgnored;
-    [Test] procedure InputResponses_NotObject_IsInvalidParams;
-    [Test] procedure InputResponses_ValueNotObject_IsInvalidParams;
-    [Test] procedure Sampling_RoundTrip;
-    [Test] procedure ListRoots_RoundTrip;
-    [Test] procedure RequestState_RoundTrip_MentionsStateOk;
-    [Test] procedure RequestState_Tampered_IsInvalidParams;
-    [Test] procedure RequestState_OtherTool_IsInvalidParams;
-    [Test] procedure MultipleInputs_RoundTrip;
-    [Test] procedure MultiRound_StateChangesPerRound;
-    [Test] procedure Capabilities_OnlyDeclaredKinds;
-    [Test] procedure Capabilities_UndeclaredKind_Is32021;
-    [Test] procedure MissingCapabilityTool_Is32021_WithRequiredCapabilities;
-    [Test] procedure Legacy_IsInternalError;
-    [Test] procedure Prompt_RoundTrip;
-    [Test] procedure ToolsList_IsNeverInputRequired;
+    [Test]
+    procedure Elicitation_RoundOne_IsInputRequired_WithResultType;
+
+    [Test]
+    procedure Elicitation_RoundTwo_Completes;
+
+    [Test]
+    procedure Elicitation_WrongKey_ReRequests;
+
+    [Test]
+    procedure Elicitation_ExtraKeys_AreIgnored;
+
+    [Test]
+    procedure InputResponses_NotObject_IsInvalidParams;
+
+    [Test]
+    procedure InputResponses_ValueNotObject_IsInvalidParams;
+
+    [Test]
+    procedure Sampling_RoundTrip;
+
+    [Test]
+    procedure ListRoots_RoundTrip;
+
+    [Test]
+    procedure RequestState_RoundTrip_MentionsStateOk;
+
+    [Test]
+    procedure RequestState_Tampered_IsInvalidParams;
+
+    [Test]
+    procedure RequestState_OtherTool_IsInvalidParams;
+
+    [Test]
+    procedure MultipleInputs_RoundTrip;
+
+    [Test]
+    procedure MultiRound_StateChangesPerRound;
+
+    [Test]
+    procedure Capabilities_OnlyDeclaredKinds;
+
+    [Test]
+    procedure Capabilities_UndeclaredKind_Is32021;
+
+    [Test]
+    procedure MissingCapabilityTool_Is32021_WithRequiredCapabilities;
+
+    [Test]
+    procedure Legacy_IsInternalError;
+
+    [Test]
+    procedure Prompt_RoundTrip;
+
+    [Test]
+    procedure ToolsList_IsNeverInputRequired;
   end;
 
 implementation
@@ -358,7 +419,8 @@ begin
   var Meta := Format('"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":%s}',
     [Capabilities]);
   var Params := ParamsJson;
-  if Params = '' then
+  const ParamsIsEmpty = (Params = '');
+  if ParamsIsEmpty then
     Params := Meta
   else
     Params := Params + ',' + Meta;
@@ -372,7 +434,8 @@ end;
 function TInputRequiredFlowTests.CallTool(const Name, ExtraParams: string; const Capabilities: string): TJSONObject;
 begin
   var Params := Format('"name":"%s","arguments":{}', [Name]);
-  if ExtraParams <> '' then
+  const HasExtraParams = (ExtraParams <> '');
+  if HasExtraParams then
     Params := Params + ',' + ExtraParams;
   Result := Call('tools/call', Params, Capabilities);
 end;

@@ -9,15 +9,32 @@ type
   [TestFixture]
   TToolResultTests = class
   public
-    [Test] procedure Text_ProducesOneTextBlock;
-    [Test] procedure Image_Audio_Embedded_Blocks;
-    [Test] procedure StructuredOnly_GetsTextFallback;
-    [Test] procedure StructuredArray_LegacyDropsIt_ModernKeepsIt;
-    [Test] procedure Error_SetsIsError;
-    [Test] procedure Meta_IsEmitted;
-    [Test] procedure Annotations_AttachToLastBlock;
-    [Test] procedure Annotations_BeforeAnyBlock_AttachToTheNextBlock;
-    [Test] procedure Base64Blob_HasNoLineBreaks;
+    [Test]
+    procedure Text_ProducesOneTextBlock;
+
+    [Test]
+    procedure Image_Audio_Embedded_Blocks;
+
+    [Test]
+    procedure StructuredOnly_GetsTextFallback;
+
+    [Test]
+    procedure StructuredArray_LegacyDropsIt_ModernKeepsIt;
+
+    [Test]
+    procedure Error_SetsIsError;
+
+    [Test]
+    procedure Meta_IsEmitted;
+
+    [Test]
+    procedure Annotations_AttachToLastBlock;
+
+    [Test]
+    procedure Annotations_BeforeAnyBlock_AttachToTheNextBlock;
+
+    [Test]
+    procedure Base64Blob_HasNoLineBreaks;
   end;
 
 implementation
@@ -162,7 +179,9 @@ begin
   var Bytes: TBytes;
   SetLength(Bytes, 300);
   for var I := 0 to High(Bytes) do
+  begin
     Bytes[I] := Byte(I);
+  end;
   var Encoded := TMCPContentBlock.EncodeBlob(Bytes);
   Assert.AreEqual(400, Length(Encoded));
   Assert.IsFalse(Encoded.Contains(#13) or Encoded.Contains(#10));

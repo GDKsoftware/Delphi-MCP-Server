@@ -213,17 +213,22 @@ end;
 class function TMCPBearerChallenge.Build(const ResourceMetadataUrl: string; const Challenge: TMCPAuthChallenge): string;
 begin
   var Parameters: TArray<string> := nil;
-  if ResourceMetadataUrl <> '' then
+  const HasResourceMetadataUrl = (ResourceMetadataUrl <> '');
+  if HasResourceMetadataUrl then
     Parameters := Parameters + ['resource_metadata=' + Quote(ResourceMetadataUrl)];
-  if Challenge.Error <> '' then
+  const HasError = (Challenge.Error <> '');
+  if HasError then
     Parameters := Parameters + ['error=' + Quote(Challenge.Error)];
-  if Challenge.ErrorDescription <> '' then
+  const HasErrorDescription = (Challenge.ErrorDescription <> '');
+  if HasErrorDescription then
     Parameters := Parameters + ['error_description=' + Quote(Challenge.ErrorDescription)];
-  if Challenge.Scope <> '' then
+  const HasScope = (Challenge.Scope <> '');
+  if HasScope then
     Parameters := Parameters + ['scope=' + Quote(Challenge.Scope)];
 
   Result := SCHEME;
-  if Length(Parameters) > 0 then
+  const HasParameters = (Length(Parameters) > 0);
+  if HasParameters then
     Result := Result + ' ' + string.Join(', ', Parameters);
 end;
 
@@ -253,7 +258,8 @@ begin
     Servers.Add(Server);
   end;
   var Scopes := WithoutOfflineAccess(ScopesSupported);
-  if Length(Scopes) > 0 then
+  const HasScopes = (Length(Scopes) > 0);
+  if HasScopes then
   begin
     var ScopesArray := TJSONArray.Create;
     Result.AddPair('scopes_supported', ScopesArray);
@@ -265,7 +271,8 @@ begin
   var Methods := TJSONArray.Create;
   Methods.Add('header');
   Result.AddPair('bearer_methods_supported', Methods);
-  if ResourceName <> '' then
+  const HasResourceName = (ResourceName <> '');
+  if HasResourceName then
     Result.AddPair('resource_name', ResourceName);
 end;
 
@@ -279,10 +286,12 @@ begin
     if Token.Trim <> '' then
       FTokens := FTokens + [TEncoding.UTF8.GetBytes(Token.Trim)];
   end;
-  if Length(FTokens) = 0 then
+  const TokensIsEmpty = (Length(FTokens) = 0);
+  if TokensIsEmpty then
     raise EMCPAuthorizationConfiguration.Create('A static bearer authorizer needs at least one token');
   FScopes := Scopes;
-  if Length(FScopes) = 0 then
+  const ScopesIsEmpty = (Length(FScopes) = 0);
+  if ScopesIsEmpty then
     FScopes := [MCP_SCOPE_ANY];
 end;
 
@@ -317,7 +326,8 @@ end;
 constructor TMCPOAuthResourceServerAuthorizer.Create(const ExpectedAudience: string);
 begin
   inherited Create;
-  if ExpectedAudience.Trim = '' then
+  const ExpectedAudienceIsEmpty = (ExpectedAudience.Trim = '');
+  if ExpectedAudienceIsEmpty then
     raise EMCPAuthorizationConfiguration.Create('An OAuth resource server authorizer needs the expected audience');
   FExpectedAudience := ExpectedAudience.Trim;
 end;
@@ -410,7 +420,8 @@ end;
 constructor TMCPIntrospectionAuthorizer.Create(const ExpectedAudience, IntrospectionUrl, ClientId, ClientSecret: string);
 begin
   inherited Create(ExpectedAudience);
-  if IntrospectionUrl.Trim = '' then
+  const IntrospectionUrlIsEmpty = (IntrospectionUrl.Trim = '');
+  if IntrospectionUrlIsEmpty then
     raise EMCPAuthorizationConfiguration.Create('An introspection authorizer needs the introspection endpoint URL');
   FIntrospectionUrl := IntrospectionUrl.Trim;
   FClientId := ClientId;
@@ -430,7 +441,8 @@ begin
     const Form = TStringStream.Create(Format('token=%s', [TNetEncoding.URL.EncodeForm(Token)]), TEncoding.UTF8);
     try
       var Headers: TArray<TNetHeader> := [TNetHeader.Create('Accept', 'application/json')];
-      if FClientId <> '' then
+      const HasClientId = (FClientId <> '');
+      if HasClientId then
       begin
         const Credentials = TNetEncoding.Base64.Encode(Format('%s:%s', [FClientId, FClientSecret]));
         Headers := Headers + [TNetHeader.Create('Authorization', Format('Basic %s', [Credentials]))];

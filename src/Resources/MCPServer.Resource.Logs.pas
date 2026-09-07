@@ -128,7 +128,9 @@ var
   Entry: TLogEntry;
 begin
   for Entry in FLogs do
+  begin
     Entry.Free;
+  end;
   FLogs.Free;
   inherited;
 end;

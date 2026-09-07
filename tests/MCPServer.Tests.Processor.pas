@@ -39,23 +39,56 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Modern_UnknownMethod_Is404;
-    [Test] procedure Legacy_UnknownMethod_Is200;
-    [Test] procedure ParseError_ModernHeader_Is400_LegacyIs200;
-    [Test] procedure Modern_MetaValidationError_Is400;
-    [Test] procedure Modern_ApplicationInvalidParams_Is200;
-    [Test] procedure Modern_ToolsList_HasEnvelopeAndCacheHints;
-    [Test] procedure Modern_ToolsCall_HasResultTypeButNoCacheHints;
-    [Test] procedure Modern_Discover_ListsModernVersionsAndCapabilities;
-    [Test] procedure Modern_Discover_ListsLegacyVersions_WhenConfigured;
-    [Test] procedure Modern_ServerInfo_UsesSettings;
-    [Test] procedure Legacy_Initialize_NegotiatesAndDeclaresCapabilities;
-    [Test] procedure Legacy_Result_IsUntouched;
-    [Test] procedure Notification_Returns202WithoutBody;
-    [Test] procedure ClientResponse_Legacy_IsIgnored_Modern_IsRejected;
-    [Test] procedure ErrorData_IsEmitted;
-    [Test] procedure Current_IsSetDuringDispatch_AndClearedAfter;
-    [Test] procedure Concurrent_Initialize_AllSucceed;
+    [Test]
+    procedure Modern_UnknownMethod_Is404;
+
+    [Test]
+    procedure Legacy_UnknownMethod_Is200;
+
+    [Test]
+    procedure ParseError_ModernHeader_Is400_LegacyIs200;
+
+    [Test]
+    procedure Modern_MetaValidationError_Is400;
+
+    [Test]
+    procedure Modern_ApplicationInvalidParams_Is200;
+
+    [Test]
+    procedure Modern_ToolsList_HasEnvelopeAndCacheHints;
+
+    [Test]
+    procedure Modern_ToolsCall_HasResultTypeButNoCacheHints;
+
+    [Test]
+    procedure Modern_Discover_ListsModernVersionsAndCapabilities;
+
+    [Test]
+    procedure Modern_Discover_ListsLegacyVersions_WhenConfigured;
+
+    [Test]
+    procedure Modern_ServerInfo_UsesSettings;
+
+    [Test]
+    procedure Legacy_Initialize_NegotiatesAndDeclaresCapabilities;
+
+    [Test]
+    procedure Legacy_Result_IsUntouched;
+
+    [Test]
+    procedure Notification_Returns202WithoutBody;
+
+    [Test]
+    procedure ClientResponse_Legacy_IsIgnored_Modern_IsRejected;
+
+    [Test]
+    procedure ErrorData_IsEmitted;
+
+    [Test]
+    procedure Current_IsSetDuringDispatch_AndClearedAfter;
+
+    [Test]
+    procedure Concurrent_Initialize_AllSucceed;
   end;
 
 implementation

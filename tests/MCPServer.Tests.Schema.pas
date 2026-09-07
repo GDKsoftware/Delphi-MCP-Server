@@ -85,19 +85,44 @@ type
   [TestFixture]
   TSchemaGeneratorTests = class
   public
-    [Test] procedure Integers_AreInteger_FloatsAreNumber;
-    [Test] procedure DateTime_IsStringWithFormat;
-    [Test] procedure Boolean_And_Enum;
-    [Test] procedure Set_IsArrayOfEnumNames;
-    [Test] procedure DynArray_And_List_HaveItems;
-    [Test] procedure NestedObject_HasProperties;
-    [Test] procedure Attributes_AreApplied;
-    [Test] procedure Optional_IsNotRequired;
-    [Test] procedure NoParameters_ForbidsAdditionalProperties;
-    [Test] procedure StringConstraints_AreApplied;
-    [Test] procedure SchemaName_OverridesPropertyName;
-    [Test] procedure ClassAttributes_AdditionalPropertiesAndDialect;
-    [Test] procedure Dialect_OnlyAppliesAtRoot;
+    [Test]
+    procedure Integers_AreInteger_FloatsAreNumber;
+
+    [Test]
+    procedure DateTime_IsStringWithFormat;
+
+    [Test]
+    procedure Boolean_And_Enum;
+
+    [Test]
+    procedure Set_IsArrayOfEnumNames;
+
+    [Test]
+    procedure DynArray_And_List_HaveItems;
+
+    [Test]
+    procedure NestedObject_HasProperties;
+
+    [Test]
+    procedure Attributes_AreApplied;
+
+    [Test]
+    procedure Optional_IsNotRequired;
+
+    [Test]
+    procedure NoParameters_ForbidsAdditionalProperties;
+
+    [Test]
+    procedure StringConstraints_AreApplied;
+
+    [Test]
+    procedure SchemaName_OverridesPropertyName;
+
+    [Test]
+    procedure ClassAttributes_AdditionalPropertiesAndDialect;
+
+    [Test]
+    procedure Dialect_OnlyAppliesAtRoot;
   end;
 
 implementation
@@ -203,7 +228,9 @@ begin
   try
     var Required := Schema.GetValue('required') as TJSONArray;
     for var Item in Required do
+    begin
       Assert.AreNotEqual('code', Item.Value);
+    end;
     Assert.AreEqual('count', Required.Items[0].Value);
   finally
     Schema.Free;

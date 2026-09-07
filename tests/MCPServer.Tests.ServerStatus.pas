@@ -19,10 +19,17 @@ type
     [Setup]
     procedure Setup;
 
-    [Test] procedure Counters_StartAtZero;
-    [Test] procedure Counters_AreExactUnderConcurrentUpdates;
-    [Test] procedure ConnectionClosed_NeverGoesBelowZero;
-    [Test] procedure Read_ProducesJsonWithStatusFields;
+    [Test]
+    procedure Counters_StartAtZero;
+
+    [Test]
+    procedure Counters_AreExactUnderConcurrentUpdates;
+
+    [Test]
+    procedure ConnectionClosed_NeverGoesBelowZero;
+
+    [Test]
+    procedure Read_ProducesJsonWithStatusFields;
   end;
 
 implementation

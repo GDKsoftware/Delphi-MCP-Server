@@ -19,23 +19,56 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Server_Discover;
-    [Test] procedure Server_Discover_AfterInitialize;
-    [Test] procedure Server_Discover_WithoutMeta;
-    [Test] procedure Tools_List;
-    [Test] procedure Tools_Call_Echo;
-    [Test] procedure Tools_Call_UnknownTool;
-    [Test] procedure Resources_List;
-    [Test] procedure Resources_Read_ProjectInfo;
-    [Test] procedure Resources_Templates_List;
-    [Test] procedure Ping_IsNotFound;
-    [Test] procedure UnknownMethod;
-    [Test] procedure UnknownProtocolVersion;
-    [Test] procedure MissingClientCapabilities;
-    [Test] procedure InvalidLogLevel;
-    [Test] procedure Initialize_WithModernMeta_IsNotFound;
-    [Test] procedure Id_Null;
-    [Test] procedure MissingJsonRpcField;
+    [Test]
+    procedure Server_Discover;
+
+    [Test]
+    procedure Server_Discover_AfterInitialize;
+
+    [Test]
+    procedure Server_Discover_WithoutMeta;
+
+    [Test]
+    procedure Tools_List;
+
+    [Test]
+    procedure Tools_Call_Echo;
+
+    [Test]
+    procedure Tools_Call_UnknownTool;
+
+    [Test]
+    procedure Resources_List;
+
+    [Test]
+    procedure Resources_Read_ProjectInfo;
+
+    [Test]
+    procedure Resources_Templates_List;
+
+    [Test]
+    procedure Ping_IsNotFound;
+
+    [Test]
+    procedure UnknownMethod;
+
+    [Test]
+    procedure UnknownProtocolVersion;
+
+    [Test]
+    procedure MissingClientCapabilities;
+
+    [Test]
+    procedure InvalidLogLevel;
+
+    [Test]
+    procedure Initialize_WithModernMeta_IsNotFound;
+
+    [Test]
+    procedure Id_Null;
+
+    [Test]
+    procedure MissingJsonRpcField;
   end;
 
 implementation

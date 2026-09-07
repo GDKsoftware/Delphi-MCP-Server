@@ -30,32 +30,83 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Initialize_WithModernMeta_IsNotFound;
-    [Test] procedure Initialize_EchoesServedRevision;
-    [Test] procedure Initialize_UnknownRevision_AnswersLatestLegacy;
-    [Test] procedure ModernMeta_IsModern;
-    [Test] procedure ModernMeta_Http_HeaderMissing_IsHeaderMismatch;
-    [Test] procedure ModernMeta_Http_HeaderDiffers_IsHeaderMismatch;
-    [Test] procedure ModernMeta_Http_HeaderMatches_IsModern;
-    [Test] procedure ModernMeta_Http_NameHeader_IsDecodedAndCompared;
-    [Test] procedure ModernMeta_UnknownVersion_ListsSupported;
-    [Test] procedure ModernMeta_MissingClientCapabilities_IsInvalidParams;
-    [Test] procedure ModernMeta_ClientInfoNotObject_IsInvalidParams;
-    [Test] procedure ModernMeta_InvalidLogLevel_IsInvalidParams;
-    [Test] procedure ModernMeta_Ping_IsMethodNotFound;
-    [Test] procedure ModernMeta_Ping_LenientSetting_Allows;
-    [Test] procedure ModernMeta_LegacyOnlyMethods_AreNotFound;
-    [Test] procedure ModernOnlyMethod_WithoutMeta_IsInvalidParams;
-    [Test] procedure Http_ModernHeader_WithoutMeta_IsInvalidParams;
-    [Test] procedure Http_UnknownHeaderVersion_IsInvalidRequest;
-    [Test] procedure Http_LegacyHeader_IsLegacyWithHeaderVersion;
-    [Test] procedure Http_NoHeader_NoMeta_IsLegacy;
-    [Test] procedure Stdio_SessionVersion_IsUsedForLegacyRequests;
-    [Test] procedure Stdio_NoSessionVersion_IsLatestLegacy;
-    [Test] procedure LegacyMeta_WithProgressTokenOnly_IsLegacy;
-    [Test] procedure Meta_NotAnObject_IsInvalidParams;
-    [Test] procedure ClientCapabilities_AreReadable;
-    [Test] procedure RequireClientCapability_RaisesMissingCapability;
+    [Test]
+    procedure Initialize_WithModernMeta_IsNotFound;
+
+    [Test]
+    procedure Initialize_EchoesServedRevision;
+
+    [Test]
+    procedure Initialize_UnknownRevision_AnswersLatestLegacy;
+
+    [Test]
+    procedure ModernMeta_IsModern;
+
+    [Test]
+    procedure ModernMeta_Http_HeaderMissing_IsHeaderMismatch;
+
+    [Test]
+    procedure ModernMeta_Http_HeaderDiffers_IsHeaderMismatch;
+
+    [Test]
+    procedure ModernMeta_Http_HeaderMatches_IsModern;
+
+    [Test]
+    procedure ModernMeta_Http_NameHeader_IsDecodedAndCompared;
+
+    [Test]
+    procedure ModernMeta_UnknownVersion_ListsSupported;
+
+    [Test]
+    procedure ModernMeta_MissingClientCapabilities_IsInvalidParams;
+
+    [Test]
+    procedure ModernMeta_ClientInfoNotObject_IsInvalidParams;
+
+    [Test]
+    procedure ModernMeta_InvalidLogLevel_IsInvalidParams;
+
+    [Test]
+    procedure ModernMeta_Ping_IsMethodNotFound;
+
+    [Test]
+    procedure ModernMeta_Ping_LenientSetting_Allows;
+
+    [Test]
+    procedure ModernMeta_LegacyOnlyMethods_AreNotFound;
+
+    [Test]
+    procedure ModernOnlyMethod_WithoutMeta_IsInvalidParams;
+
+    [Test]
+    procedure Http_ModernHeader_WithoutMeta_IsInvalidParams;
+
+    [Test]
+    procedure Http_UnknownHeaderVersion_IsInvalidRequest;
+
+    [Test]
+    procedure Http_LegacyHeader_IsLegacyWithHeaderVersion;
+
+    [Test]
+    procedure Http_NoHeader_NoMeta_IsLegacy;
+
+    [Test]
+    procedure Stdio_SessionVersion_IsUsedForLegacyRequests;
+
+    [Test]
+    procedure Stdio_NoSessionVersion_IsLatestLegacy;
+
+    [Test]
+    procedure LegacyMeta_WithProgressTokenOnly_IsLegacy;
+
+    [Test]
+    procedure Meta_NotAnObject_IsInvalidParams;
+
+    [Test]
+    procedure ClientCapabilities_AreReadable;
+
+    [Test]
+    procedure RequireClientCapability_RaisesMissingCapability;
   end;
 
 implementation

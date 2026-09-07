@@ -210,7 +210,8 @@ begin
     Exit;
   if Assigned(Context) then
     Context.Cancel;
-  if Reason <> '' then
+  const HasReason = (Reason <> '');
+  if HasReason then
     TLogger.Info(Format('Request %s cancelled by the client: %s', [RequestId.AsText, Reason]))
   else
     TLogger.Info(Format('Request %s cancelled by the client', [RequestId.AsText]));
@@ -235,7 +236,9 @@ begin
       FLock.Leave;
     end;
     for var Context in Contexts do
+    begin
       Context.Cancel;
+    end;
   finally
     Contexts.Free;
   end;

@@ -170,7 +170,9 @@ end;
 procedure TMCPPromptsManager.RegisterBuiltInPrompts;
 begin
   for var PromptName in TMCPRegistry.GetPromptNames do
+  begin
     RegisterPrompt(TMCPRegistry.CreatePrompt(PromptName));
+  end;
 end;
 
 procedure TMCPPromptsManager.AddPrompt(const Prompt: IMCPPrompt);
@@ -201,13 +203,16 @@ var
 begin
   Result := TJSONObject.Create;
   Result.AddPair(MCP_KEY_NAME, Prompt.Name);
-  if Prompt.Title <> Prompt.Name then
+  const IsNotName = (Prompt.Title <> Prompt.Name);
+  if IsNotName then
     Result.AddPair(MCP_KEY_TITLE, Prompt.Title);
-  if Prompt.Description <> '' then
+  const HasDescription = (Prompt.Description <> '');
+  if HasDescription then
     Result.AddPair(MCP_KEY_DESCRIPTION, Prompt.Description);
 
   var Arguments := Prompt.Arguments;
-  if Length(Arguments) > 0 then
+  const HasArguments = (Length(Arguments) > 0);
+  if HasArguments then
   begin
     var ArgumentsArray := TJSONArray.Create;
     Result.AddPair(MCP_KEY_ARGUMENTS, ArgumentsArray);
@@ -250,7 +255,8 @@ begin
       FLock.Leave;
     end;
 
-    if Era = TMCPProtocolEra.Modern then
+    const IsModern = (Era = TMCPProtocolEra.Modern);
+    if IsModern then
     begin
       ResultJSON.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FListTtlMs));
       ResultJSON.AddPair(MCP_KEY_CACHE_SCOPE, FListCacheScope);

@@ -741,7 +741,9 @@ begin
   inherited Create;
   SetLength(FValues, Length(AValues));
   for I := 0 to High(AValues) do
+  begin
     FValues[I] := AValues[I];
+  end;
 end;
 
 constructor SchemaEnumAttribute.Create(const AValue1: string);

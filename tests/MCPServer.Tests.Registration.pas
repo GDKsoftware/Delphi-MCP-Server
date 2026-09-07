@@ -9,14 +9,29 @@ type
   [TestFixture]
   TRegistryTests = class
   public
-    [Test] procedure BuiltInTools_AreRegisteredFromInitialization;
-    [Test] procedure BuiltInResources_AreRegisteredFromInitialization;
-    [Test] procedure BuiltInPrompts_AreRegisteredFromInitialization;
-    [Test] procedure BuiltInResourceTemplates_AreRegisteredFromInitialization;
-    [Test] procedure ServerStatus_IsRegisteredByDefault;
-    [Test] procedure CreateTool_UnknownName_Raises;
-    [Test] procedure CreateResource_UnknownUri_Raises;
-    [Test] procedure CreateTool_ReturnsFreshInstances;
+    [Test]
+    procedure BuiltInTools_AreRegisteredFromInitialization;
+
+    [Test]
+    procedure BuiltInResources_AreRegisteredFromInitialization;
+
+    [Test]
+    procedure BuiltInPrompts_AreRegisteredFromInitialization;
+
+    [Test]
+    procedure BuiltInResourceTemplates_AreRegisteredFromInitialization;
+
+    [Test]
+    procedure ServerStatus_IsRegisteredByDefault;
+
+    [Test]
+    procedure CreateTool_UnknownName_Raises;
+
+    [Test]
+    procedure CreateResource_UnknownUri_Raises;
+
+    [Test]
+    procedure CreateTool_ReturnsFreshInstances;
   end;
 
 implementation

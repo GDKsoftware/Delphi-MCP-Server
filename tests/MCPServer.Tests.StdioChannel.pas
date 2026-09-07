@@ -15,18 +15,41 @@ type
   private
     function ReadAll(const Bytes: TBytes; const MaxLineBytes: Integer): TArray<TMCPLine>;
   public
-    [Test] procedure Reader_SplitsOnLf_DropsCr_LastLineWithoutNewline;
-    [Test] procedure Reader_SkipsByteOrderMark;
-    [Test] procedure Reader_DecodesUtf8;
-    [Test] procedure Reader_ReportsOverlongLine_AndContinues;
-    [Test] procedure Reader_ReportsInvalidUtf8_AndContinues;
-    [Test] procedure Reader_ReportsReplacedUtf8_AsInvalid;
-    [Test] procedure Reader_OverlongLineWithoutNewline_EndsStream;
-    [Test] procedure Reader_OverlongLineBeyondChunk_IsSkippedUpToNewline;
-    [Test] procedure Reader_EmptyStream_HasNoLines;
-    [Test] procedure Writer_OneLinePerMessage_Utf8_NoBom;
-    [Test] procedure Writer_ReplacesEmbeddedNewlines;
-    [Test] procedure Writer_ConcurrentSends_DoNotInterleave;
+    [Test]
+    procedure Reader_SplitsOnLf_DropsCr_LastLineWithoutNewline;
+
+    [Test]
+    procedure Reader_SkipsByteOrderMark;
+
+    [Test]
+    procedure Reader_DecodesUtf8;
+
+    [Test]
+    procedure Reader_ReportsOverlongLine_AndContinues;
+
+    [Test]
+    procedure Reader_ReportsInvalidUtf8_AndContinues;
+
+    [Test]
+    procedure Reader_ReportsReplacedUtf8_AsInvalid;
+
+    [Test]
+    procedure Reader_OverlongLineWithoutNewline_EndsStream;
+
+    [Test]
+    procedure Reader_OverlongLineBeyondChunk_IsSkippedUpToNewline;
+
+    [Test]
+    procedure Reader_EmptyStream_HasNoLines;
+
+    [Test]
+    procedure Writer_OneLinePerMessage_Utf8_NoBom;
+
+    [Test]
+    procedure Writer_ReplacesEmbeddedNewlines;
+
+    [Test]
+    procedure Writer_ConcurrentSends_DoNotInterleave;
   end;
 
 implementation
@@ -197,7 +220,9 @@ begin
         begin
           try
             for var I := 1 to MESSAGES_PER_THREAD do
+            begin
               SinkIntf.Send('{"thread":' + ThreadNo.ToString + ',"payload":"' + StringOfChar('x', 300) + '"}');
+            end;
           finally
             Done.Signal;
           end;

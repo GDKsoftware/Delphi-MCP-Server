@@ -244,7 +244,9 @@ end;
 procedure TMCPToolsManager.RegisterBuiltInTools;
 begin
   for var ToolName in TMCPRegistry.GetToolNames do
+  begin
     RegisterTool(TMCPRegistry.CreateTool(ToolName));
+  end;
 end;
 
 procedure TMCPToolsManager.AddTool(const Tool: IMCPTool);
@@ -369,7 +371,8 @@ var
 begin
   Result := TJSONObject.Create;
   Result.AddPair(MCP_KEY_NAME, Tool.Name);
-  if Tool.Title <> Tool.Name then
+  const IsNotName = (Tool.Title <> Tool.Name);
+  if IsNotName then
     Result.AddPair(MCP_KEY_TITLE, Tool.Title);
   Result.AddPair(MCP_KEY_DESCRIPTION, Tool.Description);
 
@@ -406,7 +409,8 @@ begin
     FLock.Leave;
   end;
 
-  if Era = TMCPProtocolEra.Modern then
+  const IsModern = (Era = TMCPProtocolEra.Modern);
+  if IsModern then
   begin
     Result.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FListTtlMs));
     Result.AddPair(MCP_KEY_CACHE_SCOPE, FListCacheScope);

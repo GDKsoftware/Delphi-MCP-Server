@@ -48,50 +48,137 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Notification_Is202WithEmptyBody;
-    [Test] procedure Get_IsMethodNotAllowedWithAllow;
-    [Test] procedure Delete_IsMethodNotAllowed;
-    [Test] procedure Options_Is204;
-    [Test] procedure WrongPath_Is404;
-    [Test] procedure Origin_NotAllowed_Is403WithJsonRpcBody_EvenWithCorsDisabled;
-    [Test] procedure Origin_LoopbackOnAnyPort_IsAllowed;
-    [Test] procedure Origin_Null_IsDenied;
-    [Test] procedure Origin_AllowListWithPortWildcard;
-    [Test] procedure Cors_HeadersOnlyWhenEnabled;
-    [Test] procedure Cors_PreflightReflectsRequestedHeaders;
-    [Test] procedure Legacy_UnknownMethod_Is200;
-    [Test] procedure Modern_UnknownMethod_Is404;
-    [Test] procedure Modern_MissingVersionHeader_Is400HeaderMismatch;
-    [Test] procedure Modern_UnsupportedVersion_Is400;
-    [Test] procedure Modern_MissingClientCapabilities_Is400;
-    [Test] procedure ModernHeader_WithoutMeta_Is400InvalidParams;
-    [Test] procedure Legacy_UnknownVersionHeader_Is400;
-    [Test] procedure Modern_McpMethodHeader_IsRequiredAndMustMatch;
-    [Test] procedure Modern_McpNameHeader_Base64IsDecoded;
-    [Test] procedure Modern_Discover_Is200;
-    [Test] procedure BodyTooLarge_Is413;
-    [Test] procedure NestingTooDeep_Is400;
-    [Test] procedure SessionId_IsEchoedForLegacyOnly;
-    [Test] procedure Sse_HasNoIdLine;
-    [Test] procedure Bind_DefaultIsLoopback;
-    [Test] procedure Bind_ExplicitAddress;
-    [Test] procedure EndpointInfoPath_AnswersJson;
-    [Test] procedure Progress_IsStreamedBeforeTheResponse;
-    [Test] procedure Progress_WithoutEventStreamAccept_IsPlainJson;
-    [Test] procedure Log_OnlyWithLogLevel_InMeta;
-    [Test] procedure InputRequired_StreamsAsFinalEvent;
-    [Test] procedure StreamedError_IsFinalEvent;
-    [Test] procedure Listen_StreamsAckAndChanges_UntilStopped;
-    [Test] procedure Listen_WithoutEventStreamAccept_IsInvalidRequest;
-    [Test] procedure Auth_MissingToken_Is401WithChallenge;
-    [Test] procedure Auth_WrongToken_Is401_InvalidToken;
-    [Test] procedure Auth_MalformedHeader_Is400;
-    [Test] procedure Auth_ValidToken_IsServed;
-    [Test] procedure Auth_PreflightAndMetadata_NeedNoToken;
-    [Test] procedure Auth_ScopedTool_Is403_WithInsufficientScope;
-    [Test] procedure Auth_ScopedTool_OnOpenServer_Is403;
-    [Test] procedure Host_NotAllowed_Is403;
-    [Test] procedure Rejection_CarriesCorsHeaders;
+    [Test]
+    procedure Notification_Is202WithEmptyBody;
+
+    [Test]
+    procedure Get_IsMethodNotAllowedWithAllow;
+
+    [Test]
+    procedure Delete_IsMethodNotAllowed;
+
+    [Test]
+    procedure Options_Is204;
+
+    [Test]
+    procedure WrongPath_Is404;
+
+    [Test]
+    procedure Origin_NotAllowed_Is403WithJsonRpcBody_EvenWithCorsDisabled;
+
+    [Test]
+    procedure Origin_LoopbackOnAnyPort_IsAllowed;
+
+    [Test]
+    procedure Origin_Null_IsDenied;
+
+    [Test]
+    procedure Origin_AllowListWithPortWildcard;
+
+    [Test]
+    procedure Cors_HeadersOnlyWhenEnabled;
+
+    [Test]
+    procedure Cors_PreflightReflectsRequestedHeaders;
+
+    [Test]
+    procedure Legacy_UnknownMethod_Is200;
+
+    [Test]
+    procedure Modern_UnknownMethod_Is404;
+
+    [Test]
+    procedure Modern_MissingVersionHeader_Is400HeaderMismatch;
+
+    [Test]
+    procedure Modern_UnsupportedVersion_Is400;
+
+    [Test]
+    procedure Modern_MissingClientCapabilities_Is400;
+
+    [Test]
+    procedure ModernHeader_WithoutMeta_Is400InvalidParams;
+
+    [Test]
+    procedure Legacy_UnknownVersionHeader_Is400;
+
+    [Test]
+    procedure Modern_McpMethodHeader_IsRequiredAndMustMatch;
+
+    [Test]
+    procedure Modern_McpNameHeader_Base64IsDecoded;
+
+    [Test]
+    procedure Modern_Discover_Is200;
+
+    [Test]
+    procedure BodyTooLarge_Is413;
+
+    [Test]
+    procedure NestingTooDeep_Is400;
+
+    [Test]
+    procedure SessionId_IsEchoedForLegacyOnly;
+
+    [Test]
+    procedure Sse_HasNoIdLine;
+
+    [Test]
+    procedure Bind_DefaultIsLoopback;
+
+    [Test]
+    procedure Bind_ExplicitAddress;
+
+    [Test]
+    procedure EndpointInfoPath_AnswersJson;
+
+    [Test]
+    procedure Progress_IsStreamedBeforeTheResponse;
+
+    [Test]
+    procedure Progress_WithoutEventStreamAccept_IsPlainJson;
+
+    [Test]
+    procedure Log_OnlyWithLogLevel_InMeta;
+
+    [Test]
+    procedure InputRequired_StreamsAsFinalEvent;
+
+    [Test]
+    procedure StreamedError_IsFinalEvent;
+
+    [Test]
+    procedure Listen_StreamsAckAndChanges_UntilStopped;
+
+    [Test]
+    procedure Listen_WithoutEventStreamAccept_IsInvalidRequest;
+
+    [Test]
+    procedure Auth_MissingToken_Is401WithChallenge;
+
+    [Test]
+    procedure Auth_WrongToken_Is401_InvalidToken;
+
+    [Test]
+    procedure Auth_MalformedHeader_Is400;
+
+    [Test]
+    procedure Auth_ValidToken_IsServed;
+
+    [Test]
+    procedure Auth_PreflightAndMetadata_NeedNoToken;
+
+    [Test]
+    procedure Auth_ScopedTool_Is403_WithInsufficientScope;
+
+    [Test]
+    procedure Auth_ScopedTool_OnOpenServer_Is403;
+
+    [Test]
+    procedure Host_NotAllowed_Is403;
+
+    [Test]
+    procedure Rejection_CarriesCorsHeaders;
   end;
 
 implementation
@@ -470,8 +557,8 @@ begin
   var Addresses := FServer.BoundAddresses;
   Assert.IsTrue(Length(Addresses) >= 1);
   for var Address in Addresses do
-    Assert.IsTrue(Address.StartsWith('127.0.0.1:') or Address.StartsWith('[::1]:')
-      or Address.StartsWith('[0:0:0:0:0:0:0:1]:'), Address);
+    Assert.IsTrue(Address.StartsWith('127.0.0.1:') or Address.StartsWith('[::1]:') or
+      Address.StartsWith('[0:0:0:0:0:0:0:1]:'), Address);
 end;
 
 procedure THttpTransportTests.Bind_ExplicitAddress;
@@ -595,7 +682,9 @@ begin
 
   var Deadline := TThread.GetTickCount64 + 2000;
   while (FHarness.SubscriptionsManager.ActiveCount = 0) and (TThread.GetTickCount64 < Deadline) do
+  begin
     Sleep(10);
+  end;
   Assert.AreEqual(1, FHarness.SubscriptionsManager.ActiveCount, 'the subscription is open');
 
   Post(Format(TRIGGER, ['test_trigger_tool_change']), [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_trigger_tool_change']);

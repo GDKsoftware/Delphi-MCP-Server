@@ -161,10 +161,14 @@ function TMCPJsonRpcProcessor.SupportedModernVersions: TArray<string>;
 begin
   Result := nil;
   for var Version in MCP_MODERN_PROTOCOL_VERSIONS do
+  begin
     Result := Result + [Version];
+  end;
   if FSettings.DiscoverListsLegacyVersions then
     for var Version in MCP_LEGACY_PROTOCOL_VERSIONS do
+    begin
       Result := Result + [Version];
+    end;
 end;
 
 function TMCPJsonRpcProcessor.BuildServerInfo: TJSONObject;
@@ -172,11 +176,14 @@ begin
   Result := TJSONObject.Create;
   Result.AddPair(MCP_KEY_NAME, FSettings.ServerName);
   Result.AddPair(MCP_KEY_VERSION, FSettings.ServerVersion);
-  if FSettings.ServerTitle <> '' then
+  const HasServerTitle = (FSettings.ServerTitle <> '');
+  if HasServerTitle then
     Result.AddPair(MCP_KEY_TITLE, FSettings.ServerTitle);
-  if FSettings.ServerDescription <> '' then
+  const HasServerDescription = (FSettings.ServerDescription <> '');
+  if HasServerDescription then
     Result.AddPair(MCP_KEY_DESCRIPTION, FSettings.ServerDescription);
-  if FSettings.ServerWebsiteUrl <> '' then
+  const HasServerWebsiteUrl = (FSettings.ServerWebsiteUrl <> '');
+  if HasServerWebsiteUrl then
     Result.AddPair('websiteUrl', FSettings.ServerWebsiteUrl);
 end;
 
@@ -240,8 +247,8 @@ end;
 
 function TMCPJsonRpcProcessor.EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
 begin
-  if Hints.HasHeaderLayer and Hints.HasProtocolVersionHeader
-    and TMCPProtocolVersion.IsModern(Hints.ProtocolVersionHeader) then
+  if Hints.HasHeaderLayer and Hints.HasProtocolVersionHeader and
+    TMCPProtocolVersion.IsModern(Hints.ProtocolVersionHeader) then
     Result := TMCPProtocolEra.Modern
   else
     Result := TMCPProtocolEra.Legacy;
@@ -300,7 +307,8 @@ var
 begin
   if not Hints.HasMethodHeader then
     raise EMCPError.HeaderMismatch('Mcp-Method header is missing');
-  if Hints.MethodHeader <> Method then
+  const IsNotMethod = (Hints.MethodHeader <> Method);
+  if IsNotMethod then
     raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
       ['Mcp-Method', Hints.MethodHeader, Method]));
 
@@ -309,7 +317,8 @@ begin
     SourceField := 'name'
   else if Method = MCP_METHOD_RESOURCES_READ then
     SourceField := 'uri';
-  if SourceField = '' then
+  const SourceFieldIsEmpty = (SourceField = '');
+  if SourceFieldIsEmpty then
     Exit;
 
   if not Hints.HasNameHeader then
@@ -324,7 +333,8 @@ begin
     if IsJsonString(Source) then
       BodyValue := TJSONString(Source).Value;
   end;
-  if Decoded <> BodyValue then
+  const IsNotBodyValue = (Decoded <> BodyValue);
+  if IsNotBodyValue then
     raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
       ['Mcp-Name', Decoded, BodyValue]));
 end;
@@ -364,7 +374,8 @@ begin
   begin
     if not Hints.HasProtocolVersionHeader then
       raise EMCPError.HeaderMismatch('MCP-Protocol-Version header is missing');
-    if Hints.ProtocolVersionHeader <> Version then
+    const IsNotVersion = (Hints.ProtocolVersionHeader <> Version);
+    if IsNotVersion then
       raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
         ['MCP-Protocol-Version', Hints.ProtocolVersionHeader, Version]));
   end;
@@ -440,7 +451,8 @@ begin
   var Version := '';
   if Assigned(Hints.LegacySession) then
     Version := Hints.LegacySession.ProtocolVersion;
-  if Version = '' then
+  const VersionIsEmpty = (Version = '');
+  if VersionIsEmpty then
     Version := MCP_LATEST_LEGACY_PROTOCOL_VERSION;
 
   Result := NewContext(TMCPProtocolEra.Legacy, Version, Method, RequestId, Meta, Hints);
@@ -456,7 +468,8 @@ begin
 
   TLogger.Info('Notification received: ' + Method);
 
-  if Method = MCP_METHOD_NOTIFICATIONS_CANCELLED then
+  const IsMcpMethodNotificationsCancelled = (Method = MCP_METHOD_NOTIFICATIONS_CANCELLED);
+  if IsMcpMethodNotificationsCancelled then
   begin
     HandleCancelled(Params, Hints);
     Exit;
@@ -520,7 +533,8 @@ begin
   for var Method in Required.Requests.Methods do
   begin
     var Capability := TMCPInputRequests.RequiredCapability(Method);
-    if Capability = '' then
+    const CapabilityIsEmpty = (Capability = '');
+    if CapabilityIsEmpty then
       raise EMCPError.InternalError(Format('%s is not a request a client can answer', [Method]));
     Context.RequireClientCapability(Capability);
   end;
@@ -528,7 +542,8 @@ begin
   var ResultObject := TJSONObject.Create;
   try
     ResultObject.AddPair(MCP_KEY_RESULT_TYPE, RESULT_TYPE_INPUT_REQUIRED);
-    if Required.Requests.Count > 0 then
+    const HasRequests = (Required.Requests.Count > 0);
+    if HasRequests then
       ResultObject.AddPair('inputRequests', Required.Requests.ToJson);
     if Assigned(Required.State) then
       ResultObject.AddPair(PARAM_REQUEST_STATE, FStateSealer.Seal(Required.State, Context.Method,
@@ -598,8 +613,8 @@ begin
     Meta.AddPair(MCP_META_SERVER_INFO, BuildServerInfo);
 
   var ResultType := ResultObject.GetValue(MCP_KEY_RESULT_TYPE);
-  if IsCacheableMethod(Method) and (ResultType is TJSONString)
-    and (TJSONString(ResultType).Value = RESULT_TYPE_COMPLETE) then
+  if IsCacheableMethod(Method) and (ResultType is TJSONString) and
+    (TJSONString(ResultType).Value = RESULT_TYPE_COMPLETE) then
   begin
     if not Assigned(ResultObject.GetValue(MCP_KEY_TTL_MS)) then
       ResultObject.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(0));
@@ -674,7 +689,8 @@ function TMCPJsonRpcProcessor.ErrorResult(Era: TMCPProtocolEra; const RequestId:
 begin
   TLogger.Error('Error processing request: ' + Error.Message);
   var RequiredScope := '';
-  if Error.HttpStatus = HTTP_STATUS_FORBIDDEN then
+  const IsHttpStatusForbidden = (Error.HttpStatus = HTTP_STATUS_FORBIDDEN);
+  if IsHttpStatusForbidden then
     RequiredScope := Error.RequiredScope;
 
   var Response := TJSONObject.Create;
@@ -723,9 +739,11 @@ end;
 function TMCPJsonRpcProcessor.ReadRequestId(const Request: TJSONObject): TMCPRequestId;
 begin
   Result := TMCPRequestId.FromJson(Request.GetValue(MCP_KEY_ID));
-  if Result.Kind = TMCPRequestIdKind.Null then
+  const IsNull = (Result.Kind = TMCPRequestIdKind.Null);
+  if IsNull then
     raise EMCPError.InvalidRequest('id must not be null');
-  if Result.Kind = TMCPRequestIdKind.Invalid then
+  const IsInvalid = (Result.Kind = TMCPRequestIdKind.Invalid);
+  if IsInvalid then
   begin
     Result := TMCPRequestId.FromJson(nil);
     raise EMCPError.InvalidRequest('id must be a string or an integer');
@@ -751,7 +769,8 @@ begin
   const IsResponse = (Assigned(Request.GetValue(MCP_KEY_RESULT)) or Assigned(Request.GetValue(MCP_KEY_ERROR)));
   if not IsResponse then
     raise EMCPError.InvalidRequest('method must be a string');
-  if Era = TMCPProtocolEra.Modern then
+  const IsModern = (Era = TMCPProtocolEra.Modern);
+  if IsModern then
     raise EMCPError.InvalidRequest('JSON-RPC responses are not accepted');
 
   IsClientResponse := True;
@@ -876,7 +895,8 @@ begin
         end;
 
       const Params = ReadParams(Request, Era);
-      if RequestId.Kind = TMCPRequestIdKind.None then
+      const IsNone = (RequestId.Kind = TMCPRequestIdKind.None);
+      if IsNone then
         begin
           Result := ProcessNotification(Method, Params, Hints);
           Exit;

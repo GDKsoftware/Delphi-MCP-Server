@@ -108,7 +108,8 @@ begin
   while Current > 0 do
   begin
     var Previous := AtomicCmpExchange(FActiveConnections, Current - 1, Current);
-    if Previous = Current then
+    const IsCurrent = (Previous = Current);
+    if IsCurrent then
       Exit;
     Current := Previous;
   end;

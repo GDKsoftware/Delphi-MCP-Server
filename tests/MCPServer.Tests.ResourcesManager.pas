@@ -57,22 +57,53 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Unknown_Modern_Is32602_WithUri;
-    [Test] procedure Unknown_Legacy_Is32002_WithUri;
-    [Test] procedure MissingUri_IsInvalidParams;
-    [Test] procedure ReadFailure_IsInternalError;
-    [Test] procedure Text_ReadsText;
-    [Test] procedure Binary_ReadsBlob;
-    [Test] procedure Read_CacheHints_ModernOnly_FromResource;
-    [Test] procedure List_HasMetadata_AndOmitsEmptyFields;
-    [Test] procedure List_CacheHints_ModernOnly;
-    [Test] procedure Templates_ListsRegisteredTemplates_WithHints;
-    [Test] procedure Templates_Cursor_IsInvalidParams;
-    [Test] procedure Read_ViaTemplate_ResolvesWithActualUri;
-    [Test] procedure Read_TemplateMismatch_IsNotFound;
-    [Test] procedure Read_ViaTemplate_PercentDecodes_KeepsPlusLiteral;
-    [Test] procedure Read_ViaTemplate_ConcurrentReads_Succeed;
-    [Test] procedure RemoveResourceTemplate_StopsMatching;
+    [Test]
+    procedure Unknown_Modern_Is32602_WithUri;
+
+    [Test]
+    procedure Unknown_Legacy_Is32002_WithUri;
+
+    [Test]
+    procedure MissingUri_IsInvalidParams;
+
+    [Test]
+    procedure ReadFailure_IsInternalError;
+
+    [Test]
+    procedure Text_ReadsText;
+
+    [Test]
+    procedure Binary_ReadsBlob;
+
+    [Test]
+    procedure Read_CacheHints_ModernOnly_FromResource;
+
+    [Test]
+    procedure List_HasMetadata_AndOmitsEmptyFields;
+
+    [Test]
+    procedure List_CacheHints_ModernOnly;
+
+    [Test]
+    procedure Templates_ListsRegisteredTemplates_WithHints;
+
+    [Test]
+    procedure Templates_Cursor_IsInvalidParams;
+
+    [Test]
+    procedure Read_ViaTemplate_ResolvesWithActualUri;
+
+    [Test]
+    procedure Read_TemplateMismatch_IsNotFound;
+
+    [Test]
+    procedure Read_ViaTemplate_PercentDecodes_KeepsPlusLiteral;
+
+    [Test]
+    procedure Read_ViaTemplate_ConcurrentReads_Succeed;
+
+    [Test]
+    procedure RemoveResourceTemplate_StopsMatching;
   end;
 
 implementation

@@ -298,7 +298,8 @@ begin
           VarName := Expr;
           Result.Pattern := Result.Pattern + Format('(?<%s>[^/]+)', [VarName]);
         end;
-        if VarName = '' then
+        const VarNameIsEmpty = (VarName = '');
+        if VarNameIsEmpty then
           raise EArgumentException.CreateFmt('Empty variable name in URI template "%s"', [UriTemplate]);
         for var C in VarName do
           if not CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']) then
@@ -315,7 +316,9 @@ begin
       begin
         var LiteralStart := Position;
         while (Position <= Length(UriTemplate)) and (UriTemplate[Position] <> '{') do
+        begin
           Inc(Position);
+        end;
         LiteralRun := Copy(UriTemplate, LiteralStart, Position - LiteralStart);
         Result.Pattern := Result.Pattern + TRegEx.Escape(LiteralRun);
       end;
@@ -375,7 +378,9 @@ begin
   Result := Match.Success;
   if Result then
     for var VarName in FVariableNames do
+    begin
       Vars.AddOrSetValue(VarName, PercentDecode(Match.Groups[VarName].Value));
+    end;
 end;
 
 end.

@@ -35,16 +35,35 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure StaticBearer_AcceptsListedTokens_RejectsOthers;
-    [Test] procedure StaticBearer_NeedsAToken;
-    [Test] procedure ConstantTime_ComparesWholeToken;
-    [Test] procedure Principal_HasScope_HonoursWildcard;
-    [Test] procedure OAuth_RejectsWrongAudience_Expiry_AndScope;
-    [Test] procedure OAuth_AcceptsAudienceArray_AndScopeArray;
-    [Test] procedure OAuth_NeedsAnAudience;
-    [Test] procedure Challenge_Build_QuotesParameters;
-    [Test] procedure Metadata_Build_DropsOfflineAccess;
-    [Test] procedure Introspection_PostsTokenWithClientCredentials;
+    [Test]
+    procedure StaticBearer_AcceptsListedTokens_RejectsOthers;
+
+    [Test]
+    procedure StaticBearer_NeedsAToken;
+
+    [Test]
+    procedure ConstantTime_ComparesWholeToken;
+
+    [Test]
+    procedure Principal_HasScope_HonoursWildcard;
+
+    [Test]
+    procedure OAuth_RejectsWrongAudience_Expiry_AndScope;
+
+    [Test]
+    procedure OAuth_AcceptsAudienceArray_AndScopeArray;
+
+    [Test]
+    procedure OAuth_NeedsAnAudience;
+
+    [Test]
+    procedure Challenge_Build_QuotesParameters;
+
+    [Test]
+    procedure Metadata_Build_DropsOfflineAccess;
+
+    [Test]
+    procedure Introspection_PostsTokenWithClientCredentials;
   end;
 
 implementation

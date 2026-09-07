@@ -33,13 +33,20 @@ type
     destructor Destroy; override;
     property Name: string read FName write FName;
     property Count: Integer read FCount write FCount;
-    [Optional] property Ratio: Double read FRatio write FRatio;
-    [Optional] property Enabled: Boolean read FEnabled write FEnabled;
-    [Optional] property Colour: TColour read FColour write FColour;
-    [Optional] property When: TDateTime read FWhen write FWhen;
-    [Optional] property Tags: TArray<string> read FTags write FTags;
-    [Optional] property Nested: TNested read FNested write FNested;
-    [Optional] property Note: string read FNote write FNote;
+    [Optional]
+    property Ratio: Double read FRatio write FRatio;
+    [Optional]
+    property Enabled: Boolean read FEnabled write FEnabled;
+    [Optional]
+    property Colour: TColour read FColour write FColour;
+    [Optional]
+    property When: TDateTime read FWhen write FWhen;
+    [Optional]
+    property Tags: TArray<string> read FTags write FTags;
+    [Optional]
+    property Nested: TNested read FNested write FNested;
+    [Optional]
+    property Note: string read FNote write FNote;
   end;
 
   TRenamedParams = class
@@ -71,18 +78,41 @@ type
     function Deserialize(const Json: string): TSampleParams;
     procedure ExpectArgumentError(const Json, Fragment: string);
   public
-    [Test] procedure Deserialize_AllTypes;
-    [Test] procedure MissingRequired_Raises;
-    [Test] procedure Null_CountsAsAbsent;
-    [Test] procedure WrongType_String_Raises;
-    [Test] procedure WrongType_Integer_Raises;
-    [Test] procedure Fraction_ForInteger_Raises;
-    [Test] procedure WrongType_Boolean_Raises;
-    [Test] procedure UnknownParameter_Raises;
-    [Test] procedure Enum_ByName_AndInvalidRaises;
-    [Test] procedure Serialize_Enum_Set_Array_DateTime;
-    [Test] procedure Serialize_NilObject_IsNull;
-    [Test] procedure SchemaName_UsedForDeserializeAndSerialize;
+    [Test]
+    procedure Deserialize_AllTypes;
+
+    [Test]
+    procedure MissingRequired_Raises;
+
+    [Test]
+    procedure Null_CountsAsAbsent;
+
+    [Test]
+    procedure WrongType_String_Raises;
+
+    [Test]
+    procedure WrongType_Integer_Raises;
+
+    [Test]
+    procedure Fraction_ForInteger_Raises;
+
+    [Test]
+    procedure WrongType_Boolean_Raises;
+
+    [Test]
+    procedure UnknownParameter_Raises;
+
+    [Test]
+    procedure Enum_ByName_AndInvalidRaises;
+
+    [Test]
+    procedure Serialize_Enum_Set_Array_DateTime;
+
+    [Test]
+    procedure Serialize_NilObject_IsNull;
+
+    [Test]
+    procedure SchemaName_UsedForDeserializeAndSerialize;
   end;
 
 implementation
