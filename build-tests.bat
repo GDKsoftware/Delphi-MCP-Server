@@ -66,7 +66,7 @@ if not "!TAURUS_PATH!"=="" (
     if "!TLS_DEFINES!"=="" echo Warning: TaurusTLS not found. The HTTP server unit needs it.
 )
 
-set UNIT_PATHS=src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;src\Prompts;tests!EXTRA_UNITS!
+set UNIT_PATHS=src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;src\Prompts;src\Client;tests!EXTRA_UNITS!
 set NAMESPACES=Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap
 
 echo Building MCPServer.Tests - %CONFIG% %PLATFORM%
