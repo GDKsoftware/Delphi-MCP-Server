@@ -324,6 +324,15 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Enumeration sets with more than 64 elements were truncated when serialised,
+  and a JSON number outside the range of its target integer type was silently
+  wrapped instead of rejected.
+- `TServerStatusResource.SetNamePrefix` removed the old registration before
+  adding the new one, so a failure left the server without a status resource.
+- `logs://recent` and `logs://{level}` leaked their result when reading the
+  log buffer failed.
+- A rejected `Origin` or `Host` now answers `403` with the CORS headers, so a
+  browser can read the error instead of seeing an opaque failure.
 - `TServerStatusResource` request and connection counters and the SSE event-id
   counter are updated atomically; they were plain increments shared by all
   Indy connection threads.

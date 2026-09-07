@@ -231,7 +231,13 @@ begin
         if RttiType.TypeKind = tkInt64 then
           Result := Number.AsInt64
         else
+        begin
+          const Ordinal = TRttiOrdinalType(RttiType);
+          const InRange = ((Number.AsInt64 >= Ordinal.MinValue) and (Number.AsInt64 <= Ordinal.MaxValue));
+          if not InRange then
+            raise EArgumentException.CreateFmt('%d is outside the range of %s', [Number.AsInt64, RttiType.Name]);
           Result := TValue.FromOrdinal(RttiType.Handle, Number.AsInt64);
+        end;
       end;
 
     tkFloat:
@@ -402,14 +408,18 @@ begin
 
     tkSet:
       begin
-        var Names := TJSONArray.Create;
-        var ElementType := TRttiEnumerationType(TRttiSetType(RttiType).ElementType);
-        var SetBits: Int64 := 0;
-        Move(Value.GetReferenceToRawData^, SetBits, Min(Value.DataSize, SizeOf(SetBits)));
-        var FirstBit := ElementType.MinValue and not 7;
+        const Names = TJSONArray.Create;
+        const ElementType = TRttiEnumerationType(TRttiSetType(RttiType).ElementType);
+        const Bytes = PByte(Value.GetReferenceToRawData);
+        const FirstBit = ElementType.MinValue and not 7;
         for var Ordinal := ElementType.MinValue to ElementType.MaxValue do
-          if (SetBits and (Int64(1) shl (Ordinal - FirstBit))) <> 0 then
+        begin
+          const BitIndex = Ordinal - FirstBit;
+          const ByteIndex = BitIndex div 8;
+          const IsMember = ((ByteIndex < Value.DataSize) and ((Bytes[ByteIndex] and (1 shl (BitIndex mod 8))) <> 0));
+          if IsMember then
             Names.Add(GetEnumName(ElementType.Handle, Ordinal));
+        end;
         Result := Names;
       end;
 

@@ -14,9 +14,11 @@ type
   TMCPToolResult = class
   private
     FContent: TJSONArray;
+    FPendingAnnotations: TJSONObject;
     FStructuredContent: TJSONValue;
     FMeta: TJSONObject;
     FIsError: Boolean;
+    procedure AddBlock(const Block: TJSONObject);
     function BuildContent(Era: TMCPProtocolEra): TJSONArray;
   public
     constructor Create;
@@ -58,6 +60,7 @@ end;
 
 destructor TMCPToolResult.Destroy;
 begin
+  FPendingAnnotations.Free;
   FContent.Free;
   FStructuredContent.Free;
   FMeta.Free;
@@ -66,7 +69,7 @@ end;
 
 function TMCPToolResult.AddText(const Text: string): TMCPToolResult;
 begin
-  FContent.AddElement(CreateTextBlock(Text));
+  AddBlock(CreateTextBlock(Text));
   Result := Self;
 end;
 
@@ -77,7 +80,7 @@ end;
 
 function TMCPToolResult.AddImage(const Base64Data, MimeType: string): TMCPToolResult;
 begin
-  FContent.AddElement(CreateImageBlock(Base64Data, MimeType));
+  AddBlock(CreateImageBlock(Base64Data, MimeType));
   Result := Self;
 end;
 
@@ -88,36 +91,48 @@ end;
 
 function TMCPToolResult.AddAudio(const Base64Data, MimeType: string): TMCPToolResult;
 begin
-  FContent.AddElement(CreateAudioBlock(Base64Data, MimeType));
+  AddBlock(CreateAudioBlock(Base64Data, MimeType));
   Result := Self;
 end;
 
 function TMCPToolResult.AddResourceLink(const Uri, Name, Description, MimeType: string): TMCPToolResult;
 begin
-  FContent.AddElement(CreateResourceLinkBlock(Uri, Name, Description, MimeType));
+  AddBlock(CreateResourceLinkBlock(Uri, Name, Description, MimeType));
   Result := Self;
 end;
 
 function TMCPToolResult.AddEmbeddedText(const Uri, MimeType, Text: string): TMCPToolResult;
 begin
-  FContent.AddElement(CreateEmbeddedTextBlock(Uri, MimeType, Text));
+  AddBlock(CreateEmbeddedTextBlock(Uri, MimeType, Text));
   Result := Self;
 end;
 
 function TMCPToolResult.AddEmbeddedBlob(const Uri, MimeType: string; const Data: TBytes): TMCPToolResult;
 begin
-  FContent.AddElement(CreateEmbeddedBlobBlock(Uri, MimeType, EncodeBase64Blob(Data)));
+  AddBlock(CreateEmbeddedBlobBlock(Uri, MimeType, EncodeBase64Blob(Data)));
   Result := Self;
+end;
+
+procedure TMCPToolResult.AddBlock(const Block: TJSONObject);
+begin
+  FContent.AddElement(Block);
+  if Assigned(FPendingAnnotations) then
+  begin
+    Block.AddPair('annotations', FPendingAnnotations);
+    FPendingAnnotations := nil;
+  end;
 end;
 
 function TMCPToolResult.WithAnnotations(const Annotations: TJSONObject): TMCPToolResult;
 begin
-  if FContent.Count = 0 then
+  const HasBlock = (FContent.Count > 0);
+  if HasBlock then
+    TJSONObject(FContent.Items[FContent.Count - 1]).AddPair('annotations', Annotations)
+  else
   begin
-    Annotations.Free;
-    raise EInvalidOperation.Create('WithAnnotations needs a content block to attach to');
+    FPendingAnnotations.Free;
+    FPendingAnnotations := Annotations;
   end;
-  TJSONObject(FContent.Items[FContent.Count - 1]).AddPair('annotations', Annotations);
   Result := Self;
 end;
 

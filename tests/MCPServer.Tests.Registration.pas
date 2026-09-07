@@ -77,7 +77,7 @@ begin
     begin
       TMCPRegistry.CreateTool('no_such_tool');
     end;
-  Assert.WillRaise(Probe, Exception);
+  Assert.WillRaise(Probe, EMCPRegistryNotFound);
 end;
 
 procedure TRegistryTests.CreateResource_UnknownUri_Raises;
@@ -87,7 +87,7 @@ begin
     begin
       TMCPRegistry.CreateResource('nope://missing');
     end;
-  Assert.WillRaise(Probe, Exception);
+  Assert.WillRaise(Probe, EMCPRegistryNotFound);
 end;
 
 procedure TRegistryTests.CreateTool_ReturnsFreshInstances;

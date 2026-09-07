@@ -16,6 +16,7 @@ type
     [Test] procedure Error_SetsIsError;
     [Test] procedure Meta_IsEmitted;
     [Test] procedure Annotations_AttachToLastBlock;
+    [Test] procedure Annotations_BeforeAnyBlock_AttachToTheNextBlock;
     [Test] procedure Base64Blob_HasNoLineBreaks;
   end;
 
@@ -120,6 +121,21 @@ begin
   var Json := ToolResult.ToJson(TMCPProtocolEra.Modern);
   try
     Assert.AreEqual('abc', Json.GetValue<string>('_meta["com.example/trace"]'));
+  finally
+    Json.Free;
+    ToolResult.Free;
+  end;
+end;
+
+procedure TToolResultTests.Annotations_BeforeAnyBlock_AttachToTheNextBlock;
+begin
+  var Annotations := TJSONObject.Create;
+  Annotations.AddPair('priority', TJSONNumber.Create(0.5));
+  var ToolResult := TMCPToolResult.Create.WithAnnotations(Annotations).AddText('first').AddText('second');
+  var Json := ToolResult.ToJson(TMCPProtocolEra.Modern);
+  try
+    Assert.AreEqual(0.5, Json.GetValue<Double>('content[0].annotations.priority'), 0.0001);
+    Assert.IsNull(Json.FindValue('content[1].annotations'));
   finally
     Json.Free;
     ToolResult.Free;

@@ -40,6 +40,7 @@ type
   public
     const DEFAULT_KEEP_ALIVE_INTERVAL_MS = 15000;
     const POLL_INTERVAL_MS = 250;
+    const CLOSE_GRACE_MS = 2000;
   strict private
     FLock: TCriticalSection;
     FSubscriptions: TList<IMCPSubscription>;
@@ -64,6 +65,7 @@ type
     procedure ResourcesListChanged;
     procedure ResourceUpdated(const Uri: string);
     procedure CloseAll(const Reason: string);
+    procedure CloseAllAndWait(const Reason: string);
     function ActiveCount: Integer;
 
     property KeepAliveIntervalMs: Integer read FKeepAliveIntervalMs write FKeepAliveIntervalMs;
@@ -82,6 +84,7 @@ const
   FILTER_RESOURCES = 'resourcesListChanged';
   FILTER_RESOURCE_SUBSCRIPTIONS = 'resourceSubscriptions';
   PARAM_NOTIFICATIONS = 'notifications';
+  CLOSE_POLL_MS = 10;
 
 type
   TMCPSubscription = class(TInterfacedObject, IMCPSubscription)
@@ -231,7 +234,7 @@ end;
 
 destructor TMCPSubscriptionsManager.Destroy;
 begin
-  CloseAll('subscriptions manager destroyed');
+  CloseAllAndWait('subscriptions manager destroyed');
   FSubscriptions.Free;
   FLock.Free;
   inherited;
@@ -395,6 +398,22 @@ begin
   begin
     Subscription.Close;
   end;
+end;
+
+procedure TMCPSubscriptionsManager.CloseAllAndWait(const Reason: string);
+begin
+  const Deadline = TThread.GetTickCount64 + CLOSE_GRACE_MS;
+  repeat
+    CloseAll(Reason);
+    const AllGone = (ActiveCount = 0);
+    if AllGone then
+      Break;
+    Sleep(CLOSE_POLL_MS);
+  until TThread.GetTickCount64 >= Deadline;
+
+  const StillOpen = ActiveCount;
+  if StillOpen > 0 then
+    TLogger.Warning(Format('%d subscription(s) did not close in time', [StillOpen]));
 end;
 
 function TMCPSubscriptionsManager.ActiveCount: Integer;

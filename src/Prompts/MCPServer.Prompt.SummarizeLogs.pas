@@ -32,7 +32,8 @@ implementation
 uses
   System.Classes,
   MCPServer.Registration,
-  MCPServer.Resource.Logs;
+  MCPServer.Resource.Logs,
+  System.NetEncoding;
 
 { TSummarizeLogsPrompt }
 
@@ -58,7 +59,7 @@ begin
   begin
     Messages.AddText('user', Format(
       'Summarize the server''s recent "%s" log entries, calling out anything unusual.', [Params.Level]));
-    ResourceUri := 'logs://' + Params.Level;
+    ResourceUri := Format('logs://%s', [TNetEncoding.URL.Encode(Params.Level)]);
   end;
 
   Entries := TLogBuffer.Instance.GetLogs(100, Params.Level);

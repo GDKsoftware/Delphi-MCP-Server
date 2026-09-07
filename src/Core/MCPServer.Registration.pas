@@ -11,6 +11,9 @@ uses
   MCPServer.Logger;
 
 type
+  EMCPRegistryNotFound = class(Exception)
+  end;
+
   TMCPToolClass = class of TMCPToolBase;
 
   TMCPToolFactory = reference to function: IMCPTool;
@@ -131,7 +134,7 @@ begin
   if FTools.TryGetValue(Name, Factory) then
     Result := Factory()
   else
-    raise Exception.CreateFmt('Tool not found: %s', [Name]);
+    raise EMCPRegistryNotFound.CreateFmt('Tool not found: %s', [Name]);
 end;
 
 class function TMCPRegistry.CreateResource(const URI: string): IMCPResource;
@@ -141,7 +144,7 @@ begin
   if FResources.TryGetValue(URI, Factory) then
     Result := Factory()
   else
-    raise Exception.CreateFmt('Resource not found: %s', [URI]);
+    raise EMCPRegistryNotFound.CreateFmt('Resource not found: %s', [URI]);
 end;
 
 class function TMCPRegistry.CreatePrompt(const Name: string): IMCPPrompt;
@@ -151,7 +154,7 @@ begin
   if FPrompts.TryGetValue(Name, Factory) then
     Result := Factory()
   else
-    raise Exception.CreateFmt('Prompt not found: %s', [Name]);
+    raise EMCPRegistryNotFound.CreateFmt('Prompt not found: %s', [Name]);
 end;
 
 class function TMCPRegistry.CreateResourceTemplate(const UriTemplate: string): IMCPResourceTemplate;
@@ -161,7 +164,7 @@ begin
   if FResourceTemplates.TryGetValue(UriTemplate, Factory) then
     Result := Factory()
   else
-    raise Exception.CreateFmt('Resource template not found: %s', [UriTemplate]);
+    raise EMCPRegistryNotFound.CreateFmt('Resource template not found: %s', [UriTemplate]);
 end;
 
 class function TMCPRegistry.GetToolNames: TArray<string>;

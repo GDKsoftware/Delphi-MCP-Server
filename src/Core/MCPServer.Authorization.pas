@@ -126,6 +126,7 @@ const
   SCOPE_SEPARATOR = ' ';
   STATIC_SUBJECT_FORMAT = 'token-%d';
   MEDIA_TYPE_FORM = 'application/x-www-form-urlencoded';
+  HTTP_STATUS_OK = 200;
 
 { TMCPPrincipal }
 
@@ -401,38 +402,52 @@ end;
 function TMCPIntrospectionAuthorizer.ValidateToken(const Token: string; out Claims: TJSONObject): Boolean;
 begin
   Claims := nil;
-  var Client := THTTPClient.Create;
-  var Form := TStringStream.Create('token=' + TNetEncoding.URL.EncodeForm(Token), TEncoding.UTF8);
+  const Client = THTTPClient.Create;
   try
     Client.ConnectionTimeout := FTimeoutMs;
     Client.ResponseTimeout := FTimeoutMs;
     Client.ContentType := MEDIA_TYPE_FORM;
-    var Headers: TArray<TNetHeader> := [TNetHeader.Create('Accept', 'application/json')];
-    if FClientId <> '' then
-      Headers := Headers + [TNetHeader.Create('Authorization', 'Basic ' + TNetEncoding.Base64.Encode(FClientId + ':' + FClientSecret))];
 
-    var Response := Client.Post(FIntrospectionUrl, Form, nil, Headers);
-    if Response.StatusCode <> 200 then
-    begin
-      TLogger.Warning(Format('Token introspection answered HTTP %d', [Response.StatusCode]));
-      Exit(False);
-    end;
+    const Form = TStringStream.Create(Format('token=%s', [TNetEncoding.URL.EncodeForm(Token)]), TEncoding.UTF8);
+    try
+      var Headers: TArray<TNetHeader> := [TNetHeader.Create('Accept', 'application/json')];
+      if FClientId <> '' then
+      begin
+        const Credentials = TNetEncoding.Base64.Encode(Format('%s:%s', [FClientId, FClientSecret]));
+        Headers := Headers + [TNetHeader.Create('Authorization', Format('Basic %s', [Credentials]))];
+      end;
 
-    var Parsed := TJSONObject.ParseJSONValue(Response.ContentAsString(TEncoding.UTF8));
-    if not (Parsed is TJSONObject) then
-    begin
-      Parsed.Free;
-      Exit(False);
+      var Body := '';
+      try
+        const Response = Client.Post(FIntrospectionUrl, Form, nil, Headers);
+        const Answered = (Response.StatusCode = HTTP_STATUS_OK);
+        if not Answered then
+        begin
+          TLogger.Warning(Format('Token introspection answered HTTP %d', [Response.StatusCode]));
+          Exit(False);
+        end;
+        Body := Response.ContentAsString(TEncoding.UTF8);
+      except
+        on E: ENetException do
+        begin
+          TLogger.Warning(Format('Token introspection failed: %s', [E.Message]));
+          Exit(False);
+        end;
+      end;
+
+      const Parsed = TJSONObject.ParseJSONValue(Body);
+      const IsActiveToken = (Parsed is TJSONObject) and (TJSONObject(Parsed).GetValue(CLAIM_ACTIVE) is TJSONTrue);
+      if not IsActiveToken then
+      begin
+        Parsed.Free;
+        Exit(False);
+      end;
+      Claims := TJSONObject(Parsed);
+      Result := True;
+    finally
+      Form.Free;
     end;
-    if not (TJSONObject(Parsed).GetValue(CLAIM_ACTIVE) is TJSONTrue) then
-    begin
-      Parsed.Free;
-      Exit(False);
-    end;
-    Claims := TJSONObject(Parsed);
-    Result := True;
   finally
-    Form.Free;
     Client.Free;
   end;
 end;

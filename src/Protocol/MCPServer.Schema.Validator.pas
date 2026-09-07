@@ -30,7 +30,9 @@ implementation
 
 uses
   System.Generics.Collections,
-  System.RegularExpressions;
+  System.RegularExpressions,
+  System.RegularExpressionsCore,
+  MCPServer.Types;
 
 { TMCPSchemaValidator }
 
@@ -213,12 +215,25 @@ begin
       AddError(Errors, Path, 'longer than maxLength');
       Result := False;
     end;
-    var PatternValue := ResolvedSchema.GetValue('pattern');
-    if (PatternValue is TJSONString) and not (PatternValue is TJSONNumber)
-      and not TRegEx.IsMatch(Text, TJSONString(PatternValue).Value) then
+    const PatternValue = ResolvedSchema.GetValue('pattern');
+    if IsJsonString(PatternValue) then
     begin
-      AddError(Errors, Path, 'does not match pattern');
-      Result := False;
+      var Matches := False;
+      try
+        Matches := TRegEx.IsMatch(Text, TJSONString(PatternValue).Value);
+      except
+        on E: ERegularExpressionError do
+        begin
+          AddError(Errors, Path, 'has an unusable pattern');
+          Exit(False);
+        end;
+      end;
+      const PatternMatched = Matches;
+      if not PatternMatched then
+      begin
+        AddError(Errors, Path, 'does not match pattern');
+        Result := False;
+      end;
     end;
   end;
 

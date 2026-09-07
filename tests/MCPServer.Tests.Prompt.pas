@@ -37,6 +37,7 @@ type
     [Test] procedure ContentIsASingleObject_NotAnArray;
     [Test] procedure Image_Audio_ResourceLink_Embedded_Blocks;
     [Test] procedure WithAnnotations_AttachesToLastMessage;
+    [Test] procedure WithAnnotations_BeforeAnyMessage_AttachesToTheNextMessage;
     [Test] procedure ToJson_ReturnsAClone;
   end;
 
@@ -116,6 +117,22 @@ begin
     Assert.AreEqual('A file', Json.Items[2].GetValue<string>('content.description'));
     Assert.AreEqual('resource', Json.Items[3].GetValue<string>('content.type'));
     Assert.AreEqual('body', Json.Items[3].GetValue<string>('content.resource.text'));
+  finally
+    Json.Free;
+    Messages.Free;
+  end;
+end;
+
+procedure TPromptMessagesTests.WithAnnotations_BeforeAnyMessage_AttachesToTheNextMessage;
+begin
+  var Annotations := TJSONObject.Create;
+  Annotations.AddPair('priority', TJSONNumber.Create(0.5));
+  var Messages := TMCPPromptMessages.Create.WithAnnotations(Annotations).AddText('user', 'first');
+  Messages.AddText('user', 'second');
+  var Json := Messages.ToJson;
+  try
+    Assert.AreEqual(0.5, Json.Items[0].GetValue<Double>('content.annotations.priority'), 0.0001);
+    Assert.IsNull(Json.Items[1].FindValue('content.annotations'));
   finally
     Json.Free;
     Messages.Free;

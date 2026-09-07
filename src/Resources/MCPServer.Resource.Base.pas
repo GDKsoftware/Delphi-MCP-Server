@@ -301,6 +301,9 @@ begin
             raise EArgumentException.CreateFmt('Variable name "%s" in URI template "%s" may only contain letters, digits and underscores',
               [VarName, UriTemplate]);
 
+        if Names.IndexOf(VarName) >= 0 then
+          raise EArgumentException.CreateFmt('URI template %s uses the variable %s more than once',
+            [UriTemplate, VarName]);
         Names.Add(VarName);
         Position := CloseBrace + 1;
       end

@@ -49,9 +49,11 @@ type
     FPrincipal: string;
     FScopes: TArray<string>;
     FCancelled: Integer;
+    FProgressLock: TObject;
     FProgressSent: Boolean;
     FLastProgress: Double;
     FLastProgressTick: UInt64;
+    function TryClaimProgress(const Progress: Double; const Completes: Boolean): Boolean;
     function MetaObject(const Key: string): TJSONObject;
   public
     constructor Create(Era: TMCPProtocolEra; const ProtocolVersion, Method: string;
@@ -91,7 +93,7 @@ type
     procedure LogJson(const Level: string; const Data: TJSONValue; const Logger: string = '');
 
     class function Current: IMCPRequestContext;
-    class procedure SetCurrent(const Value: IMCPRequestContext);
+    class function SetCurrent(const Value: IMCPRequestContext): IMCPRequestContext;
   end;
 
 implementation
@@ -153,6 +155,7 @@ begin
   FRequestState := RequestState;
   FPrincipal := Principal;
   FScopes := Scopes;
+  FProgressLock := TObject.Create;
 end;
 
 destructor TMCPRequestContext.Destroy;
@@ -160,6 +163,7 @@ begin
   FMeta.Free;
   FInputResponses.Free;
   FRequestState.Free;
+  FProgressLock.Free;
   inherited;
 end;
 
@@ -318,6 +322,27 @@ begin
   raise EMCPError.MissingRequiredClientCapability(Required);
 end;
 
+function TMCPRequestContext.TryClaimProgress(const Progress: Double; const Completes: Boolean): Boolean;
+begin
+  const Tick = TThread.GetTickCount64;
+  TMonitor.Enter(FProgressLock);
+  try
+    if FProgressSent then
+    begin
+      const Stale = (Progress <= FLastProgress);
+      const TooSoon = ((Tick - FLastProgressTick < PROGRESS_MIN_INTERVAL_MS) and not Completes);
+      if Stale or TooSoon then
+        Exit(False);
+    end;
+    FProgressSent := True;
+    FLastProgress := Progress;
+    FLastProgressTick := Tick;
+    Result := True;
+  finally
+    TMonitor.Exit(FProgressLock);
+  end;
+end;
+
 function TMCPRequestContext.IsCancelled: Boolean;
 begin
   Result := AtomicCmpExchange(FCancelled, 0, 0) <> 0;
@@ -351,18 +376,9 @@ begin
   if not Assigned(FSink) or not HasProgressToken or IsCancelled then
     Exit;
 
-  var Completes := (Total >= 0) and (Progress >= Total);
-  var Tick := TThread.GetTickCount64;
-  if FProgressSent then
-  begin
-    if Progress <= FLastProgress then
-      Exit;
-    if (Tick - FLastProgressTick < PROGRESS_MIN_INTERVAL_MS) and not Completes then
-      Exit;
-  end;
-  FProgressSent := True;
-  FLastProgress := Progress;
-  FLastProgressTick := Tick;
+  const Completes = ((Total >= 0) and (Progress >= Total));
+  if not TryClaimProgress(Progress, Completes) then
+    Exit;
 
   var Notification := TJSONObject.Create;
   try
@@ -421,8 +437,9 @@ begin
   Result := IMCPRequestContext(CurrentContextPointer);
 end;
 
-class procedure TMCPRequestContext.SetCurrent(const Value: IMCPRequestContext);
+class function TMCPRequestContext.SetCurrent(const Value: IMCPRequestContext): IMCPRequestContext;
 begin
+  Result := IMCPRequestContext(CurrentContextPointer);
   if Assigned(CurrentContextPointer) then
     IMCPRequestContext(CurrentContextPointer)._Release;
 

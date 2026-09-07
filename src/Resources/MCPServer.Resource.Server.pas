@@ -74,9 +74,12 @@ end;
 
 class procedure TServerStatusResource.SetNamePrefix(const Prefix: string);
 begin
-  TMCPRegistry.UnregisterResource(StatusURI);
+  const PreviousUri = StatusURI;
   FNamePrefix := Prefix;
   RegisterServerStatusResource;
+  const UriChanged = (PreviousUri <> StatusURI);
+  if UriChanged then
+    TMCPRegistry.UnregisterResource(PreviousUri);
 end;
 
 class procedure TServerStatusResource.RegisterServerStatusResource;

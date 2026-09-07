@@ -19,6 +19,7 @@ type
   TMCPPromptMessages = class
   strict private
     FMessages: TJSONArray;
+    FPendingAnnotations: TJSONObject;
     function AddMessage(const Role: string; const Content: TJSONObject): TMCPPromptMessages;
   public
     constructor Create;
@@ -109,6 +110,7 @@ end;
 
 destructor TMCPPromptMessages.Destroy;
 begin
+  FPendingAnnotations.Free;
   FMessages.Free;
   inherited;
 end;
@@ -119,6 +121,11 @@ begin
   Message.AddPair('role', Role);
   Message.AddPair('content', Content);
   FMessages.AddElement(Message);
+  if Assigned(FPendingAnnotations) then
+  begin
+    Content.AddPair('annotations', FPendingAnnotations);
+    FPendingAnnotations := nil;
+  end;
   Result := Self;
 end;
 
@@ -178,13 +185,17 @@ end;
 
 function TMCPPromptMessages.WithAnnotations(const Annotations: TJSONObject): TMCPPromptMessages;
 begin
-  if FMessages.Count = 0 then
+  const HasMessage = (FMessages.Count > 0);
+  if HasMessage then
   begin
-    Annotations.Free;
-    raise EInvalidOperation.Create('WithAnnotations needs a message to attach to');
+    const LastMessage = TJSONObject(FMessages.Items[FMessages.Count - 1]);
+    TJSONObject(LastMessage.GetValue('content')).AddPair('annotations', Annotations);
+  end
+  else
+  begin
+    FPendingAnnotations.Free;
+    FPendingAnnotations := Annotations;
   end;
-  var LastMessage := TJSONObject(FMessages.Items[FMessages.Count - 1]);
-  TJSONObject(LastMessage.GetValue('content')).AddPair('annotations', Annotations);
   Result := Self;
 end;
 
