@@ -60,6 +60,7 @@ uses
   MCPClient.Errors in '..\src\Client\MCPClient.Errors.pas',
   MCPClient.Interfaces in '..\src\Client\MCPClient.Interfaces.pas',
   MCPClient.Http in '..\src\Client\MCPClient.Http.pas',
+  MCPClient in '..\src\Client\MCPClient.pas',
   MCPServer.Tests.Support in 'MCPServer.Tests.Support.pas',
   MCPServer.Tests.Harness in 'MCPServer.Tests.Harness.pas',
   MCPServer.Tests.Golden in 'MCPServer.Tests.Golden.pas',
@@ -96,7 +97,8 @@ uses
   MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
   MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas',
   MCPServer.Tests.Host in 'MCPServer.Tests.Host.pas',
-  MCPClient.Tests.Sse in 'MCPClient.Tests.Sse.pas';
+  MCPClient.Tests.Sse in 'MCPClient.Tests.Sse.pas',
+  MCPClient.Tests.Legacy in 'MCPClient.Tests.Legacy.pas';
 
 procedure RunTests;
 begin
