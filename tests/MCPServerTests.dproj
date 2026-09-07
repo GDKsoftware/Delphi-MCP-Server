@@ -102,6 +102,7 @@
         <DCCReference Include="..\src\Managers\MCPServer.SubscriptionsManager.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioChannel.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.Host.pas"/>
         <DCCReference Include="MCPServer.Tests.StdioChannel.pas"/>
         <DCCReference Include="MCPServer.Tests.Cancellation.pas"/>
         <DCCReference Include="MCPServer.Tests.Stdio.pas"/>
@@ -144,6 +145,7 @@
         <DCCReference Include="MCPServer.Tests.MethodTool.pas"/>
         <DCCReference Include="MCPServer.Tests.ToolsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.ResourcesManager.pas"/>
+        <DCCReference Include="MCPServer.Tests.Host.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.InputRequiredSamples.pas"/>

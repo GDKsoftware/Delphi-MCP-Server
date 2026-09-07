@@ -38,6 +38,7 @@ uses
   MCPServer.SubscriptionsManager in '..\src\Managers\MCPServer.SubscriptionsManager.pas',
   MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
   MCPServer.StdioChannel in '..\src\Server\MCPServer.StdioChannel.pas',
+  MCPServer.Host in '..\src\Server\MCPServer.Host.pas',
   // The built-in tools and resources register themselves in their
   // initialization sections. Keep the order identical to MCPServer.dpr so the
   // registry (and therefore tools/list and resources/list) matches the server.
@@ -89,7 +90,8 @@ uses
   MCPServer.Tests.Subscriptions in 'MCPServer.Tests.Subscriptions.pas',
   MCPServer.Tests.Authorization in 'MCPServer.Tests.Authorization.pas',
   MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
-  MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas';
+  MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas',
+  MCPServer.Tests.Host in 'MCPServer.Tests.Host.pas';
 
 procedure RunTests;
 begin
