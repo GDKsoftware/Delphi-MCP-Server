@@ -35,7 +35,8 @@ type
 implementation
 
 uses
-  MCPServer.Registration;
+  MCPServer.Registration,
+  MCPServer.PathBoundary;
 
 const
   TOOL_NAME = 'list_files';
@@ -66,7 +67,8 @@ begin
     NormalizedPath := TPath.GetFullPath(Params.Path);
     AllowedBasePath := TPath.GetFullPath(GetCurrentDir);
 
-    if not NormalizedPath.StartsWith(AllowedBasePath, True) then
+    const IsAllowed = TPathBoundary.IsWithin(NormalizedPath, AllowedBasePath);
+    if not IsAllowed then
     begin
       Result := 'Error: Access denied - path outside allowed directory';
       Exit;

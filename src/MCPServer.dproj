@@ -139,6 +139,7 @@
         <DCCReference Include="Protocol\MCPServer.Schema.Validator.pas"/>
         <DCCReference Include="Protocol\MCPServer.ContentBlocks.pas"/>
         <DCCReference Include="Core\MCPServer.Logger.pas"/>
+        <DCCReference Include="Core\MCPServer.PathBoundary.pas"/>
         <DCCReference Include="Core\MCPServer.Settings.pas"/>
         <DCCReference Include="Core\MCPServer.Application.pas"/>
         <DCCReference Include="Core\MCPServer.Authorization.pas"/>
