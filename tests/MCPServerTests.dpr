@@ -98,7 +98,8 @@ uses
   MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas',
   MCPServer.Tests.Host in 'MCPServer.Tests.Host.pas',
   MCPClient.Tests.Sse in 'MCPClient.Tests.Sse.pas',
-  MCPClient.Tests.Legacy in 'MCPClient.Tests.Legacy.pas';
+  MCPClient.Tests.Legacy in 'MCPClient.Tests.Legacy.pas',
+  MCPClient.Tests.Modern in 'MCPClient.Tests.Modern.pas';
 
 procedure RunTests;
 begin

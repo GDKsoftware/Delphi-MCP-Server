@@ -116,6 +116,7 @@
         <DCCReference Include="MCPServer.Tests.Marshal.pas"/>
         <DCCReference Include="MCPClient.Tests.Sse.pas"/>
         <DCCReference Include="MCPClient.Tests.Legacy.pas"/>
+        <DCCReference Include="MCPClient.Tests.Modern.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.GetTime.pas"/>
