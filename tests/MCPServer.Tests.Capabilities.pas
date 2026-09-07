@@ -9,9 +9,14 @@ type
   [TestFixture]
   TCapabilityBuilderTests = class
   public
-    [Test] procedure Registry_YieldsAllManagersInRegistrationOrder;
-    [Test] procedure Registry_NeverEmitsLogging;
-    [Test] procedure RegistryWithoutEnumeration_YieldsDefaults;
+    [Test]
+    procedure Registry_YieldsAllManagersInRegistrationOrder;
+
+    [Test]
+    procedure Registry_NeverEmitsLogging;
+
+    [Test]
+    procedure RegistryWithoutEnumeration_YieldsDefaults;
   end;
 
 implementation

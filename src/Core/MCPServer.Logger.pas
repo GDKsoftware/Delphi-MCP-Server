@@ -320,7 +320,9 @@ begin
   end
   else if Value is TJSONArray then
     for var Item in TJSONArray(Value) do
+    begin
       RedactValue(Item);
+    end;
 end;
 
 class function TLogger.RedactJson(const Json: string): string;

@@ -29,18 +29,41 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Handshake_And_ToolsList;
-    [Test] procedure Utf8_RoundTrip_LfFraming_NoBom;
-    [Test] procedure CrLf_Input_IsAccepted;
-    [Test] procedure InvalidJson_IsParseError_WithNullId;
-    [Test] procedure Notification_ProducesNoOutput;
-    [Test] procedure DuplicateId_WhileInFlight_IsInvalidRequest;
-    [Test] procedure Cancelled_GetsNoResponse_PingIsStillAnswered;
-    [Test] procedure Progress_IsSentBeforeTheResponse;
-    [Test] procedure ModernRequest_OverStdio;
-    [Test] procedure Eof_WithRunningRequest_ReturnsAfterDrain;
-    [Test] procedure Listen_AckThenCancel_HasNoResponse;
-    [Test] procedure Listen_Eof_ClosesGracefully;
+    [Test]
+    procedure Handshake_And_ToolsList;
+
+    [Test]
+    procedure Utf8_RoundTrip_LfFraming_NoBom;
+
+    [Test]
+    procedure CrLf_Input_IsAccepted;
+
+    [Test]
+    procedure InvalidJson_IsParseError_WithNullId;
+
+    [Test]
+    procedure Notification_ProducesNoOutput;
+
+    [Test]
+    procedure DuplicateId_WhileInFlight_IsInvalidRequest;
+
+    [Test]
+    procedure Cancelled_GetsNoResponse_PingIsStillAnswered;
+
+    [Test]
+    procedure Progress_IsSentBeforeTheResponse;
+
+    [Test]
+    procedure ModernRequest_OverStdio;
+
+    [Test]
+    procedure Eof_WithRunningRequest_ReturnsAfterDrain;
+
+    [Test]
+    procedure Listen_AckThenCancel_HasNoResponse;
+
+    [Test]
+    procedure Listen_Eof_ClosesGracefully;
   end;
 
 implementation
@@ -69,7 +92,9 @@ function TStdioTransportTests.Run(const Lines: array of string; DrainMs: Integer
 begin
   var Input := '';
   for var Line in Lines do
+  begin
     Input := Input + Line + Separator;
+  end;
 
   var InputStream := TBytesStream.Create(TEncoding.UTF8.GetBytes(Input));
   var OutputStream := TBytesStream.Create;
@@ -151,7 +176,9 @@ begin
   Assert.AreEqual($7B, Integer(FOutputBytes[0]), 'no byte-order mark');
   Assert.AreEqual(10, Integer(FOutputBytes[High(FOutputBytes)]), 'ends with LF');
   for var B in FOutputBytes do
+  begin
     Assert.AreNotEqual(13, Integer(B), 'no CR on stdout');
+  end;
 end;
 
 procedure TStdioTransportTests.CrLf_Input_IsAccepted;

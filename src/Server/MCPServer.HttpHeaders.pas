@@ -68,8 +68,8 @@ end;
 
 class function TMCPHeaderValue.IsSentinel(const Value: string): Boolean;
 begin
-  Result := (Length(Value) >= Length(SENTINEL_PREFIX) + Length(SENTINEL_SUFFIX))
-    and Value.StartsWith(SENTINEL_PREFIX, False) and Value.EndsWith(SENTINEL_SUFFIX, False);
+  Result := (Length(Value) >= Length(SENTINEL_PREFIX) + Length(SENTINEL_SUFFIX)) and
+    Value.StartsWith(SENTINEL_PREFIX, False) and Value.EndsWith(SENTINEL_SUFFIX, False);
 end;
 
 class function TMCPHeaderValue.TryDecodeBase64(const Text: string; out Bytes: TBytes): Boolean;
@@ -201,7 +201,8 @@ begin
   if not IsParsed then
     Exit(False);
 
-  if Wanted.Port = '' then
+  const PortIsEmpty = (Wanted.Port = '');
+  if PortIsEmpty then
     Wanted.Port := Wanted.DefaultPort;
   if Allowed.Port = '' then
     Allowed.Port := Allowed.DefaultPort;
@@ -214,7 +215,8 @@ end;
 class function TMCPOriginPolicy.IsAllowed(const Origin: string; const AllowList: TArray<string>): Boolean;
 begin
   var Value := Origin.Trim;
-  if Value = '' then
+  const ValueIsEmpty = (Value = '');
+  if ValueIsEmpty then
     Exit(True);
   if SameText(Value, 'null') then
     Exit(False);

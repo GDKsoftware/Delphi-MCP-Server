@@ -44,18 +44,41 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Cancel_SetsIsCancelled_And_CheckRaises;
-    [Test] procedure Progress_WithoutToken_SendsNothing;
-    [Test] procedure Progress_NotificationShape;
-    [Test] procedure Progress_IntegerToken_IsKept;
-    [Test] procedure Progress_Monotonic_And_Throttled;
-    [Test] procedure Progress_AfterCancel_SendsNothing;
-    [Test] procedure Progress_WithoutSink_IsNoOp;
-    [Test] procedure Log_WithoutLogLevel_SendsNothing;
-    [Test] procedure Log_AtOrAboveLevel_HasNotificationShape;
-    [Test] procedure Log_AfterCancel_SendsNothing;
-    [Test] procedure Processor_CancelledRequest_HasNoResponse;
-    [Test] procedure Processor_CancelledNotification_ReachesTracker;
+    [Test]
+    procedure Cancel_SetsIsCancelled_And_CheckRaises;
+
+    [Test]
+    procedure Progress_WithoutToken_SendsNothing;
+
+    [Test]
+    procedure Progress_NotificationShape;
+
+    [Test]
+    procedure Progress_IntegerToken_IsKept;
+
+    [Test]
+    procedure Progress_Monotonic_And_Throttled;
+
+    [Test]
+    procedure Progress_AfterCancel_SendsNothing;
+
+    [Test]
+    procedure Progress_WithoutSink_IsNoOp;
+
+    [Test]
+    procedure Log_WithoutLogLevel_SendsNothing;
+
+    [Test]
+    procedure Log_AtOrAboveLevel_HasNotificationShape;
+
+    [Test]
+    procedure Log_AfterCancel_SendsNothing;
+
+    [Test]
+    procedure Processor_CancelledRequest_HasNoResponse;
+
+    [Test]
+    procedure Processor_CancelledNotification_ReachesTracker;
   end;
 
 implementation
@@ -121,7 +144,8 @@ end;
 function TCancellationTests.NewContext(const MetaJson: string): IMCPRequestContext;
 begin
   var Meta: TJSONObject := nil;
-  if MetaJson <> '' then
+  const HasMetaJson = (MetaJson <> '');
+  if HasMetaJson then
     Meta := TJSONObject.ParseJSONValue(MetaJson) as TJSONObject;
   try
     Result := TMCPRequestContext.Create(TMCPProtocolEra.Modern, MCP_LATEST_PROTOCOL_VERSION, 'tools/call',

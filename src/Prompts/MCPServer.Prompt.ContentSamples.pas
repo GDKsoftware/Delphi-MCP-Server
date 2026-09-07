@@ -163,7 +163,8 @@ begin
   var Context := TMCPRequestContext.Current;
   if Assigned(Context) and Context.TryGetInputResponse(KEY_USER_CONTEXT, Response) then
     UserContext := TMCPInputResponse.ElicitationField(Response, FIELD_CONTEXT);
-  if UserContext = '' then
+  const UserContextIsEmpty = (UserContext = '');
+  if UserContextIsEmpty then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create.AddElicitation(KEY_USER_CONTEXT,
       'What context should the prompt use?', TMCPInputRequests.FieldSchema(FIELD_CONTEXT)));
 

@@ -168,7 +168,8 @@ begin
   var Name := '';
   if Context.TryGetInputResponse(KEY_USER_NAME, Response) then
     Name := TMCPInputResponse.ElicitationField(Response, FIELD_NAME);
-  if Name = '' then
+  const NameIsEmpty = (Name = '');
+  if NameIsEmpty then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
       .AddElicitation(KEY_USER_NAME, ASK_NAME, TMCPInputRequests.FieldSchema(FIELD_NAME)));
 
@@ -191,7 +192,8 @@ begin
   var Answer := '';
   if Context.TryGetInputResponse(KEY_CAPITAL_QUESTION, Response) then
     Answer := TMCPInputResponse.SamplingText(Response);
-  if Answer = '' then
+  const AnswerIsEmpty = (Answer = '');
+  if AnswerIsEmpty then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
       .AddSampling(KEY_CAPITAL_QUESTION, CAPITAL_QUESTION, SAMPLING_MAX_TOKENS));
 
@@ -211,8 +213,8 @@ function TListRootsInputTool.ExecuteWithContext(const Params: TNoParams; const C
 var
   Response: TJSONObject;
 begin
-  if not Context.TryGetInputResponse(KEY_CLIENT_ROOTS, Response)
-    or not Assigned(TMCPInputResponse.Roots(Response)) then
+  if not Context.TryGetInputResponse(KEY_CLIENT_ROOTS, Response) or
+    not Assigned(TMCPInputResponse.Roots(Response)) then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create.AddListRoots(KEY_CLIENT_ROOTS));
 
   Result := TMCPToolResult.Text(TInputSample.DescribeRoots(TMCPInputResponse.Roots(Response)));
@@ -231,8 +233,8 @@ function TRequestStateInputTool.ExecuteWithContext(const Params: TNoParams; cons
 var
   Response: TJSONObject;
 begin
-  var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response)
-    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
+  var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response) and
+    (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
   var HasState := Assigned(Context.RequestState) and Assigned(Context.RequestState.GetValue(STATE_NONCE));
   if not Confirmed or not HasState then
   begin
@@ -259,10 +261,10 @@ function TMultipleInputsTool.ExecuteWithContext(const Params: TNoParams; const C
 var
   NameResponse, GreetingResponse, RootsResponse: TJSONObject;
 begin
-  var Complete := Context.TryGetInputResponse(KEY_USER_NAME, NameResponse)
-    and Context.TryGetInputResponse(KEY_GREETING, GreetingResponse)
-    and Context.TryGetInputResponse(KEY_CLIENT_ROOTS, RootsResponse)
-    and Assigned(Context.RequestState);
+  var Complete := Context.TryGetInputResponse(KEY_USER_NAME, NameResponse) and
+    Context.TryGetInputResponse(KEY_GREETING, GreetingResponse) and
+    Context.TryGetInputResponse(KEY_CLIENT_ROOTS, RootsResponse) and
+    Assigned(Context.RequestState);
   if not Complete then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
       .AddElicitation(KEY_USER_NAME, ASK_NAME, TMCPInputRequests.FieldSchema(FIELD_NAME))
@@ -301,7 +303,8 @@ begin
     var Name := '';
     if Context.TryGetInputResponse(KEY_STEP1, Response) then
       Name := TMCPInputResponse.ElicitationField(Response, FIELD_NAME);
-    if Name = '' then
+    const NameIsEmpty = (Name = '');
+    if NameIsEmpty then
       raise EMCPInputRequired.Create(TMCPInputRequests.Create
         .AddElicitation(KEY_STEP1, ASK_STEP_ONE, TMCPInputRequests.FieldSchema(FIELD_NAME)), TInputSample.NewState(1));
 
@@ -314,7 +317,8 @@ begin
   var Color := '';
   if Context.TryGetInputResponse(KEY_STEP2, Response) then
     Color := TMCPInputResponse.ElicitationField(Response, FIELD_COLOR);
-  if Color = '' then
+  const ColorIsEmpty = (Color = '');
+  if ColorIsEmpty then
   begin
     var State := TInputSample.NewState(2);
     State.AddPair(STATE_NAME, Context.RequestState.GetValue<string>(STATE_NAME, ''));
@@ -339,8 +343,8 @@ function TTamperedStateInputTool.ExecuteWithContext(const Params: TNoParams; con
 var
   Response: TJSONObject;
 begin
-  var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response)
-    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
+  var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response) and
+    (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
   if not Confirmed or not Assigned(Context.RequestState) then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
       .AddElicitation(KEY_CONFIRM, ASK_CONFIRM, TMCPInputRequests.FieldSchema(FIELD_OK, SCHEMA_TYPE_BOOLEAN)), TInputSample.NewState(1));
@@ -385,7 +389,8 @@ begin
         Requests.AddListRoots(KEY_CLIENT_ROOTS);
     end;
 
-    if Requests.Count > 0 then
+    const HasRequests = (Requests.Count > 0);
+    if HasRequests then
     begin
       var Pending := Requests;
       Requests := nil;
@@ -395,7 +400,8 @@ begin
     Requests.Free;
   end;
 
-  if Length(Answers) = 0 then
+  const AnswersIsEmpty = (Length(Answers) = 0);
+  if AnswersIsEmpty then
     Result := TMCPToolResult.Text('The client declared no capability this tool can ask input through')
   else
     Result := TMCPToolResult.Text(string.Join('; ', Answers));
@@ -430,8 +436,8 @@ var
   Response: TJSONObject;
 begin
   Context.Log('info', 'Asking the client to confirm', TOOL_STREAMING_ELICITATION);
-  var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response)
-    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
+  var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response) and
+    (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
   if not Confirmed then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
       .AddElicitation(KEY_CONFIRM, ASK_CONFIRM, TMCPInputRequests.FieldSchema(FIELD_OK, SCHEMA_TYPE_BOOLEAN)));

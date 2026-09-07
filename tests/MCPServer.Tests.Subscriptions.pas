@@ -63,14 +63,29 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Filter_FromJson_HonoursBooleansAndUris;
-    [Test] procedure Listen_AckFirst_ThenTaggedNotifications_ThenCompletion;
-    [Test] procedure Listen_UnrequestedNotifications_AreNotSent;
-    [Test] procedure Listen_Cancel_EndsTheWait;
-    [Test] procedure Listen_KeepAlive_OnInterval;
-    [Test] procedure Listen_WithoutSink_IsInvalidRequest;
-    [Test] procedure Listen_NotificationsNotObject_IsInvalidParams;
-    [Test] procedure Managers_NotifyTheHub_AndAnnounceCapabilities;
+    [Test]
+    procedure Filter_FromJson_HonoursBooleansAndUris;
+
+    [Test]
+    procedure Listen_AckFirst_ThenTaggedNotifications_ThenCompletion;
+
+    [Test]
+    procedure Listen_UnrequestedNotifications_AreNotSent;
+
+    [Test]
+    procedure Listen_Cancel_EndsTheWait;
+
+    [Test]
+    procedure Listen_KeepAlive_OnInterval;
+
+    [Test]
+    procedure Listen_WithoutSink_IsInvalidRequest;
+
+    [Test]
+    procedure Listen_NotificationsNotObject_IsInvalidParams;
+
+    [Test]
+    procedure Managers_NotifyTheHub_AndAnnounceCapabilities;
   end;
 
 implementation
@@ -249,7 +264,9 @@ procedure TSubscriptionsTests.WaitUntilOpen;
 begin
   var Deadline := TThread.GetTickCount64 + WAIT_MS;
   while (FManager.ActiveCount = 0) and (FError = '') and (TThread.GetTickCount64 < Deadline) do
+  begin
     Sleep(5);
+  end;
   Assert.AreEqual('', FError);
   Assert.AreEqual(1, FManager.ActiveCount, 'the subscription is registered');
 end;
@@ -357,7 +374,9 @@ begin
   FContext.Cancel;
   var Deadline := TThread.GetTickCount64 + WAIT_MS;
   while (FManager.ActiveCount > 0) and (TThread.GetTickCount64 < Deadline) do
+  begin
     Sleep(5);
+  end;
   Assert.AreEqual(0, FManager.ActiveCount, 'cancellation ends the subscription');
   FThread.WaitFor;
   Assert.AreEqual(1, FSink.Count, 'nothing after the acknowledgement');
@@ -370,7 +389,9 @@ begin
   WaitUntilOpen;
   var Deadline := TThread.GetTickCount64 + WAIT_MS;
   while (FSink.KeepAlives < 2) and (TThread.GetTickCount64 < Deadline) do
+  begin
     Sleep(5);
+  end;
   Assert.IsTrue(FSink.KeepAlives >= 2, 'keep-alives are sent while the subscription is quiet');
   Assert.AreEqual(1, FSink.Count, 'keep-alives are not messages');
 end;

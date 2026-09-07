@@ -70,9 +70,11 @@ begin
   Result.AddPair(MCP_KEY_TYPE, 'resource_link');
   Result.AddPair(MCP_KEY_URI, Uri);
   Result.AddPair(MCP_KEY_NAME, Name);
-  if Description <> '' then
+  const HasDescription = (Description <> '');
+  if HasDescription then
     Result.AddPair(MCP_KEY_DESCRIPTION, Description);
-  if MimeType <> '' then
+  const HasMimeType = (MimeType <> '');
+  if HasMimeType then
     Result.AddPair(MCP_KEY_MIME_TYPE, MimeType);
 end;
 

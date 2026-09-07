@@ -190,13 +190,17 @@ end;
 procedure TMCPResourcesManager.RegisterBuiltInResources;
 begin
   for var ResourceURI in TMCPRegistry.GetResourceURIs do
+  begin
     RegisterResource(TMCPRegistry.CreateResource(ResourceURI));
+  end;
 end;
 
 procedure TMCPResourcesManager.RegisterBuiltInResourceTemplates;
 begin
   for var UriTemplate in TMCPRegistry.GetResourceTemplateURIs do
+  begin
     FTemplates.Add(TMCPRegistry.CreateResourceTemplate(UriTemplate));
+  end;
 end;
 
 procedure TMCPResourcesManager.AddResource(const Resource: IMCPResource);
@@ -323,9 +327,11 @@ begin
     if Metadata.Title <> '' then
       Result.AddPair(MCP_KEY_TITLE, Metadata.Title);
   end;
-  if Resource.Description <> '' then
+  const HasDescription = (Resource.Description <> '');
+  if HasDescription then
     Result.AddPair(MCP_KEY_DESCRIPTION, Resource.Description);
-  if Resource.MimeType <> '' then
+  const HasMimeType = (Resource.MimeType <> '');
+  if HasMimeType then
     Result.AddPair(MCP_KEY_MIME_TYPE, Resource.MimeType);
   if Assigned(Metadata) then
   begin
@@ -341,11 +347,14 @@ begin
   Result := TJSONObject.Create;
   Result.AddPair('uriTemplate', Template.UriTemplate);
   Result.AddPair(MCP_KEY_NAME, Template.Name);
-  if Template.Title <> '' then
+  const HasTitle = (Template.Title <> '');
+  if HasTitle then
     Result.AddPair(MCP_KEY_TITLE, Template.Title);
-  if Template.Description <> '' then
+  const HasDescription = (Template.Description <> '');
+  if HasDescription then
     Result.AddPair(MCP_KEY_DESCRIPTION, Template.Description);
-  if Template.MimeType <> '' then
+  const HasMimeType = (Template.MimeType <> '');
+  if HasMimeType then
     Result.AddPair(MCP_KEY_MIME_TYPE, Template.MimeType);
 end;
 
@@ -356,7 +365,8 @@ begin
   Result := TJSONObject.Create;
   try
     Result.AddPair(MCP_KEY_URI, Resource.URI);
-    if Resource.MimeType <> '' then
+    const HasMimeType = (Resource.MimeType <> '');
+    if HasMimeType then
       Result.AddPair(MCP_KEY_MIME_TYPE, Resource.MimeType);
 
     if Supports(Resource, IMCPBinaryResource, Binary) then
@@ -441,7 +451,8 @@ begin
         raise EMCPError.InternalError('Error reading resource: ' + E.Message);
     end;
 
-    if Era = TMCPProtocolEra.Modern then
+    const IsModern = (Era = TMCPProtocolEra.Modern);
+    if IsModern then
     begin
       var TtlMs := 0;
       var CacheScope := MCP_CACHE_SCOPE_PRIVATE;

@@ -127,7 +127,8 @@ constructor TMCPSettings.Create(const ASettingsFile: string; const ACreateFile: 
 begin
   inherited Create;
 
-  if ASettingsFile = '' then
+  const ASettingsFileIsEmpty = (ASettingsFile = '');
+  if ASettingsFileIsEmpty then
     FSettingsFile := TPath.Combine(ExtractFilePath(ParamStr(0)), 'settings.ini')
   else
     FSettingsFile := ASettingsFile;
@@ -346,7 +347,8 @@ begin
     if FSSLEnabled then
     begin
       TLogger.Info('SSL Enabled: True');
-      if FSSLCertFile <> '' then
+      const HasSSLCertFile = (FSSLCertFile <> '');
+      if HasSSLCertFile then
         TLogger.Info('SSL Certificate: ' + FSSLCertFile);
     end;
     TLogger.Info('CORS Enabled: ' + BoolToStr(FCorsEnabled, True));

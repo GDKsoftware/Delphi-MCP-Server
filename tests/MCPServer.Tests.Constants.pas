@@ -9,13 +9,26 @@ type
   [TestFixture]
   TProtocolConstantsTests = class
   public
-    [Test] procedure JsonRpcErrorCodes_HaveSpecValues;
-    [Test] procedure ProcessorAliases_MatchTypes;
-    [Test] procedure McpErrorCodes_HaveSpecValues;
-    [Test] procedure ProtocolVersions_AreConsistent;
-    [Test] procedure MetaKeys_UseReservedPrefix;
-    [Test] procedure CacheableMethods_MatchSpec;
-    [Test] procedure IsJsonString_AcceptsStringsOnly;
+    [Test]
+    procedure JsonRpcErrorCodes_HaveSpecValues;
+
+    [Test]
+    procedure ProcessorAliases_MatchTypes;
+
+    [Test]
+    procedure McpErrorCodes_HaveSpecValues;
+
+    [Test]
+    procedure ProtocolVersions_AreConsistent;
+
+    [Test]
+    procedure MetaKeys_UseReservedPrefix;
+
+    [Test]
+    procedure CacheableMethods_MatchSpec;
+
+    [Test]
+    procedure IsJsonString_AcceptsStringsOnly;
   end;
 
 implementation

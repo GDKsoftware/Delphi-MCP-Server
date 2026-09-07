@@ -9,21 +9,50 @@ type
   [TestFixture]
   TSchemaValidatorTests = class
   public
-    [Test] procedure Type_Mismatch_Fails;
-    [Test] procedure Type_Array_AcceptsEitherAlternative;
-    [Test] procedure Integer_RejectsFraction;
-    [Test] procedure Required_MissingProperty_Fails;
-    [Test] procedure Properties_RecurseIntoNestedObject;
-    [Test] procedure AdditionalProperties_False_RejectsExtraKey;
-    [Test] procedure Items_RecurseIntoArrayElements;
-    [Test] procedure MinimumMaximum_OutOfRange_Fails;
-    [Test] procedure MinLengthMaxLengthPattern_Fail;
-    [Test] procedure Enum_RejectsValueNotListed;
-    [Test] procedure Const_RejectsDifferentValue;
-    [Test] procedure Ref_ResolvesSameDocumentDefs;
-    [Test] procedure Ref_UnsupportedShape_IsAnError;
-    [Test] procedure Valid_Instance_HasNoErrors;
-    [Test] procedure ExcessiveNesting_IsAnError;
+    [Test]
+    procedure Type_Mismatch_Fails;
+
+    [Test]
+    procedure Type_Array_AcceptsEitherAlternative;
+
+    [Test]
+    procedure Integer_RejectsFraction;
+
+    [Test]
+    procedure Required_MissingProperty_Fails;
+
+    [Test]
+    procedure Properties_RecurseIntoNestedObject;
+
+    [Test]
+    procedure AdditionalProperties_False_RejectsExtraKey;
+
+    [Test]
+    procedure Items_RecurseIntoArrayElements;
+
+    [Test]
+    procedure MinimumMaximum_OutOfRange_Fails;
+
+    [Test]
+    procedure MinLengthMaxLengthPattern_Fail;
+
+    [Test]
+    procedure Enum_RejectsValueNotListed;
+
+    [Test]
+    procedure Const_RejectsDifferentValue;
+
+    [Test]
+    procedure Ref_ResolvesSameDocumentDefs;
+
+    [Test]
+    procedure Ref_UnsupportedShape_IsAnError;
+
+    [Test]
+    procedure Valid_Instance_HasNoErrors;
+
+    [Test]
+    procedure ExcessiveNesting_IsAnError;
   end;
 
 implementation

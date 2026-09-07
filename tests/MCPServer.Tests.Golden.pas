@@ -89,7 +89,8 @@ const
 class function TGoldenFiles.GoldenRoot: string;
 begin
   Result := GetEnvironmentVariable(GOLDEN_DIR_ENVIRONMENT_VARIABLE);
-  if Result <> '' then
+  const HasResult = (Result <> '');
+  if HasResult then
     Exit(TPath.GetFullPath(Result));
 
   var Dir := ExtractFilePath(ParamStr(0));
@@ -133,7 +134,9 @@ begin
       Result := Result + '[*';
       Inc(I);
       while (I <= Length(Segment)) and CharInSet(Segment[I], ['0'..'9']) do
+      begin
         Inc(I);
+      end;
     end
     else
     begin
@@ -191,14 +194,18 @@ begin
   begin
     var Obj := TJSONObject.Create;
     for var Pair in TJSONObject(Value) do
+    begin
       Obj.AddPair(Pair.JsonString.Value, Shape(Pair.JsonValue));
+    end;
     Result := Obj;
   end
   else if Value is TJSONArray then
   begin
     var Arr := TJSONArray.Create;
     for var Item in TJSONArray(Value) do
+    begin
       Arr.AddElement(Shape(Item));
+    end;
     Result := Arr;
   end
   else if Value is TJSONNull then
@@ -219,7 +226,8 @@ begin
   for var Pair in Obj do
   begin
     var ChildPath := Pair.JsonString.Value;
-    if Path <> '' then
+    const HasPath = (Path <> '');
+    if HasPath then
       ChildPath := Path + '.' + ChildPath;
 
     if MatchesAny(ChildPath, MaskPaths) then
@@ -290,7 +298,9 @@ begin
   var Arr := TJSONArray(Value);
   SetLength(Result, Arr.Count);
   for var I := 0 to Arr.Count - 1 do
+  begin
     Result[I] := Arr.Items[I].Value;
+  end;
 end;
 
 function TGoldenCase.GetRequestBody: string;
@@ -362,7 +372,8 @@ begin
   RemoveExpected;
 
   var Parsed: TJSONValue := nil;
-  if ResponseBody.Trim <> '' then
+  const HasResponseBody = (ResponseBody.Trim <> '');
+  if HasResponseBody then
     Parsed := TJSONObject.ParseJSONValue(ResponseBody);
 
   if Assigned(Parsed) then
@@ -390,7 +401,8 @@ begin
   try
     var Response: string;
     var SavedDirectory := GetCurrentDir;
-    if GoldenCase.WorkingDirectory <> '' then
+    const HasWorkingDirectory = (GoldenCase.WorkingDirectory <> '');
+    if HasWorkingDirectory then
       SetCurrentDir(GoldenCase.WorkingDirectory);
     try
       Response := Process(GoldenCase.RequestBody);
@@ -406,7 +418,8 @@ begin
 
     var Expected := GoldenCase.ExpectedText;
     var Actual := GoldenCase.NormalizeResponse(Response);
-    if Expected <> Actual then
+    const IsNotActual = (Expected <> Actual);
+    if IsNotActual then
       raise EGoldenError.CreateFmt('Golden mismatch for %s/%s'#13#10'--- expected ---'#13#10'%s'#13#10'--- actual ---'#13#10'%s',
         [Suite, CaseName, Expected, Actual]);
   finally

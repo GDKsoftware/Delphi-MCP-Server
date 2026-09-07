@@ -17,10 +17,17 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure StdoutReserved_ForcesUseStdErr;
-    [Test] procedure StdoutReserved_RefusesUseStdErrFalse_AndWarnsOnce;
-    [Test] procedure StdoutReleased_AllowsUseStdErrFalseAgain;
-    [Test] procedure StdioTransport_Create_ReservesStdout;
+    [Test]
+    procedure StdoutReserved_ForcesUseStdErr;
+
+    [Test]
+    procedure StdoutReserved_RefusesUseStdErrFalse_AndWarnsOnce;
+
+    [Test]
+    procedure StdoutReleased_AllowsUseStdErrFalseAgain;
+
+    [Test]
+    procedure StdioTransport_Create_ReservesStdout;
   end;
 
 implementation

@@ -33,20 +33,36 @@ type
   [TestFixture]
   TPromptMessagesTests = class
   public
-    [Test] procedure AddText_ProducesOneMessage;
-    [Test] procedure ContentIsASingleObject_NotAnArray;
-    [Test] procedure Image_Audio_ResourceLink_Embedded_Blocks;
-    [Test] procedure WithAnnotations_AttachesToLastMessage;
-    [Test] procedure WithAnnotations_BeforeAnyMessage_AttachesToTheNextMessage;
-    [Test] procedure ToJson_ReturnsAClone;
+    [Test]
+    procedure AddText_ProducesOneMessage;
+
+    [Test]
+    procedure ContentIsASingleObject_NotAnArray;
+
+    [Test]
+    procedure Image_Audio_ResourceLink_Embedded_Blocks;
+
+    [Test]
+    procedure WithAnnotations_AttachesToLastMessage;
+
+    [Test]
+    procedure WithAnnotations_BeforeAnyMessage_AttachesToTheNextMessage;
+
+    [Test]
+    procedure ToJson_ReturnsAClone;
   end;
 
   [TestFixture]
   TPromptBaseTests = class
   public
-    [Test] procedure Arguments_DerivedFromRttiWithDescriptionAndRequired;
-    [Test] procedure Get_BuildsMessages_AndReturnsDescription;
-    [Test] procedure Get_MissingRequiredArgument_Raises;
+    [Test]
+    procedure Arguments_DerivedFromRttiWithDescriptionAndRequired;
+
+    [Test]
+    procedure Get_BuildsMessages_AndReturnsDescription;
+
+    [Test]
+    procedure Get_MissingRequiredArgument_Raises;
   end;
 
 implementation
@@ -63,7 +79,8 @@ end;
 function TGreetingPrompt.ExecuteWithParams(const Params: TGreetingParams; Messages: TMCPPromptMessages): string;
 begin
   var Tone := Params.Tone;
-  if Tone = '' then
+  const ToneIsEmpty = (Tone = '');
+  if ToneIsEmpty then
     Tone := 'friendly';
   Messages.AddText('user', Format('Write a %s greeting for %s.', [Tone, Params.Name]));
   Result := 'Greeting request';

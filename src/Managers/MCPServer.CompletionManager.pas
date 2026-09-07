@@ -161,7 +161,9 @@ function TMCPCompletionManager.BuildCompletionJSON(const Completion: TMCPComplet
 begin
   var Values := TJSONArray.Create;
   for var Value in Completion.Values do
+  begin
     Values.Add(Value);
+  end;
 
   Result := TJSONObject.Create;
   Result.AddPair('values', Values);

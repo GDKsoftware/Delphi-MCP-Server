@@ -9,22 +9,53 @@ type
   [TestFixture]
   THttpHeadersTests = class
   public
-    [Test] procedure Decode_PlainAsciiValue_IsReturnedAsIs;
-    [Test] procedure Decode_SentinelValues_FromSpecTable;
-    [Test] procedure Decode_LiteralSentinelPattern_RoundTrips;
-    [Test] procedure Decode_BadPadding_Fails;
-    [Test] procedure Decode_InvalidBase64Characters_Fails;
-    [Test] procedure Decode_NonAsciiPlainValue_Fails;
-    [Test] procedure Decode_UppercaseMarkers_AreNotASentinel;
-    [Test] procedure Accept_ListsMediaTypesCaseInsensitively;
-    [Test] procedure Accept_WildcardDoesNotCount;
-    [Test] procedure Origin_LoopbackOnAnyPort_IsAllowed;
-    [Test] procedure Origin_AbsentAllowed_NullDenied;
-    [Test] procedure Origin_AllowListMatchesSchemeHostAndPort;
-    [Test] procedure Origin_PortWildcardAndAllowAll;
-    [Test] procedure Origin_DefaultPortEqualsExplicitPort;
-    [Test] procedure Host_AllowList_MatchesNameAndPort;
-    [Test] procedure NestingDepth_CountsObjectsAndArraysOutsideStrings;
+    [Test]
+    procedure Decode_PlainAsciiValue_IsReturnedAsIs;
+
+    [Test]
+    procedure Decode_SentinelValues_FromSpecTable;
+
+    [Test]
+    procedure Decode_LiteralSentinelPattern_RoundTrips;
+
+    [Test]
+    procedure Decode_BadPadding_Fails;
+
+    [Test]
+    procedure Decode_InvalidBase64Characters_Fails;
+
+    [Test]
+    procedure Decode_NonAsciiPlainValue_Fails;
+
+    [Test]
+    procedure Decode_UppercaseMarkers_AreNotASentinel;
+
+    [Test]
+    procedure Accept_ListsMediaTypesCaseInsensitively;
+
+    [Test]
+    procedure Accept_WildcardDoesNotCount;
+
+    [Test]
+    procedure Origin_LoopbackOnAnyPort_IsAllowed;
+
+    [Test]
+    procedure Origin_AbsentAllowed_NullDenied;
+
+    [Test]
+    procedure Origin_AllowListMatchesSchemeHostAndPort;
+
+    [Test]
+    procedure Origin_PortWildcardAndAllowAll;
+
+    [Test]
+    procedure Origin_DefaultPortEqualsExplicitPort;
+
+    [Test]
+    procedure Host_AllowList_MatchesNameAndPort;
+
+    [Test]
+    procedure NestingDepth_CountsObjectsAndArraysOutsideStrings;
   end;
 
 implementation

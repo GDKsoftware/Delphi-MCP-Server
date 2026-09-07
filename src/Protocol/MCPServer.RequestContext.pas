@@ -391,7 +391,8 @@ begin
     Params.AddPair('progress', TJSONNumber.Create(Progress));
     if Total >= 0 then
       Params.AddPair('total', TJSONNumber.Create(Total));
-    if Message <> '' then
+    const HasMessage = (Message <> '');
+    if HasMessage then
       Params.AddPair('message', Message);
     FSink.Send(Notification.ToJSON);
   finally
@@ -407,8 +408,8 @@ end;
 procedure TMCPRequestContext.LogJson(const Level: string; const Data: TJSONValue; const Logger: string);
 begin
   var Threshold := GetLogLevel;
-  var Wanted := Assigned(FSink) and (Threshold <> '') and not IsCancelled
-    and (TMCPLogLevel.Rank(Level) >= TMCPLogLevel.Rank(Threshold));
+  var Wanted := Assigned(FSink) and (Threshold <> '') and not IsCancelled and
+    (TMCPLogLevel.Rank(Level) >= TMCPLogLevel.Rank(Threshold));
   if not Wanted then
   begin
     Data.Free;
@@ -422,7 +423,8 @@ begin
     var Params := TJSONObject.Create;
     Notification.AddPair(MCP_KEY_PARAMS, Params);
     Params.AddPair('level', Level);
-    if Logger <> '' then
+    const HasLogger = (Logger <> '');
+    if HasLogger then
       Params.AddPair('logger', Logger);
     Params.AddPair('data', Data);
     FSink.Send(Notification.ToJSON);

@@ -19,47 +19,119 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure Initialize_2025_06_18;
-    [Test] procedure Initialize_2025_11_25;
-    [Test] procedure Initialize_2025_03_26;
-    [Test] procedure Initialize_UnknownVersion;
-    [Test] procedure Initialize_WithoutParams;
-    [Test] procedure Notifications_Initialized;
-    [Test] procedure Ping;
+    [Test]
+    procedure Initialize_2025_06_18;
 
-    [Test] procedure Tools_List;
-    [Test] procedure Tools_Call_Echo;
-    [Test] procedure Tools_Call_Echo_Unicode;
-    [Test] procedure Tools_Call_Calculate;
-    [Test] procedure Tools_Call_Calculate_DivideByZero;
-    [Test] procedure Tools_Call_GetTime;
-    [Test] procedure Tools_Call_ListFiles;
-    [Test] procedure Tools_Call_ListFiles_OutsideAllowedDirectory;
-    [Test] procedure Tools_Call_MissingArguments;
-    [Test] procedure Tools_Call_UnknownTool;
-    [Test] procedure Tools_Call_InvalidArgumentType;
-    [Test] procedure Tools_Call_WithoutParams;
-    [Test] procedure Tools_Call_EmptyName;
+    [Test]
+    procedure Initialize_2025_11_25;
 
-    [Test] procedure Resources_List;
-    [Test] procedure Resources_Read_ProjectInfo;
-    [Test] procedure Resources_Read_ProjectReadme;
-    [Test] procedure Resources_Read_LogsRecent;
-    [Test] procedure Resources_Read_ServerStatus;
-    [Test] procedure Resources_Read_UnknownUri;
-    [Test] procedure Resources_Read_WithoutParams;
-    [Test] procedure Resources_Templates_List;
+    [Test]
+    procedure Initialize_2025_03_26;
 
-    [Test] procedure UnknownMethod;
-    [Test] procedure ServerDiscover_WithoutMeta;
-    [Test] procedure ParseError;
-    [Test] procedure EmptyBody;
-    [Test] procedure RequestNotAnObject;
-    [Test] procedure Id_Null;
-    [Test] procedure Id_String;
-    [Test] procedure MissingJsonRpcField;
-    [Test] procedure MissingMethod;
-    [Test] procedure ParamsNotAnObject;
+    [Test]
+    procedure Initialize_UnknownVersion;
+
+    [Test]
+    procedure Initialize_WithoutParams;
+
+    [Test]
+    procedure Notifications_Initialized;
+
+    [Test]
+    procedure Ping;
+
+    [Test]
+    procedure Tools_List;
+
+    [Test]
+    procedure Tools_Call_Echo;
+
+    [Test]
+    procedure Tools_Call_Echo_Unicode;
+
+    [Test]
+    procedure Tools_Call_Calculate;
+
+    [Test]
+    procedure Tools_Call_Calculate_DivideByZero;
+
+    [Test]
+    procedure Tools_Call_GetTime;
+
+    [Test]
+    procedure Tools_Call_ListFiles;
+
+    [Test]
+    procedure Tools_Call_ListFiles_OutsideAllowedDirectory;
+
+    [Test]
+    procedure Tools_Call_MissingArguments;
+
+    [Test]
+    procedure Tools_Call_UnknownTool;
+
+    [Test]
+    procedure Tools_Call_InvalidArgumentType;
+
+    [Test]
+    procedure Tools_Call_WithoutParams;
+
+    [Test]
+    procedure Tools_Call_EmptyName;
+
+    [Test]
+    procedure Resources_List;
+
+    [Test]
+    procedure Resources_Read_ProjectInfo;
+
+    [Test]
+    procedure Resources_Read_ProjectReadme;
+
+    [Test]
+    procedure Resources_Read_LogsRecent;
+
+    [Test]
+    procedure Resources_Read_ServerStatus;
+
+    [Test]
+    procedure Resources_Read_UnknownUri;
+
+    [Test]
+    procedure Resources_Read_WithoutParams;
+
+    [Test]
+    procedure Resources_Templates_List;
+
+    [Test]
+    procedure UnknownMethod;
+
+    [Test]
+    procedure ServerDiscover_WithoutMeta;
+
+    [Test]
+    procedure ParseError;
+
+    [Test]
+    procedure EmptyBody;
+
+    [Test]
+    procedure RequestNotAnObject;
+
+    [Test]
+    procedure Id_Null;
+
+    [Test]
+    procedure Id_String;
+
+    [Test]
+    procedure MissingJsonRpcField;
+
+    [Test]
+    procedure MissingMethod;
+
+    [Test]
+    procedure ParamsNotAnObject;
   end;
 
 implementation

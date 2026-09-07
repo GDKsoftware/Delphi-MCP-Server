@@ -102,7 +102,9 @@ begin
   var EnumType := TRttiEnumerationType(RttiType);
   Result := TJSONArray.Create;
   for var Ordinal := EnumType.MinValue to EnumType.MaxValue do
+  begin
     Result.Add(GetEnumName(RttiType.Handle, Ordinal));
+  end;
 end;
 
 class function TMCPSchemaGenerator.ListItemType(RttiType: TRttiType): TRttiType;
@@ -269,7 +271,9 @@ begin
       PropSchema.RemovePair(SCHEMA_KEY_ENUM).Free;
       var EnumArray := TJSONArray.Create;
       for var Value in SchemaEnumAttribute(Attr).Values do
+      begin
         EnumArray.Add(Value);
+      end;
       PropSchema.AddPair(SCHEMA_KEY_ENUM, EnumArray);
     end
     else if Attr is SchemaMinLengthAttribute then
@@ -317,7 +321,8 @@ begin
         RequiredArray.Add(JsonName);
     end;
 
-    if RequiredArray.Count > 0 then
+    const HasRequiredArray = (RequiredArray.Count > 0);
+    if HasRequiredArray then
       Result.AddPair(SCHEMA_KEY_REQUIRED, RequiredArray)
     else
       RequiredArray.Free;

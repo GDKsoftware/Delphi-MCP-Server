@@ -52,21 +52,50 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure UnknownTool_IsInvalidParams_WithName;
-    [Test] procedure MissingName_IsInvalidParams;
-    [Test] procedure ArgumentsNotObject_IsInvalidParams;
-    [Test] procedure MissingRequiredArgument_IsErrorResult;
-    [Test] procedure WrongArgumentType_IsErrorResult;
-    [Test] procedure UnknownArgument_IsErrorResult;
-    [Test] procedure ToolError_IsErrorResult;
-    [Test] procedure ContentBlocks_FromToolResult;
-    [Test] procedure StructuredResult_HasTextFallback;
-    [Test] procedure List_IsInRegistrationOrder_WithAnnotations;
-    [Test] procedure List_CacheHints_ModernOnly;
-    [Test] procedure List_Cursor_IsInvalidParams;
-    [Test] procedure HandWrittenTool_ValidArguments_Runs;
-    [Test] procedure HandWrittenTool_MissingRequired_IsErrorResult;
-    [Test] procedure HandWrittenTool_WrongType_IsErrorResult;
+    [Test]
+    procedure UnknownTool_IsInvalidParams_WithName;
+
+    [Test]
+    procedure MissingName_IsInvalidParams;
+
+    [Test]
+    procedure ArgumentsNotObject_IsInvalidParams;
+
+    [Test]
+    procedure MissingRequiredArgument_IsErrorResult;
+
+    [Test]
+    procedure WrongArgumentType_IsErrorResult;
+
+    [Test]
+    procedure UnknownArgument_IsErrorResult;
+
+    [Test]
+    procedure ToolError_IsErrorResult;
+
+    [Test]
+    procedure ContentBlocks_FromToolResult;
+
+    [Test]
+    procedure StructuredResult_HasTextFallback;
+
+    [Test]
+    procedure List_IsInRegistrationOrder_WithAnnotations;
+
+    [Test]
+    procedure List_CacheHints_ModernOnly;
+
+    [Test]
+    procedure List_Cursor_IsInvalidParams;
+
+    [Test]
+    procedure HandWrittenTool_ValidArguments_Runs;
+
+    [Test]
+    procedure HandWrittenTool_MissingRequired_IsErrorResult;
+
+    [Test]
+    procedure HandWrittenTool_WrongType_IsErrorResult;
   end;
 
 implementation

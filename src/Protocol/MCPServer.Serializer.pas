@@ -372,7 +372,9 @@ begin
   SetLength(Names, EnumType.MaxValue - EnumType.MinValue + 1);
 
   for Ordinal := EnumType.MinValue to EnumType.MaxValue do
+  begin
     Names[Ordinal - EnumType.MinValue] := GetEnumName(EnumType.Handle, Ordinal);
+  end;
 
   Result := String.Join(', ', Names);
 end;
@@ -504,8 +506,8 @@ begin
   ListType := FContext.GetType(Obj.ClassType);
   CountProp := ListType.GetProperty('Count');
   ItemsProp := ListType.GetIndexedProperty('Items');
-  if not Assigned(CountProp) or not Assigned(ItemsProp) or not ItemsProp.IsReadable
-    or not Assigned(ItemsProp.ReadMethod) then
+  if not Assigned(CountProp) or not Assigned(ItemsProp) or not ItemsProp.IsReadable or
+    not Assigned(ItemsProp.ReadMethod) then
     Exit;
 
   IndexParams := ItemsProp.ReadMethod.GetParameters;

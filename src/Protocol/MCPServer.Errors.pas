@@ -127,7 +127,9 @@ class function EMCPError.UnsupportedProtocolVersion(const Requested: string; con
 begin
   var SupportedArray := TJSONArray.Create;
   for var Version in Supported do
+  begin
     SupportedArray.Add(Version);
+  end;
 
   var Data := TJSONObject.Create;
   Data.AddPair('supported', SupportedArray);
@@ -169,7 +171,8 @@ class function EMCPError.ResourceNotFound(const Uri: string; Era: TMCPProtocolEr
 begin
   var Data := TJSONObject.Create;
   Data.AddPair(MCP_KEY_URI, Uri);
-  if Era = TMCPProtocolEra.Modern then
+  const IsModern = (Era = TMCPProtocolEra.Modern);
+  if IsModern then
     Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, MESSAGE_RESOURCE_NOT_FOUND, Data)
   else
     Result := EMCPError.Create(MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY, MESSAGE_RESOURCE_NOT_FOUND, Data);

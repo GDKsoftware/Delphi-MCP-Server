@@ -35,14 +35,29 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure List_IsInRegistrationOrder_WithArguments;
-    [Test] procedure List_CacheHints_ModernOnly;
-    [Test] procedure List_Cursor_IsInvalidParams;
-    [Test] procedure Get_MissingName_IsInvalidParams;
-    [Test] procedure Get_UnknownPrompt_IsInvalidParams_WithName;
-    [Test] procedure Get_MissingRequiredArgument_IsInvalidParams;
-    [Test] procedure Get_ReturnsDescriptionAndMessages;
-    [Test] procedure Get_ResultHasNoCacheHints;
+    [Test]
+    procedure List_IsInRegistrationOrder_WithArguments;
+
+    [Test]
+    procedure List_CacheHints_ModernOnly;
+
+    [Test]
+    procedure List_Cursor_IsInvalidParams;
+
+    [Test]
+    procedure Get_MissingName_IsInvalidParams;
+
+    [Test]
+    procedure Get_UnknownPrompt_IsInvalidParams_WithName;
+
+    [Test]
+    procedure Get_MissingRequiredArgument_IsInvalidParams;
+
+    [Test]
+    procedure Get_ReturnsDescriptionAndMessages;
+
+    [Test]
+    procedure Get_ResultHasNoCacheHints;
   end;
 
 implementation

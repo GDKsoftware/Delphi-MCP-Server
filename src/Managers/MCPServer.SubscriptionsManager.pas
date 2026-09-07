@@ -139,7 +139,8 @@ begin
     Result.AddPair(FILTER_PROMPTS, TJSONBool.Create(True));
   if ResourcesListChanged then
     Result.AddPair(FILTER_RESOURCES, TJSONBool.Create(True));
-  if Length(ResourceSubscriptions) > 0 then
+  const HasResourceSubscriptions = (Length(ResourceSubscriptions) > 0);
+  if HasResourceSubscriptions then
   begin
     var Uris := TJSONArray.Create;
     Result.AddPair(FILTER_RESOURCE_SUBSCRIPTIONS, Uris);
@@ -416,7 +417,8 @@ end;
 procedure TMCPSubscriptionsManager.CloseAll(const Reason: string);
 begin
   var Open := Snapshot;
-  if Length(Open) > 0 then
+  const HasOpen = (Length(Open) > 0);
+  if HasOpen then
     TLogger.Info(Format('Closing %d subscription(s): %s', [Length(Open), Reason]));
   for var Subscription in Open do
   begin

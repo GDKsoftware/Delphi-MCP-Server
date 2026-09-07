@@ -14,7 +14,8 @@ type
   TMCPCoreManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPRegistryAware)
   private
     FSettings: TMCPSettings;
-    [Weak] FManagerRegistry: IMCPManagerRegistry;
+    [Weak]
+    FManagerRegistry: IMCPManagerRegistry;
     function GetSessionID: string;
     function BuildServerInfo: TJSONObject;
     function BuildCapabilities(Era: TMCPProtocolEra): TJSONObject;
@@ -105,11 +106,14 @@ begin
   Result := TJSONObject.Create;
   Result.AddPair(MCP_KEY_NAME, FSettings.ServerName);
   Result.AddPair(MCP_KEY_VERSION, FSettings.ServerVersion);
-  if FSettings.ServerTitle <> '' then
+  const HasServerTitle = (FSettings.ServerTitle <> '');
+  if HasServerTitle then
     Result.AddPair(MCP_KEY_TITLE, FSettings.ServerTitle);
-  if FSettings.ServerDescription <> '' then
+  const HasServerDescription = (FSettings.ServerDescription <> '');
+  if HasServerDescription then
     Result.AddPair(MCP_KEY_DESCRIPTION, FSettings.ServerDescription);
-  if FSettings.ServerWebsiteUrl <> '' then
+  const HasServerWebsiteUrl = (FSettings.ServerWebsiteUrl <> '');
+  if HasServerWebsiteUrl then
     Result.AddPair('websiteUrl', FSettings.ServerWebsiteUrl);
 end;
 
@@ -122,10 +126,14 @@ function TMCPCoreManager.SupportedVersions: TJSONArray;
 begin
   Result := TJSONArray.Create;
   for var Version in MCP_MODERN_PROTOCOL_VERSIONS do
+  begin
     Result.Add(Version);
+  end;
   if FSettings.DiscoverListsLegacyVersions then
     for var Version in MCP_LEGACY_PROTOCOL_VERSIONS do
+    begin
       Result.Add(Version);
+    end;
 end;
 
 procedure TMCPCoreManager.LogClientInfo(const ClientInfo: TJSONValue);
@@ -180,7 +188,8 @@ begin
     ResultJSON.AddPair(MCP_KEY_PROTOCOL_VERSION, Negotiated);
     ResultJSON.AddPair(MCP_KEY_CAPABILITIES, BuildCapabilities(TMCPProtocolEra.Legacy));
     ResultJSON.AddPair('serverInfo', BuildServerInfo);
-    if FSettings.Instructions <> '' then
+    const HasInstructions = (FSettings.Instructions <> '');
+    if HasInstructions then
       ResultJSON.AddPair(MCP_KEY_INSTRUCTIONS, FSettings.Instructions);
 
     if Assigned(Context) and Assigned(Context.LegacySession) then
@@ -208,7 +217,8 @@ begin
     ResultJSON.AddPair(MCP_KEY_META, Meta);
     Meta.AddPair(MCP_META_SERVER_INFO, BuildServerInfo);
 
-    if FSettings.Instructions <> '' then
+    const HasInstructions = (FSettings.Instructions <> '');
+    if HasInstructions then
       ResultJSON.AddPair(MCP_KEY_INSTRUCTIONS, FSettings.Instructions);
     ResultJSON.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FSettings.DiscoverTtlMs));
     ResultJSON.AddPair(MCP_KEY_CACHE_SCOPE, MCP_CACHE_SCOPE_PUBLIC);

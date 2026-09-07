@@ -112,7 +112,8 @@ constructor TMCPRequestStateSealer.Create(const Key: string; TtlSeconds: Integer
 begin
   inherited Create;
   FTtlSeconds := TtlSeconds;
-  if Key.Trim <> '' then
+  const HasKey = (Key.Trim <> '');
+  if HasKey then
     FKey := TEncoding.UTF8.GetBytes(Key)
   else
   begin
@@ -141,7 +142,8 @@ end;
 class function TMCPRequestStateSealer.TryFromBase64Url(const Text: string; out Bytes: TBytes): Boolean;
 begin
   Bytes := nil;
-  if Text = '' then
+  const TextIsEmpty = (Text = '');
+  if TextIsEmpty then
     Exit(False);
   for var C in Text do
     if not (CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '-', '_'])) then
@@ -149,7 +151,9 @@ begin
 
   var Standard := Text.Replace('-', '+').Replace('_', '/');
   while Length(Standard) mod 4 <> 0 do
+  begin
     Standard := Standard + '=';
+  end;
   try
     Bytes := TNetEncoding.Base64.DecodeStringToBytes(Standard);
     Result := Length(Bytes) > 0;
@@ -165,7 +169,9 @@ begin
     var Names := TList<string>.Create;
     try
       for var Pair in TJSONObject(Value) do
+      begin
         Names.Add(Pair.JsonString.Value);
+      end;
       Names.Sort(TComparer<string>.Construct(
         function(const Left, Right: string): Integer
         begin
@@ -262,9 +268,9 @@ var
   PayloadBytes, SignatureBytes: TBytes;
 begin
   var Separator := Token.LastIndexOf(TOKEN_SEPARATOR);
-  if (Separator <= 0) or not TryFromBase64Url(Token.Substring(0, Separator), PayloadBytes)
-    or not TryFromBase64Url(Token.Substring(Separator + 1), SignatureBytes)
-    or not TMCPConstantTime.SameBytes(SignatureBytes, Signature(PayloadBytes)) then
+  if (Separator <= 0) or not TryFromBase64Url(Token.Substring(0, Separator), PayloadBytes) or
+    not TryFromBase64Url(Token.Substring(Separator + 1), SignatureBytes) or
+    not TMCPConstantTime.SameBytes(SignatureBytes, Signature(PayloadBytes)) then
     raise EMCPError.InvalidParams(MESSAGE_INTEGRITY_FAILED);
 
   const Parsed = TJSONObject.ParseJSONValue(TEncoding.UTF8.GetString(PayloadBytes));

@@ -185,8 +185,8 @@ begin
   try
     Result.AddPair(MCP_KEY_CONTENT, BuildContent(Era));
 
-    if Assigned(FStructuredContent)
-      and ((Era = TMCPProtocolEra.Modern) or (FStructuredContent is TJSONObject)) then
+    if Assigned(FStructuredContent) and
+      ((Era = TMCPProtocolEra.Modern) or (FStructuredContent is TJSONObject)) then
       Result.AddPair('structuredContent', FStructuredContent.Clone as TJSONValue);
 
     if FIsError then

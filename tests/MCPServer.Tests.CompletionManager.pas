@@ -19,15 +19,32 @@ type
     [TearDown]
     procedure TearDown;
 
-    [Test] procedure RefPrompt_KnownArgument_ReturnsFilteredValues;
-    [Test] procedure RefPrompt_UnknownPrompt_IsInvalidParams;
-    [Test] procedure RefPrompt_MissingRefName_IsInvalidParams;
-    [Test] procedure RefResource_Template_Completes;
-    [Test] procedure RefResource_UnknownUri_IsNotFound;
-    [Test] procedure RefResource_UnknownUri_Legacy_IsLegacyNotFound;
-    [Test] procedure MissingArgument_IsInvalidParams;
-    [Test] procedure UnknownRefType_IsInvalidParams;
-    [Test] procedure CapabilitiesInclude_Completions;
+    [Test]
+    procedure RefPrompt_KnownArgument_ReturnsFilteredValues;
+
+    [Test]
+    procedure RefPrompt_UnknownPrompt_IsInvalidParams;
+
+    [Test]
+    procedure RefPrompt_MissingRefName_IsInvalidParams;
+
+    [Test]
+    procedure RefResource_Template_Completes;
+
+    [Test]
+    procedure RefResource_UnknownUri_IsNotFound;
+
+    [Test]
+    procedure RefResource_UnknownUri_Legacy_IsLegacyNotFound;
+
+    [Test]
+    procedure MissingArgument_IsInvalidParams;
+
+    [Test]
+    procedure UnknownRefType_IsInvalidParams;
+
+    [Test]
+    procedure CapabilitiesInclude_Completions;
   end;
 
 implementation
@@ -59,7 +76,9 @@ begin
     try
       var Values := Json.FindValue('completion.values') as TJSONArray;
       for var Value in Values do
+      begin
         Assert.IsTrue(Value.Value.ToUpper.StartsWith('IN'), 'every suggestion starts with the typed prefix');
+      end;
       Assert.IsFalse(Json.GetValue<Boolean>('completion.hasMore'));
     finally
       Json.Free;

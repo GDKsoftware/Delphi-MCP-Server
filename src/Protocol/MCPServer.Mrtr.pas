@@ -120,7 +120,8 @@ begin
   Message.AddPair(MCP_KEY_CONTENT, Content);
   Content.AddPair(MCP_KEY_TYPE, 'text');
   Content.AddPair(MCP_KEY_TEXT, UserText);
-  if SystemPrompt <> '' then
+  const HasSystemPrompt = (SystemPrompt <> '');
+  if HasSystemPrompt then
     Params.AddPair('systemPrompt', SystemPrompt);
   Params.AddPair('maxTokens', TJSONNumber.Create(MaxTokens));
   Result := AddRequest(Key, MCP_METHOD_SAMPLING_CREATE_MESSAGE, Params);
@@ -140,7 +141,9 @@ function TMCPInputRequests.Methods: TArray<string>;
 begin
   Result := nil;
   for var Pair in FRequests do
+  begin
     Result := Result + [TJSONObject(Pair.JsonValue).GetValue<string>(MCP_KEY_METHOD)];
+  end;
 end;
 
 class function TMCPInputRequests.RequiredCapability(const Method: string): string;
