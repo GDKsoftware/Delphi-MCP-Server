@@ -118,7 +118,7 @@ begin
   FContent.AddElement(Block);
   if Assigned(FPendingAnnotations) then
   begin
-    Block.AddPair('annotations', FPendingAnnotations);
+    Block.AddPair(MCP_KEY_ANNOTATIONS, FPendingAnnotations);
     FPendingAnnotations := nil;
   end;
 end;
@@ -127,7 +127,7 @@ function TMCPToolResult.WithAnnotations(const Annotations: TJSONObject): TMCPToo
 begin
   const HasBlock = (FContent.Count > 0);
   if HasBlock then
-    TJSONObject(FContent.Items[FContent.Count - 1]).AddPair('annotations', Annotations)
+    TJSONObject(FContent.Items[FContent.Count - 1]).AddPair(MCP_KEY_ANNOTATIONS, Annotations)
   else
   begin
     FPendingAnnotations.Free;
@@ -173,8 +173,8 @@ begin
   if (Result.Count = 0) and Assigned(FStructuredContent) then
   begin
     var Block := TJSONObject.Create;
-    Block.AddPair('type', 'text');
-    Block.AddPair('text', FStructuredContent.ToJSON);
+    Block.AddPair(MCP_KEY_TYPE, 'text');
+    Block.AddPair(MCP_KEY_TEXT, FStructuredContent.ToJSON);
     Result.AddElement(Block);
   end;
 end;
@@ -183,7 +183,7 @@ function TMCPToolResult.ToJson(Era: TMCPProtocolEra): TJSONObject;
 begin
   Result := TJSONObject.Create;
   try
-    Result.AddPair('content', BuildContent(Era));
+    Result.AddPair(MCP_KEY_CONTENT, BuildContent(Era));
 
     if Assigned(FStructuredContent)
       and ((Era = TMCPProtocolEra.Modern) or (FStructuredContent is TJSONObject)) then
@@ -193,7 +193,7 @@ begin
       Result.AddPair('isError', TJSONBool.Create(True));
 
     if Assigned(FMeta) then
-      Result.AddPair('_meta', TJSONObject(FMeta.Clone));
+      Result.AddPair(MCP_KEY_META, TJSONObject(FMeta.Clone));
   except
     Result.Free;
     raise;

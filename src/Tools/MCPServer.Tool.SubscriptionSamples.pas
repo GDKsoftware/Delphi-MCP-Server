@@ -56,6 +56,11 @@ uses
   MCPServer.Tool.Result;
 
 const
+  TOOL_TRIGGER_TOOL_CHANGE = 'test_trigger_tool_change';
+  TOOL_TRIGGER_PROMPT_CHANGE = 'test_trigger_prompt_change';
+  TOOL_TRIGGER_RESOURCE_CHANGE = 'test_trigger_resource_change';
+  MESSAGE_REMOVED = 'Removed %s';
+  MESSAGE_ADDED = 'Added %s';
   DYNAMIC_TOOL_NAME = 'test_dynamic_tool';
   DYNAMIC_PROMPT_NAME = 'test_dynamic_prompt';
   UPDATED_RESOURCE_URI = 'test://static-text';
@@ -89,13 +94,13 @@ end;
 constructor TTriggerToolChangeTool.Create;
 begin
   inherited;
-  FName := 'test_trigger_tool_change';
+  FName := TOOL_TRIGGER_TOOL_CHANGE;
   FDescription := 'Adds or removes test_dynamic_tool, which notifies subscribed clients that the tool list changed';
 end;
 
 function TTriggerToolChangeTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
 begin
-  var Manager := Context.ManagerRegistry.GetManagerForMethod('tools/list') as TObject;
+  var Manager := Context.ManagerRegistry.GetManagerForMethod(MCP_METHOD_TOOLS_LIST) as TObject;
   if not (Manager is TMCPToolsManager) then
     raise EMCPError.InternalError('No tools manager to change');
 
@@ -103,12 +108,12 @@ begin
   if Tools.HasTool(DYNAMIC_TOOL_NAME) then
   begin
     Tools.RemoveTool(DYNAMIC_TOOL_NAME);
-    Result := TMCPToolResult.Text(Format('Removed %s', [DYNAMIC_TOOL_NAME]));
+    Result := TMCPToolResult.Text(Format(MESSAGE_REMOVED, [DYNAMIC_TOOL_NAME]));
   end
   else
   begin
     Tools.AddTool(TDynamicTool.Create);
-    Result := TMCPToolResult.Text(Format('Added %s', [DYNAMIC_TOOL_NAME]));
+    Result := TMCPToolResult.Text(Format(MESSAGE_ADDED, [DYNAMIC_TOOL_NAME]));
   end;
 end;
 
@@ -117,13 +122,13 @@ end;
 constructor TTriggerPromptChangeTool.Create;
 begin
   inherited;
-  FName := 'test_trigger_prompt_change';
+  FName := TOOL_TRIGGER_PROMPT_CHANGE;
   FDescription := 'Adds or removes test_dynamic_prompt, which notifies subscribed clients that the prompt list changed';
 end;
 
 function TTriggerPromptChangeTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
 begin
-  var Manager := Context.ManagerRegistry.GetManagerForMethod('prompts/list') as TObject;
+  var Manager := Context.ManagerRegistry.GetManagerForMethod(MCP_METHOD_PROMPTS_LIST) as TObject;
   if not (Manager is TMCPPromptsManager) then
     raise EMCPError.InternalError('No prompts manager to change');
 
@@ -131,12 +136,12 @@ begin
   if Prompts.HasPrompt(DYNAMIC_PROMPT_NAME) then
   begin
     Prompts.RemovePrompt(DYNAMIC_PROMPT_NAME);
-    Result := TMCPToolResult.Text(Format('Removed %s', [DYNAMIC_PROMPT_NAME]));
+    Result := TMCPToolResult.Text(Format(MESSAGE_REMOVED, [DYNAMIC_PROMPT_NAME]));
   end
   else
   begin
     Prompts.AddPrompt(TDynamicPrompt.Create);
-    Result := TMCPToolResult.Text(Format('Added %s', [DYNAMIC_PROMPT_NAME]));
+    Result := TMCPToolResult.Text(Format(MESSAGE_ADDED, [DYNAMIC_PROMPT_NAME]));
   end;
 end;
 
@@ -145,13 +150,13 @@ end;
 constructor TTriggerResourceChangeTool.Create;
 begin
   inherited;
-  FName := 'test_trigger_resource_change';
+  FName := TOOL_TRIGGER_RESOURCE_CHANGE;
   FDescription := 'Reports test://static-text as updated to the clients subscribed to it';
 end;
 
 function TTriggerResourceChangeTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
 begin
-  var Manager := Context.ManagerRegistry.GetManagerForMethod('resources/list') as TObject;
+  var Manager := Context.ManagerRegistry.GetManagerForMethod(MCP_METHOD_RESOURCES_LIST) as TObject;
   if not (Manager is TMCPResourcesManager) then
     raise EMCPError.InternalError('No resources manager to change');
 
@@ -160,17 +165,17 @@ begin
 end;
 
 initialization
-  TMCPRegistry.RegisterTool('test_trigger_tool_change',
+  TMCPRegistry.RegisterTool(TOOL_TRIGGER_TOOL_CHANGE,
     function: IMCPTool
     begin
       Result := TTriggerToolChangeTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_trigger_prompt_change',
+  TMCPRegistry.RegisterTool(TOOL_TRIGGER_PROMPT_CHANGE,
     function: IMCPTool
     begin
       Result := TTriggerPromptChangeTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_trigger_resource_change',
+  TMCPRegistry.RegisterTool(TOOL_TRIGGER_RESOURCE_CHANGE,
     function: IMCPTool
     begin
       Result := TTriggerResourceChangeTool.Create;

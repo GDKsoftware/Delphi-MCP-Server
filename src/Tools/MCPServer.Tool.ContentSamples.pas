@@ -109,12 +109,26 @@ uses
   MCPServer.Registration,
   MCPServer.Tool.Result;
 
+const
+  TOOL_SIMPLE_TEXT = 'test_simple_text';
+  TOOL_IMAGE_CONTENT = 'test_image_content';
+  TOOL_AUDIO_CONTENT = 'test_audio_content';
+  TOOL_EMBEDDED_RESOURCE = 'test_embedded_resource';
+  TOOL_MULTIPLE_CONTENT_TYPES = 'test_multiple_content_types';
+  TOOL_ERROR_HANDLING = 'test_error_handling';
+  TOOL_WITH_PROGRESS = 'test_tool_with_progress';
+  TOOL_LOGGING = 'test_logging_tool';
+  TOOL_JSON_SCHEMA = 'json_schema_2020_12_tool';
+  MIME_TYPE_PNG = 'image/png';
+  MIME_TYPE_TEXT = 'text/plain';
+
+
 { TSimpleTextTool }
 
 constructor TSimpleTextTool.Create;
 begin
   inherited;
-  FName := 'test_simple_text';
+  FName := TOOL_SIMPLE_TEXT;
   FDescription := 'Returns a plain text result';
   FAnnotations := TJSONObject.Create;
   FAnnotations.AddPair('readOnlyHint', TJSONBool.Create(True));
@@ -130,13 +144,13 @@ end;
 constructor TImageContentTool.Create;
 begin
   inherited;
-  FName := 'test_image_content';
+  FName := TOOL_IMAGE_CONTENT;
   FDescription := 'Returns an image content block';
 end;
 
 function TImageContentTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
 begin
-  Result := TMCPToolResult.Create.AddImage(SAMPLE_PNG_BASE64, 'image/png');
+  Result := TMCPToolResult.Create.AddImage(SAMPLE_PNG_BASE64, MIME_TYPE_PNG);
 end;
 
 { TAudioContentTool }
@@ -144,7 +158,7 @@ end;
 constructor TAudioContentTool.Create;
 begin
   inherited;
-  FName := 'test_audio_content';
+  FName := TOOL_AUDIO_CONTENT;
   FDescription := 'Returns an audio content block';
 end;
 
@@ -158,13 +172,13 @@ end;
 constructor TEmbeddedResourceTool.Create;
 begin
   inherited;
-  FName := 'test_embedded_resource';
+  FName := TOOL_EMBEDDED_RESOURCE;
   FDescription := 'Returns an embedded resource content block';
 end;
 
 function TEmbeddedResourceTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
 begin
-  Result := TMCPToolResult.Create.AddEmbeddedText(SAMPLE_TEXT_RESOURCE_URI, 'text/plain', SAMPLE_TEXT_RESOURCE_CONTENT);
+  Result := TMCPToolResult.Create.AddEmbeddedText(SAMPLE_TEXT_RESOURCE_URI, MIME_TYPE_TEXT, SAMPLE_TEXT_RESOURCE_CONTENT);
 end;
 
 { TMultipleContentTypesTool }
@@ -172,7 +186,7 @@ end;
 constructor TMultipleContentTypesTool.Create;
 begin
   inherited;
-  FName := 'test_multiple_content_types';
+  FName := TOOL_MULTIPLE_CONTENT_TYPES;
   FDescription := 'Returns text, image and embedded resource content in one result';
 end;
 
@@ -180,8 +194,8 @@ function TMultipleContentTypesTool.ExecuteWithContext(const Params: TNoParams; c
 begin
   Result := TMCPToolResult.Create
     .AddText('Multiple content types example')
-    .AddImage(SAMPLE_PNG_BASE64, 'image/png')
-    .AddEmbeddedText(SAMPLE_TEXT_RESOURCE_URI, 'text/plain', SAMPLE_TEXT_RESOURCE_CONTENT);
+    .AddImage(SAMPLE_PNG_BASE64, MIME_TYPE_PNG)
+    .AddEmbeddedText(SAMPLE_TEXT_RESOURCE_URI, MIME_TYPE_TEXT, SAMPLE_TEXT_RESOURCE_CONTENT);
 end;
 
 { TErrorHandlingTool }
@@ -189,7 +203,7 @@ end;
 constructor TErrorHandlingTool.Create;
 begin
   inherited;
-  FName := 'test_error_handling';
+  FName := TOOL_ERROR_HANDLING;
   FDescription := 'Always fails with a tool execution error';
 end;
 
@@ -203,7 +217,7 @@ end;
 constructor TProgressTool.Create;
 begin
   inherited;
-  FName := 'test_tool_with_progress';
+  FName := TOOL_WITH_PROGRESS;
   FDescription := 'Runs a few steps and reports progress for each; honours cancellation';
 end;
 
@@ -237,7 +251,7 @@ end;
 constructor TJsonSchema202012Tool.Create;
 begin
   inherited;
-  FName := 'json_schema_2020_12_tool';
+  FName := TOOL_JSON_SCHEMA;
   FDescription := 'Tool with JSON Schema 2020-12 features';
 end;
 
@@ -274,7 +288,7 @@ end;
 constructor TLoggingTool.Create;
 begin
   inherited;
-  FName := 'test_logging_tool';
+  FName := TOOL_LOGGING;
   FDescription := 'Emits log notifications at every level; the client sees those at or above its requested level';
 end;
 
@@ -282,53 +296,53 @@ function TLoggingTool.ExecuteWithContext(const Params: TNoParams; const Context:
 begin
   for var Level in MCP_LOG_LEVELS do
   begin
-    Context.Log(Level, Format('%s message from test_logging_tool', [Level]), 'test_logging_tool');
+    Context.Log(Level, Format('%s message from test_logging_tool', [Level]), TOOL_LOGGING);
   end;
   Result := TMCPToolResult.Text('Logged a message at every level');
 end;
 
 initialization
-  TMCPRegistry.RegisterTool('test_simple_text',
+  TMCPRegistry.RegisterTool(TOOL_SIMPLE_TEXT,
     function: IMCPTool
     begin
       Result := TSimpleTextTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_image_content',
+  TMCPRegistry.RegisterTool(TOOL_IMAGE_CONTENT,
     function: IMCPTool
     begin
       Result := TImageContentTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_audio_content',
+  TMCPRegistry.RegisterTool(TOOL_AUDIO_CONTENT,
     function: IMCPTool
     begin
       Result := TAudioContentTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_embedded_resource',
+  TMCPRegistry.RegisterTool(TOOL_EMBEDDED_RESOURCE,
     function: IMCPTool
     begin
       Result := TEmbeddedResourceTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_multiple_content_types',
+  TMCPRegistry.RegisterTool(TOOL_MULTIPLE_CONTENT_TYPES,
     function: IMCPTool
     begin
       Result := TMultipleContentTypesTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_tool_with_progress',
+  TMCPRegistry.RegisterTool(TOOL_WITH_PROGRESS,
     function: IMCPTool
     begin
       Result := TProgressTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_error_handling',
+  TMCPRegistry.RegisterTool(TOOL_ERROR_HANDLING,
     function: IMCPTool
     begin
       Result := TErrorHandlingTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_logging_tool',
+  TMCPRegistry.RegisterTool(TOOL_LOGGING,
     function: IMCPTool
     begin
       Result := TLoggingTool.Create;
     end);
-  TMCPRegistry.RegisterTool('json_schema_2020_12_tool',
+  TMCPRegistry.RegisterTool(TOOL_JSON_SCHEMA,
     function: IMCPTool
     begin
       Result := TJsonSchema202012Tool.Create;

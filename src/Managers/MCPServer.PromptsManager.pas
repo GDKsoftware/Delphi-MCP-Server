@@ -61,6 +61,10 @@ uses
   MCPServer.RequestContext,
   MCPServer.Errors;
 
+const
+  CAPABILITY_NAME = 'prompts';
+
+
 { TMCPPromptsManager }
 
 constructor TMCPPromptsManager.Create;
@@ -84,20 +88,20 @@ end;
 
 function TMCPPromptsManager.GetCapabilityName: string;
 begin
-  Result := 'prompts';
+  Result := CAPABILITY_NAME;
 end;
 
 function TMCPPromptsManager.HandlesMethod(const Method: string): Boolean;
 begin
-  Result := (Method = 'prompts/list') or (Method = 'prompts/get');
+  Result := (Method = MCP_METHOD_PROMPTS_LIST) or (Method = MCP_METHOD_PROMPTS_GET);
 end;
 
 procedure TMCPPromptsManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 begin
   var Announces := Assigned(FChangeNotifier) and (Era = TMCPProtocolEra.Modern);
   var Prompts := TJSONObject.Create;
-  Prompts.AddPair('listChanged', TJSONBool.Create(Announces));
-  Capabilities.AddPair('prompts', Prompts);
+  Prompts.AddPair(MCP_KEY_LIST_CHANGED, TJSONBool.Create(Announces));
+  Capabilities.AddPair(CAPABILITY_NAME, Prompts);
 end;
 
 function TMCPPromptsManager.EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
@@ -116,9 +120,9 @@ end;
 function TMCPPromptsManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
   const Context: IMCPRequestContext): TValue;
 begin
-  if Method = 'prompts/list' then
+  if Method = MCP_METHOD_PROMPTS_LIST then
     Result := ListPrompts(Params, EraOf(Context))
-  else if Method = 'prompts/get' then
+  else if Method = MCP_METHOD_PROMPTS_GET then
     Result := GetPrompt(Params, EraOf(Context))
   else
     raise EMCPError.MethodNotFound(Method);
@@ -187,7 +191,7 @@ end;
 
 procedure TMCPPromptsManager.CheckCursor(const Params: TJSONObject);
 begin
-  if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
+  if Assigned(Params) and Assigned(Params.GetValue(MCP_KEY_CURSOR)) then
     raise EMCPError.InvalidParams('Invalid cursor');
 end;
 
@@ -196,30 +200,30 @@ var
   Metadata: IMCPPromptMetadata;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('name', Prompt.Name);
+  Result.AddPair(MCP_KEY_NAME, Prompt.Name);
   if Prompt.Title <> Prompt.Name then
-    Result.AddPair('title', Prompt.Title);
+    Result.AddPair(MCP_KEY_TITLE, Prompt.Title);
   if Prompt.Description <> '' then
-    Result.AddPair('description', Prompt.Description);
+    Result.AddPair(MCP_KEY_DESCRIPTION, Prompt.Description);
 
   var Arguments := Prompt.Arguments;
   if Length(Arguments) > 0 then
   begin
     var ArgumentsArray := TJSONArray.Create;
-    Result.AddPair('arguments', ArgumentsArray);
+    Result.AddPair(MCP_KEY_ARGUMENTS, ArgumentsArray);
     for var Arg in Arguments do
     begin
       var ArgObject := TJSONObject.Create;
       ArgumentsArray.AddElement(ArgObject);
-      ArgObject.AddPair('name', Arg.Name);
+      ArgObject.AddPair(MCP_KEY_NAME, Arg.Name);
       if Arg.Description <> '' then
-        ArgObject.AddPair('description', Arg.Description);
+        ArgObject.AddPair(MCP_KEY_DESCRIPTION, Arg.Description);
       ArgObject.AddPair('required', TJSONBool.Create(Arg.Required));
     end;
   end;
 
   if Supports(Prompt, IMCPPromptMetadata, Metadata) and Assigned(Metadata.Icons) then
-    Result.AddPair('icons', TJSONArray(Metadata.Icons.Clone));
+    Result.AddPair(MCP_KEY_ICONS, TJSONArray(Metadata.Icons.Clone));
 end;
 
 function TMCPPromptsManager.ListPrompts: TValue;
@@ -235,7 +239,7 @@ begin
   var ResultJSON := TJSONObject.Create;
   try
     var PromptsArray := TJSONArray.Create;
-    ResultJSON.AddPair('prompts', PromptsArray);
+    ResultJSON.AddPair(CAPABILITY_NAME, PromptsArray);
     FLock.Enter;
     try
       for var Name in FOrder do
@@ -248,8 +252,8 @@ begin
 
     if Era = TMCPProtocolEra.Modern then
     begin
-      ResultJSON.AddPair('ttlMs', TJSONNumber.Create(FListTtlMs));
-      ResultJSON.AddPair('cacheScope', FListCacheScope);
+      ResultJSON.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FListTtlMs));
+      ResultJSON.AddPair(MCP_KEY_CACHE_SCOPE, FListCacheScope);
     end;
 
     Result := TValue.From<TJSONObject>(ResultJSON);
@@ -270,12 +274,12 @@ var
 begin
   if not Assigned(Params) then
     raise EMCPError.InvalidParams('params.name is required');
-  var NameValue := Params.GetValue('name');
+  var NameValue := Params.GetValue(MCP_KEY_NAME);
   if not (NameValue is TJSONString) or (TJSONString(NameValue).Value = '') then
     raise EMCPError.InvalidParams('params.name is required and must be a non-empty string');
   var PromptName := TJSONString(NameValue).Value;
 
-  var ArgumentsValue := Params.GetValue('arguments');
+  var ArgumentsValue := Params.GetValue(MCP_KEY_ARGUMENTS);
   if Assigned(ArgumentsValue) and not (ArgumentsValue is TJSONObject) and not (ArgumentsValue is TJSONNull) then
     raise EMCPError.InvalidParams('params.arguments must be an object');
   var OwnedArguments: TJSONObject := nil;
@@ -307,7 +311,7 @@ begin
       var ResultJSON := TJSONObject.Create;
       try
         if Description <> '' then
-          ResultJSON.AddPair('description', Description);
+          ResultJSON.AddPair(MCP_KEY_DESCRIPTION, Description);
         ResultJSON.AddPair('messages', Messages.ToJson);
         Result := TValue.From<TJSONObject>(ResultJSON);
       except

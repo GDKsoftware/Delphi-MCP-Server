@@ -56,16 +56,20 @@ type
 
 implementation
 
+
+const
+  KEY_ROOTS = 'roots';
+
 { TMCPInputRequests }
 
 class function TMCPInputRequests.FieldSchema(const Field: string; const FieldType: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('type', 'object');
+  Result.AddPair(MCP_KEY_TYPE, 'object');
   var Properties := TJSONObject.Create;
   Result.AddPair('properties', Properties);
   var Schema := TJSONObject.Create;
-  Schema.AddPair('type', FieldType);
+  Schema.AddPair(MCP_KEY_TYPE, FieldType);
   Properties.AddPair(Field, Schema);
   var Required := TJSONArray.Create;
   Required.Add(Field);
@@ -87,8 +91,8 @@ end;
 function TMCPInputRequests.AddRequest(const Key, Method: string; const Params: TJSONObject): TMCPInputRequests;
 begin
   var Request := TJSONObject.Create;
-  Request.AddPair('method', Method);
-  Request.AddPair('params', Params);
+  Request.AddPair(MCP_KEY_METHOD, Method);
+  Request.AddPair(MCP_KEY_PARAMS, Params);
   FRequests.AddPair(Key, Request);
   Result := Self;
 end;
@@ -113,9 +117,9 @@ begin
   Messages.AddElement(Message);
   Message.AddPair('role', 'user');
   var Content := TJSONObject.Create;
-  Message.AddPair('content', Content);
-  Content.AddPair('type', 'text');
-  Content.AddPair('text', UserText);
+  Message.AddPair(MCP_KEY_CONTENT, Content);
+  Content.AddPair(MCP_KEY_TYPE, 'text');
+  Content.AddPair(MCP_KEY_TEXT, UserText);
   if SystemPrompt <> '' then
     Params.AddPair('systemPrompt', SystemPrompt);
   Params.AddPair('maxTokens', TJSONNumber.Create(MaxTokens));
@@ -136,7 +140,7 @@ function TMCPInputRequests.Methods: TArray<string>;
 begin
   Result := nil;
   for var Pair in FRequests do
-    Result := Result + [TJSONObject(Pair.JsonValue).GetValue<string>('method')];
+    Result := Result + [TJSONObject(Pair.JsonValue).GetValue<string>(MCP_KEY_METHOD)];
 end;
 
 class function TMCPInputRequests.RequiredCapability(const Method: string): string;
@@ -146,7 +150,7 @@ begin
   else if Method = MCP_METHOD_SAMPLING_CREATE_MESSAGE then
     Result := 'sampling'
   else if Method = MCP_METHOD_ROOTS_LIST then
-    Result := 'roots'
+    Result := KEY_ROOTS
   else
     Result := '';
 end;
@@ -165,7 +169,7 @@ begin
     Exit;
 
   var Action := Response.GetValue('action');
-  var Content := Response.GetValue('content');
+  var Content := Response.GetValue(MCP_KEY_CONTENT);
   var Accepted := IsJsonString(Action) and (TJSONString(Action).Value = ELICITATION_ACTION_ACCEPT);
   if Accepted and (Content is TJSONObject) then
     Result := TJSONObject(Content);
@@ -191,10 +195,10 @@ begin
   if not Assigned(Response) then
     Exit;
 
-  var Content := Response.GetValue('content');
+  var Content := Response.GetValue(MCP_KEY_CONTENT);
   if not (Content is TJSONObject) then
     Exit;
-  var Text := TJSONObject(Content).GetValue('text');
+  var Text := TJSONObject(Content).GetValue(MCP_KEY_TEXT);
   if IsJsonString(Text) then
     Result := TJSONString(Text).Value;
 end;
@@ -205,7 +209,7 @@ begin
   if not Assigned(Response) then
     Exit;
 
-  var Value := Response.GetValue('roots');
+  var Value := Response.GetValue(KEY_ROOTS);
   if Value is TJSONArray then
     Result := TJSONArray(Value);
 end;

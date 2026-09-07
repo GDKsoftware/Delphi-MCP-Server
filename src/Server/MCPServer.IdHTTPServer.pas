@@ -111,6 +111,11 @@ uses
   MCPServer.Logger;
 
 const
+  HOST_LOCALHOST = 'localhost';
+  DEFAULT_ENDPOINT = '/mcp';
+  HEADER_ALLOW_ORIGIN = 'Access-Control-Allow-Origin';
+  MESSAGE_NO_CERTIFICATE = 'SSL certificate file not found: %s';
+  MESSAGE_NO_KEY = 'SSL key file not found: %s';
   DEFAULT_MCP_PORT = 3000;
 
   HTTP_NO_CONTENT = 204;
@@ -139,8 +144,6 @@ const
   HEADER_METHOD = 'Mcp-Method';
   HEADER_NAME = 'Mcp-Name';
 
-  MEDIA_TYPE_JSON = 'application/json';
-  MEDIA_TYPE_EVENT_STREAM = 'text/event-stream';
 
   LOOPBACK_IPV4 = '127.0.0.1';
   LOOPBACK_IPV6 = '::1';
@@ -272,7 +275,7 @@ begin
   FHTTPServer.Bindings.Clear;
 
   var Address := '';
-  var Host := 'localhost';
+  var Host := HOST_LOCALHOST;
   if Assigned(FSettings) then
   begin
     Address := FSettings.BindAddress.Trim;
@@ -290,7 +293,7 @@ begin
     Exit;
   end;
 
-  if SameText(Host, 'localhost') or (Host = LOOPBACK_IPV4) or (Host = LOOPBACK_IPV6) then
+  if SameText(Host, HOST_LOCALHOST) or (Host = LOOPBACK_IPV4) or (Host = LOOPBACK_IPV6) then
   begin
     AddBinding(LOOPBACK_IPV4, Id_IPv4);
     if GStack.SupportsIPv6 then
@@ -309,14 +312,14 @@ procedure TMCPIdHTTPServer.ConfigureSSL;
 begin
   if not TFile.Exists(FSettings.SSLCertFile) then
   begin
-    TLogger.Error(Format('SSL certificate file not found: %s', [FSettings.SSLCertFile]));
-    raise EMCPConfigurationError.CreateFmt('SSL certificate file not found: %s', [FSettings.SSLCertFile]);
+    TLogger.Error(Format(MESSAGE_NO_CERTIFICATE, [FSettings.SSLCertFile]));
+    raise EMCPConfigurationError.CreateFmt(MESSAGE_NO_CERTIFICATE, [FSettings.SSLCertFile]);
   end;
 
   if not TFile.Exists(FSettings.SSLKeyFile) then
   begin
-    TLogger.Error(Format('SSL key file not found: %s', [FSettings.SSLKeyFile]));
-    raise EMCPConfigurationError.CreateFmt('SSL key file not found: %s', [FSettings.SSLKeyFile]);
+    TLogger.Error(Format(MESSAGE_NO_KEY, [FSettings.SSLKeyFile]));
+    raise EMCPConfigurationError.CreateFmt(MESSAGE_NO_KEY, [FSettings.SSLKeyFile]);
   end;
 
   {$IFDEF USE_TAURUS_TLS}
@@ -406,7 +409,7 @@ begin
     if not ValidateHost(RequestInfo, ResponseInfo) or not ValidateOrigin(RequestInfo, ResponseInfo) then
       Exit;
 
-    var Endpoint := '/mcp';
+    var Endpoint := DEFAULT_ENDPOINT;
     var EndpointInfoPath := '';
     if Assigned(FSettings) then
     begin
@@ -505,9 +508,9 @@ begin
       AllowAll := True;
 
   if (Origin = '') or AllowAll then
-    ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Origin'] := TMCPOriginPolicy.ALLOW_ALL
+    ResponseInfo.CustomHeaders.Values[HEADER_ALLOW_ORIGIN] := TMCPOriginPolicy.ALLOW_ALL
   else
-    ResponseInfo.CustomHeaders.Values['Access-Control-Allow-Origin'] := Origin;
+    ResponseInfo.CustomHeaders.Values[HEADER_ALLOW_ORIGIN] := Origin;
 
   var AllowHeaders := CORS_ALLOW_HEADERS;
   for var Requested in HeaderValue(RequestInfo, 'Access-Control-Request-Headers').Split([',']) do
@@ -544,7 +547,7 @@ end;
 
 function TMCPIdHTTPServer.IsProtectedResourceMetadataPath(const Document: string): Boolean;
 begin
-  var Endpoint := '/mcp';
+  var Endpoint := DEFAULT_ENDPOINT;
   if Assigned(FSettings) then
     Endpoint := FSettings.Endpoint;
   Result := (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH)
@@ -748,7 +751,7 @@ procedure TMCPIdHTTPServer.SendSse(ResponseInfo: TIdHTTPResponseInfo; const Body
 begin
   ResponseInfo.ResponseNo := HTTP_STATUS_OK;
   ResponseInfo.ContentType := MEDIA_TYPE_EVENT_STREAM;
-  ResponseInfo.CharSet := 'utf-8';
+  ResponseInfo.CharSet := CHARSET_UTF8;
   ResponseInfo.CustomHeaders.Values['Cache-Control'] := 'no-cache';
   ResponseInfo.CustomHeaders.Values['X-Accel-Buffering'] := 'no';
   ResponseInfo.ContentStream := TStringStream.Create(TMCPHttpResponseStream.EventText(Body), TEncoding.UTF8);
@@ -759,9 +762,9 @@ procedure TMCPIdHTTPServer.SendJsonRpcError(ResponseInfo: TIdHTTPResponseInfo; S
 begin
   var Response := TJSONObject.Create;
   try
-    Response.AddPair('jsonrpc', '2.0');
+    Response.AddPair(MCP_KEY_JSONRPC, '2.0');
     var Error := TJSONObject.Create;
-    Response.AddPair('error', Error);
+    Response.AddPair(MCP_KEY_ERROR, Error);
     Error.AddPair('code', TJSONNumber.Create(Code));
     Error.AddPair('message', Message);
     SendJson(ResponseInfo, Status, Response.ToJSON);

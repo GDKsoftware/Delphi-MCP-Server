@@ -92,6 +92,12 @@ uses
   MCPServer.Registration;
 
 const
+  MIME_TYPE_JSON = 'application/json';
+  LEVEL_INFO = 'INFO';
+  CATEGORY_SYSTEM = 'SYSTEM';
+  URI_RECENT = 'logs://recent';
+  URI_TEMPLATE_BY_LEVEL = 'logs://{level}';
+  TEMPLATE_VARIABLE_LEVEL = 'level';
   MAX_RECENT_LOG_ENTRIES = 100;
 
 { TLogEntries }
@@ -212,10 +218,10 @@ end;
 constructor TLogsRecentResource.Create;
 begin
   inherited;
-  FURI := 'logs://recent';
+  FURI := URI_RECENT;
   FName := 'Recent Logs';
   FDescription := 'Recent log entries from all categories';
-  FMimeType := 'application/json';
+  FMimeType := MIME_TYPE_JSON;
   FTtlMs := 0;
   FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
 end;
@@ -250,7 +256,7 @@ begin
   FURI := AUri;
   FName := 'Recent logs (' + ALevel + ')';
   FDescription := 'Recent log entries at level ' + ALevel;
-  FMimeType := 'application/json';
+  FMimeType := MIME_TYPE_JSON;
   FTtlMs := 0;
   FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
 end;
@@ -281,21 +287,21 @@ end;
 constructor TLogsByLevelTemplate.Create;
 begin
   inherited;
-  FUriTemplate := 'logs://{level}';
+  FUriTemplate := URI_TEMPLATE_BY_LEVEL;
   FName := 'Recent logs by level';
   FDescription := 'Recent log entries at the given level, e.g. logs://INFO';
-  FMimeType := 'application/json';
+  FMimeType := MIME_TYPE_JSON;
 end;
 
 function TLogsByLevelTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
 begin
-  Result := TLogsByLevelResource.CreateForLevel(URI, Vars['level']);
+  Result := TLogsByLevelResource.CreateForLevel(URI, Vars[TEMPLATE_VARIABLE_LEVEL]);
 end;
 
 function TLogsByLevelTemplate.Complete(const ArgumentName, Value: string;
   const Context: TArray<TPair<string, string>>): TMCPCompletion;
 begin
-  if ArgumentName <> 'level' then
+  if ArgumentName <> TEMPLATE_VARIABLE_LEVEL then
     Exit(TMCPCompletion.Create(nil));
 
   var Levels := TStringList.Create;
@@ -319,20 +325,20 @@ end;
 initialization
   TLogBuffer.FLock := TCriticalSection.Create;
 
-  TLogBuffer.Instance.AddLog('INFO', 'MCP Server started', 'SYSTEM');
-  TLogBuffer.Instance.AddLog('INFO', 'Resources manager initialized', 'SYSTEM');
-  TLogBuffer.Instance.AddLog('INFO', 'Tools manager initialized', 'SYSTEM');
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'MCP Server started', CATEGORY_SYSTEM);
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'Resources manager initialized', CATEGORY_SYSTEM);
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'Tools manager initialized', CATEGORY_SYSTEM);
   TLogBuffer.Instance.AddLog('WARNING', 'Debug mode is enabled', 'CONFIG');
-  TLogBuffer.Instance.AddLog('INFO', 'Server listening on port 8080', 'SERVER');
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'Server listening on port 8080', 'SERVER');
 
-  TMCPRegistry.RegisterResource('logs://recent',
+  TMCPRegistry.RegisterResource(URI_RECENT,
     function: IMCPResource
     begin
       Result := TLogsRecentResource.Create;
     end
   );
 
-  TMCPRegistry.RegisterResourceTemplate('logs://{level}',
+  TMCPRegistry.RegisterResourceTemplate(URI_TEMPLATE_BY_LEVEL,
     function: IMCPResourceTemplate
     begin
       Result := TLogsByLevelTemplate.Create;

@@ -53,6 +53,10 @@ uses
   MCPServer.Logger;
 
 const
+  MESSAGE_INTEGRITY_FAILED = 'requestState failed integrity verification';
+
+
+const
   KEY_BYTES = 32;
   URANDOM_DEVICE = '/dev/urandom';
   TOKEN_SEPARATOR = '.';
@@ -261,14 +265,14 @@ begin
   if (Separator <= 0) or not TryFromBase64Url(Token.Substring(0, Separator), PayloadBytes)
     or not TryFromBase64Url(Token.Substring(Separator + 1), SignatureBytes)
     or not TMCPConstantTime.SameBytes(SignatureBytes, Signature(PayloadBytes)) then
-    raise EMCPError.InvalidParams('requestState failed integrity verification');
+    raise EMCPError.InvalidParams(MESSAGE_INTEGRITY_FAILED);
 
   const Parsed = TJSONObject.ParseJSONValue(TEncoding.UTF8.GetString(PayloadBytes));
   const IsPayloadObject = (Parsed is TJSONObject);
   if not IsPayloadObject then
   begin
     Parsed.Free;
-    raise EMCPError.InvalidParams('requestState failed integrity verification');
+    raise EMCPError.InvalidParams(MESSAGE_INTEGRITY_FAILED);
   end;
 
   const Payload = TJSONObject(Parsed);

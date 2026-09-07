@@ -370,8 +370,6 @@ begin
 end;
 
 procedure TMCPRequestContext.ReportProgress(const Progress, Total: Double; const Message: string);
-const
-  JSON_RPC_VERSION = '2.0';
 begin
   if not Assigned(FSink) or not HasProgressToken or IsCancelled then
     Exit;
@@ -382,10 +380,10 @@ begin
 
   var Notification := TJSONObject.Create;
   try
-    Notification.AddPair('jsonrpc', JSON_RPC_VERSION);
-    Notification.AddPair('method', MCP_METHOD_NOTIFICATIONS_PROGRESS);
+    Notification.AddPair(MCP_KEY_JSONRPC, JSONRPC_VERSION);
+    Notification.AddPair(MCP_KEY_METHOD, MCP_METHOD_NOTIFICATIONS_PROGRESS);
     var Params := TJSONObject.Create;
-    Notification.AddPair('params', Params);
+    Notification.AddPair(MCP_KEY_PARAMS, Params);
     Params.AddPair(MCP_META_PROGRESS_TOKEN, TJSONValue(GetProgressToken.Clone));
     Params.AddPair('progress', TJSONNumber.Create(Progress));
     if Total >= 0 then
@@ -404,8 +402,6 @@ begin
 end;
 
 procedure TMCPRequestContext.LogJson(const Level: string; const Data: TJSONValue; const Logger: string);
-const
-  JSON_RPC_VERSION = '2.0';
 begin
   var Threshold := GetLogLevel;
   var Wanted := Assigned(FSink) and (Threshold <> '') and not IsCancelled
@@ -418,10 +414,10 @@ begin
 
   var Notification := TJSONObject.Create;
   try
-    Notification.AddPair('jsonrpc', JSON_RPC_VERSION);
-    Notification.AddPair('method', MCP_METHOD_NOTIFICATIONS_MESSAGE);
+    Notification.AddPair(MCP_KEY_JSONRPC, JSONRPC_VERSION);
+    Notification.AddPair(MCP_KEY_METHOD, MCP_METHOD_NOTIFICATIONS_MESSAGE);
     var Params := TJSONObject.Create;
-    Notification.AddPair('params', Params);
+    Notification.AddPair(MCP_KEY_PARAMS, Params);
     Params.AddPair('level', Level);
     if Logger <> '' then
       Params.AddPair('logger', Logger);

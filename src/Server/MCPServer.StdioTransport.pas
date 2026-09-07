@@ -89,6 +89,10 @@ implementation
 uses
   MCPServer.Errors;
 
+const
+  REASON_STDIN_CLOSED = 'stdin closed';
+
+
 type
   TMCPStdioWorker = class(TThread)
   strict private
@@ -319,13 +323,13 @@ begin
     if Message is TJSONObject then
     begin
       var Request := TJSONObject(Message);
-      var RequestId := TMCPRequestId.FromJson(Request.GetValue('id'));
-      var MethodValue := Request.GetValue('method');
+      var RequestId := TMCPRequestId.FromJson(Request.GetValue(MCP_KEY_ID));
+      var MethodValue := Request.GetValue(MCP_KEY_METHOD);
       var Method := '';
       if MethodValue is TJSONString then
         Method := TJSONString(MethodValue).Value;
 
-      if RequestId.IsPresent and (Method <> '') and (Method <> 'ping') then
+      if RequestId.IsPresent and (Method <> '') and (Method <> MCP_METHOD_PING) then
       begin
         if not FTracker.Reserve(RequestId) then
         begin
@@ -368,7 +372,7 @@ end;
 
 procedure TMCPStdioTransport.ProcessQueued(const Message: TJSONValue);
 begin
-  var RequestId := TMCPRequestId.FromJson(TJSONObject(Message).GetValue('id'));
+  var RequestId := TMCPRequestId.FromJson(TJSONObject(Message).GetValue(MCP_KEY_ID));
   try
     var Outcome := FJsonRpcProcessor.ProcessRequestEx(Message, Hints);
     if Outcome.Cancelled then
@@ -408,7 +412,7 @@ begin
   var Deadline := TThread.GetTickCount64 + UInt64(FShutdownDrainMs);
   repeat
     if Assigned(Hub) then
-      Hub.CloseAll('stdin closed');
+      Hub.CloseAll(REASON_STDIN_CLOSED);
     if AtomicCmpExchange(FListeners, 0, 0) = 0 then
       Break;
     Sleep(LISTENER_POLL_MS);
@@ -460,7 +464,7 @@ begin
   const Drained = (FWorkersDone.WaitFor(Cardinal(FShutdownDrainMs)) = TWaitResult.wrSignaled);
   if not Drained then
   begin
-    FTracker.CancelAll('stdin closed');
+    FTracker.CancelAll(REASON_STDIN_CLOSED);
     FWorkersDone.WaitFor(SHUTDOWN_CANCEL_GRACE_MS);
   end;
   CloseSubscriptions;

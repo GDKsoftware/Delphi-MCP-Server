@@ -46,9 +46,6 @@ uses
   MCPServer.RequestContext,
   MCPServer.Errors;
 
-const
-  CACHE_SCOPE_PUBLIC = 'public';
-
 { TMCPCoreManager }
 
 constructor TMCPCoreManager.Create(ASettings: TMCPSettings);
@@ -74,10 +71,10 @@ end;
 
 function TMCPCoreManager.HandlesMethod(const Method: string): Boolean;
 begin
-  Result := (Method = 'initialize') or
-            (Method = 'notifications/initialized') or
-            (Method = 'ping') or
-            (Method = 'server/discover');
+  Result := (Method = MCP_METHOD_INITIALIZE) or
+            (Method = MCP_METHOD_NOTIFICATIONS_INITIALIZED) or
+            (Method = MCP_METHOD_PING) or
+            (Method = MCP_METHOD_SERVER_DISCOVER);
 end;
 
 function TMCPCoreManager.ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
@@ -88,16 +85,16 @@ end;
 function TMCPCoreManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
   const Context: IMCPRequestContext): TValue;
 begin
-  if Method = 'initialize' then
+  if Method = MCP_METHOD_INITIALIZE then
     Result := Initialize(Params, Context)
-  else if Method = 'notifications/initialized' then
+  else if Method = MCP_METHOD_NOTIFICATIONS_INITIALIZED then
   begin
     TLogger.Info('MCP Initialized notification received');
     Result := TValue.Empty;
   end
-  else if Method = 'ping' then
+  else if Method = MCP_METHOD_PING then
     Result := Ping
-  else if Method = 'server/discover' then
+  else if Method = MCP_METHOD_SERVER_DISCOVER then
     Result := Discover(Context)
   else
     raise EMCPError.MethodNotFound(Method);
@@ -106,12 +103,12 @@ end;
 function TMCPCoreManager.BuildServerInfo: TJSONObject;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('name', FSettings.ServerName);
-  Result.AddPair('version', FSettings.ServerVersion);
+  Result.AddPair(MCP_KEY_NAME, FSettings.ServerName);
+  Result.AddPair(MCP_KEY_VERSION, FSettings.ServerVersion);
   if FSettings.ServerTitle <> '' then
-    Result.AddPair('title', FSettings.ServerTitle);
+    Result.AddPair(MCP_KEY_TITLE, FSettings.ServerTitle);
   if FSettings.ServerDescription <> '' then
-    Result.AddPair('description', FSettings.ServerDescription);
+    Result.AddPair(MCP_KEY_DESCRIPTION, FSettings.ServerDescription);
   if FSettings.ServerWebsiteUrl <> '' then
     Result.AddPair('websiteUrl', FSettings.ServerWebsiteUrl);
 end;
@@ -136,8 +133,8 @@ begin
   if not (ClientInfo is TJSONObject) then
     Exit;
 
-  var ClientName := TJSONObject(ClientInfo).GetValue('name');
-  var ClientVersion := TJSONObject(ClientInfo).GetValue('version');
+  var ClientName := TJSONObject(ClientInfo).GetValue(MCP_KEY_NAME);
+  var ClientVersion := TJSONObject(ClientInfo).GetValue(MCP_KEY_VERSION);
   if Assigned(ClientName) and Assigned(ClientVersion) then
     TLogger.Info(Format('Client: %s v%s', [ClientName.Value, ClientVersion.Value]));
 end;
@@ -165,7 +162,7 @@ begin
     var Requested := '';
     if Assigned(Params) then
     begin
-      var RequestedValue := Params.GetValue('protocolVersion');
+      var RequestedValue := Params.GetValue(MCP_KEY_PROTOCOL_VERSION);
       if RequestedValue is TJSONString then
         Requested := TJSONString(RequestedValue).Value;
     end;
@@ -175,16 +172,16 @@ begin
   if Assigned(Params) then
   begin
     LogClientInfo(Params.GetValue('clientInfo'));
-    WarnAboutDeprecatedClientCapabilities(Params.GetValue('capabilities'));
+    WarnAboutDeprecatedClientCapabilities(Params.GetValue(MCP_KEY_CAPABILITIES));
   end;
 
   var ResultJSON := TJSONObject.Create;
   try
-    ResultJSON.AddPair('protocolVersion', Negotiated);
-    ResultJSON.AddPair('capabilities', BuildCapabilities(TMCPProtocolEra.Legacy));
+    ResultJSON.AddPair(MCP_KEY_PROTOCOL_VERSION, Negotiated);
+    ResultJSON.AddPair(MCP_KEY_CAPABILITIES, BuildCapabilities(TMCPProtocolEra.Legacy));
     ResultJSON.AddPair('serverInfo', BuildServerInfo);
     if FSettings.Instructions <> '' then
-      ResultJSON.AddPair('instructions', FSettings.Instructions);
+      ResultJSON.AddPair(MCP_KEY_INSTRUCTIONS, FSettings.Instructions);
 
     if Assigned(Context) and Assigned(Context.LegacySession) then
       Context.LegacySession.ProtocolVersion := Negotiated;
@@ -203,18 +200,18 @@ begin
 
   var ResultJSON := TJSONObject.Create;
   try
-    ResultJSON.AddPair('resultType', 'complete');
+    ResultJSON.AddPair(MCP_KEY_RESULT_TYPE, 'complete');
     ResultJSON.AddPair('supportedVersions', SupportedVersions);
-    ResultJSON.AddPair('capabilities', BuildCapabilities(TMCPProtocolEra.Modern));
+    ResultJSON.AddPair(MCP_KEY_CAPABILITIES, BuildCapabilities(TMCPProtocolEra.Modern));
 
     var Meta := TJSONObject.Create;
-    ResultJSON.AddPair('_meta', Meta);
+    ResultJSON.AddPair(MCP_KEY_META, Meta);
     Meta.AddPair(MCP_META_SERVER_INFO, BuildServerInfo);
 
     if FSettings.Instructions <> '' then
-      ResultJSON.AddPair('instructions', FSettings.Instructions);
-    ResultJSON.AddPair('ttlMs', TJSONNumber.Create(FSettings.DiscoverTtlMs));
-    ResultJSON.AddPair('cacheScope', CACHE_SCOPE_PUBLIC);
+      ResultJSON.AddPair(MCP_KEY_INSTRUCTIONS, FSettings.Instructions);
+    ResultJSON.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FSettings.DiscoverTtlMs));
+    ResultJSON.AddPair(MCP_KEY_CACHE_SCOPE, MCP_CACHE_SCOPE_PUBLIC);
 
     Result := TValue.From<TJSONObject>(ResultJSON);
   except

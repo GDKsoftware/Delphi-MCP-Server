@@ -52,6 +52,10 @@ uses
   System.DateUtils,
   MCPServer.Types;
 
+const
+  MESSAGE_EXPECTED_INTEGER = 'expected an integer';
+
+
 { TMCPSerializer }
 
 class constructor TMCPSerializer.Create;
@@ -224,10 +228,10 @@ begin
     tkInteger, tkInt64:
       begin
         if not (JsonValue is TJSONNumber) then
-          raise EArgumentException.Create('expected an integer');
+          raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
         var Number := TJSONNumber(JsonValue);
         if Frac(Number.AsDouble) <> 0 then
-          raise EArgumentException.Create('expected an integer');
+          raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
         if RttiType.TypeKind = tkInt64 then
           Result := Number.AsInt64
         else

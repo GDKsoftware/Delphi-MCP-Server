@@ -73,6 +73,12 @@ uses
   MCPServer.Registration;
 
 const
+  ROLE_USER = 'user';
+  PROMPT_SIMPLE = 'test_simple_prompt';
+  PROMPT_WITH_ARGUMENTS = 'test_prompt_with_arguments';
+  PROMPT_WITH_EMBEDDED_RESOURCE = 'test_prompt_with_embedded_resource';
+  PROMPT_WITH_IMAGE = 'test_prompt_with_image';
+  PROMPT_INPUT_REQUIRED = 'test_input_required_result_prompt';
   KEY_USER_CONTEXT = 'user_context';
   FIELD_CONTEXT = 'context';
 
@@ -81,13 +87,13 @@ const
 constructor TSimplePrompt.Create;
 begin
   inherited;
-  FName := 'test_simple_prompt';
+  FName := PROMPT_SIMPLE;
   FDescription := 'A simple prompt with no arguments';
 end;
 
 function TSimplePrompt.ExecuteWithParams(const Params: TNoParams; Messages: TMCPPromptMessages): string;
 begin
-  Messages.AddText('user', 'This is a simple prompt for testing.');
+  Messages.AddText(ROLE_USER, 'This is a simple prompt for testing.');
   Result := 'Simple prompt';
 end;
 
@@ -96,14 +102,14 @@ end;
 constructor TArgumentsPrompt.Create;
 begin
   inherited;
-  FName := 'test_prompt_with_arguments';
+  FName := PROMPT_WITH_ARGUMENTS;
   FDescription := 'A prompt that substitutes its arguments into the message';
 end;
 
 function TArgumentsPrompt.ExecuteWithParams(const Params: TArgumentsPromptParams;
   Messages: TMCPPromptMessages): string;
 begin
-  Messages.AddText('user', Format('Prompt with arguments: arg1=''%s'', arg2=''%s''', [Params.Arg1, Params.Arg2]));
+  Messages.AddText(ROLE_USER, Format('Prompt with arguments: arg1=''%s'', arg2=''%s''', [Params.Arg1, Params.Arg2]));
   Result := 'Prompt with arguments';
 end;
 
@@ -112,15 +118,15 @@ end;
 constructor TEmbeddedResourcePrompt.Create;
 begin
   inherited;
-  FName := 'test_prompt_with_embedded_resource';
+  FName := PROMPT_WITH_EMBEDDED_RESOURCE;
   FDescription := 'A prompt that embeds the resource named by its argument';
 end;
 
 function TEmbeddedResourcePrompt.ExecuteWithParams(const Params: TEmbeddedResourcePromptParams;
   Messages: TMCPPromptMessages): string;
 begin
-  Messages.AddEmbeddedText('user', Params.ResourceUri, 'text/plain', 'Embedded resource content for testing.');
-  Messages.AddText('user', 'Please process the embedded resource above.');
+  Messages.AddEmbeddedText(ROLE_USER, Params.ResourceUri, 'text/plain', 'Embedded resource content for testing.');
+  Messages.AddText(ROLE_USER, 'Please process the embedded resource above.');
   Result := 'Prompt with embedded resource';
 end;
 
@@ -129,14 +135,14 @@ end;
 constructor TImagePrompt.Create;
 begin
   inherited;
-  FName := 'test_prompt_with_image';
+  FName := PROMPT_WITH_IMAGE;
   FDescription := 'A prompt that returns an image content block';
 end;
 
 function TImagePrompt.ExecuteWithParams(const Params: TNoParams; Messages: TMCPPromptMessages): string;
 begin
-  Messages.AddImage('user', SAMPLE_PNG_BASE64, 'image/png');
-  Messages.AddText('user', 'Please analyze the image above.');
+  Messages.AddImage(ROLE_USER, SAMPLE_PNG_BASE64, 'image/png');
+  Messages.AddText(ROLE_USER, 'Please analyze the image above.');
   Result := 'Prompt with image';
 end;
 
@@ -145,7 +151,7 @@ end;
 constructor TInputRequiredPrompt.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_prompt';
+  FName := PROMPT_INPUT_REQUIRED;
   FDescription := 'Asks the client which context to use before it renders';
 end;
 
@@ -161,32 +167,32 @@ begin
     raise EMCPInputRequired.Create(TMCPInputRequests.Create.AddElicitation(KEY_USER_CONTEXT,
       'What context should the prompt use?', TMCPInputRequests.FieldSchema(FIELD_CONTEXT)));
 
-  Messages.AddText('user', Format('Use this context: %s', [UserContext]));
+  Messages.AddText(ROLE_USER, Format('Use this context: %s', [UserContext]));
   Result := 'Prompt with client-provided context';
 end;
 
 initialization
-  TMCPRegistry.RegisterPrompt('test_simple_prompt',
+  TMCPRegistry.RegisterPrompt(PROMPT_SIMPLE,
     function: IMCPPrompt
     begin
       Result := TSimplePrompt.Create;
     end);
-  TMCPRegistry.RegisterPrompt('test_prompt_with_arguments',
+  TMCPRegistry.RegisterPrompt(PROMPT_WITH_ARGUMENTS,
     function: IMCPPrompt
     begin
       Result := TArgumentsPrompt.Create;
     end);
-  TMCPRegistry.RegisterPrompt('test_prompt_with_embedded_resource',
+  TMCPRegistry.RegisterPrompt(PROMPT_WITH_EMBEDDED_RESOURCE,
     function: IMCPPrompt
     begin
       Result := TEmbeddedResourcePrompt.Create;
     end);
-  TMCPRegistry.RegisterPrompt('test_prompt_with_image',
+  TMCPRegistry.RegisterPrompt(PROMPT_WITH_IMAGE,
     function: IMCPPrompt
     begin
       Result := TImagePrompt.Create;
     end);
-  TMCPRegistry.RegisterPrompt('test_input_required_result_prompt',
+  TMCPRegistry.RegisterPrompt(PROMPT_INPUT_REQUIRED,
     function: IMCPPrompt
     begin
       Result := TInputRequiredPrompt.Create;

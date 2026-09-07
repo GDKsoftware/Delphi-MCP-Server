@@ -11,8 +11,6 @@ uses
 
 type
   TMCPHttpResponseStream = class(TInterfacedObject, IMCPMessageSink, IMCPRequestTracker, IMCPKeepAlive)
-  public
-    const MEDIA_TYPE_EVENT_STREAM = 'text/event-stream';
   strict private
     FConnection: TIdContext;
     FResponseInfo: TIdHTTPResponseInfo;
@@ -55,8 +53,6 @@ const
   SSE_EVENT_SUFFIX = #10#10;
   CHUNK_TERMINATOR = '0'#13#10#13#10;
   SSE_KEEP_ALIVE_COMMENT = ': keep-alive'#10#10;
-  CHARSET_UTF8 = 'utf-8';
-  HTTP_STATUS_OK = 200;
 
 { TMCPHttpResponseStream }
 

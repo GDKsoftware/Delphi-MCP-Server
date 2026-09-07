@@ -37,12 +37,16 @@ implementation
 uses
   MCPServer.Registration;
 
+const
+  TOOL_NAME = 'list_files';
+
+
 { TListFilesTool }
 
 constructor TListFilesTool.Create;
 begin
   inherited;
-  FName := 'list_files';
+  FName := TOOL_NAME;
   FDescription := 'List files in a directory';
 end;
 
@@ -96,7 +100,7 @@ begin
 end;
 
 initialization
-  TMCPRegistry.RegisterTool('list_files',
+  TMCPRegistry.RegisterTool(TOOL_NAME,
     function: IMCPTool
     begin
       Result := TListFilesTool.Create;

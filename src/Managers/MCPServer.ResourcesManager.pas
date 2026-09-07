@@ -74,6 +74,10 @@ uses
   MCPServer.Mrtr,
   MCPServer.ContentBlocks;
 
+const
+  CAPABILITY_NAME = 'resources';
+
+
 { TMCPResourcesManager }
 
 constructor TMCPResourcesManager.Create;
@@ -100,23 +104,23 @@ end;
 
 function TMCPResourcesManager.GetCapabilityName: string;
 begin
-  Result := 'resources';
+  Result := CAPABILITY_NAME;
 end;
 
 function TMCPResourcesManager.HandlesMethod(const Method: string): Boolean;
 begin
-  Result := (Method = 'resources/list') or
-            (Method = 'resources/read') or
-            (Method = 'resources/templates/list');
+  Result := (Method = MCP_METHOD_RESOURCES_LIST) or
+            (Method = MCP_METHOD_RESOURCES_READ) or
+            (Method = MCP_METHOD_RESOURCES_TEMPLATES_LIST);
 end;
 
 procedure TMCPResourcesManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 begin
   var Announces := Assigned(FChangeNotifier) and (Era = TMCPProtocolEra.Modern);
   var Resources := TJSONObject.Create;
-  Resources.AddPair('subscribe', TJSONBool.Create(Announces));
-  Resources.AddPair('listChanged', TJSONBool.Create(Announces));
-  Capabilities.AddPair('resources', Resources);
+  Resources.AddPair(MCP_KEY_SUBSCRIBE, TJSONBool.Create(Announces));
+  Resources.AddPair(MCP_KEY_LIST_CHANGED, TJSONBool.Create(Announces));
+  Capabilities.AddPair(CAPABILITY_NAME, Resources);
 end;
 
 function TMCPResourcesManager.EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
@@ -135,11 +139,11 @@ end;
 function TMCPResourcesManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
   const Context: IMCPRequestContext): TValue;
 begin
-  if Method = 'resources/list' then
+  if Method = MCP_METHOD_RESOURCES_LIST then
     Result := ListResources(Params, EraOf(Context))
-  else if Method = 'resources/read' then
+  else if Method = MCP_METHOD_RESOURCES_READ then
     Result := ReadResource(Params, EraOf(Context))
-  else if Method = 'resources/templates/list' then
+  else if Method = MCP_METHOD_RESOURCES_TEMPLATES_LIST then
     Result := ListResourceTemplates(Params, EraOf(Context))
   else
     raise EMCPError.MethodNotFound(Method);
@@ -290,7 +294,7 @@ end;
 
 procedure TMCPResourcesManager.CheckCursor(const Params: TJSONObject);
 begin
-  if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
+  if Assigned(Params) and Assigned(Params.GetValue(MCP_KEY_CURSOR)) then
     raise EMCPError.InvalidParams('Invalid cursor');
 end;
 
@@ -298,8 +302,8 @@ procedure TMCPResourcesManager.AddListCacheHints(const ResultJSON: TJSONObject; 
 begin
   if Era = TMCPProtocolEra.Modern then
   begin
-    ResultJSON.AddPair('ttlMs', TJSONNumber.Create(FListTtlMs));
-    ResultJSON.AddPair('cacheScope', FListCacheScope);
+    ResultJSON.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FListTtlMs));
+    ResultJSON.AddPair(MCP_KEY_CACHE_SCOPE, FListCacheScope);
   end;
 end;
 
@@ -308,24 +312,24 @@ var
   Metadata: IMCPResourceMetadata;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('uri', Resource.URI);
-  Result.AddPair('name', Resource.Name);
+  Result.AddPair(MCP_KEY_URI, Resource.URI);
+  Result.AddPair(MCP_KEY_NAME, Resource.Name);
 
   if Supports(Resource, IMCPResourceMetadata, Metadata) then
   begin
     if Metadata.Title <> '' then
-      Result.AddPair('title', Metadata.Title);
+      Result.AddPair(MCP_KEY_TITLE, Metadata.Title);
   end;
   if Resource.Description <> '' then
-    Result.AddPair('description', Resource.Description);
+    Result.AddPair(MCP_KEY_DESCRIPTION, Resource.Description);
   if Resource.MimeType <> '' then
-    Result.AddPair('mimeType', Resource.MimeType);
+    Result.AddPair(MCP_KEY_MIME_TYPE, Resource.MimeType);
   if Assigned(Metadata) then
   begin
     if Metadata.Size >= 0 then
       Result.AddPair('size', TJSONNumber.Create(Metadata.Size));
     if Assigned(Metadata.Annotations) then
-      Result.AddPair('annotations', TJSONObject(Metadata.Annotations.Clone));
+      Result.AddPair(MCP_KEY_ANNOTATIONS, TJSONObject(Metadata.Annotations.Clone));
   end;
 end;
 
@@ -333,13 +337,13 @@ function TMCPResourcesManager.CreateResourceTemplateJSON(const Template: IMCPRes
 begin
   Result := TJSONObject.Create;
   Result.AddPair('uriTemplate', Template.UriTemplate);
-  Result.AddPair('name', Template.Name);
+  Result.AddPair(MCP_KEY_NAME, Template.Name);
   if Template.Title <> '' then
-    Result.AddPair('title', Template.Title);
+    Result.AddPair(MCP_KEY_TITLE, Template.Title);
   if Template.Description <> '' then
-    Result.AddPair('description', Template.Description);
+    Result.AddPair(MCP_KEY_DESCRIPTION, Template.Description);
   if Template.MimeType <> '' then
-    Result.AddPair('mimeType', Template.MimeType);
+    Result.AddPair(MCP_KEY_MIME_TYPE, Template.MimeType);
 end;
 
 function TMCPResourcesManager.CreateContentsItem(const Resource: IMCPResource): TJSONObject;
@@ -348,14 +352,14 @@ var
 begin
   Result := TJSONObject.Create;
   try
-    Result.AddPair('uri', Resource.URI);
+    Result.AddPair(MCP_KEY_URI, Resource.URI);
     if Resource.MimeType <> '' then
-      Result.AddPair('mimeType', Resource.MimeType);
+      Result.AddPair(MCP_KEY_MIME_TYPE, Resource.MimeType);
 
     if Supports(Resource, IMCPBinaryResource, Binary) then
       Result.AddPair('blob', TMCPContentBlock.EncodeBlob(Binary.ReadBinary))
     else
-      Result.AddPair('text', Resource.Read);
+      Result.AddPair(MCP_KEY_TEXT, Resource.Read);
   except
     Result.Free;
     raise;
@@ -375,7 +379,7 @@ begin
   var ResultJSON := TJSONObject.Create;
   try
     var ResourcesArray := TJSONArray.Create;
-    ResultJSON.AddPair('resources', ResourcesArray);
+    ResultJSON.AddPair(CAPABILITY_NAME, ResourcesArray);
     FLock.Enter;
     try
       for var URI in FOrder do
@@ -406,7 +410,7 @@ var
 begin
   if not Assigned(Params) then
     raise EMCPError.InvalidParams('params.uri is required');
-  var URIValue := Params.GetValue('uri');
+  var URIValue := Params.GetValue(MCP_KEY_URI);
   if not (URIValue is TJSONString) or (TJSONString(URIValue).Value = '') then
     raise EMCPError.InvalidParams('params.uri is required and must be a non-empty string');
   var URI := TJSONString(URIValue).Value;
@@ -443,8 +447,8 @@ begin
         TtlMs := Cacheable.TtlMs;
         CacheScope := Cacheable.CacheScope;
       end;
-      ResultJSON.AddPair('ttlMs', TJSONNumber.Create(TtlMs));
-      ResultJSON.AddPair('cacheScope', CacheScope);
+      ResultJSON.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(TtlMs));
+      ResultJSON.AddPair(MCP_KEY_CACHE_SCOPE, CacheScope);
     end;
 
     Result := TValue.From<TJSONObject>(ResultJSON);

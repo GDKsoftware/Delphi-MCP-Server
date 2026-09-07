@@ -119,11 +119,11 @@ function TMCPPromptMessages.AddMessage(const Role: string; const Content: TJSONO
 begin
   var Message := TJSONObject.Create;
   Message.AddPair('role', Role);
-  Message.AddPair('content', Content);
+  Message.AddPair(MCP_KEY_CONTENT, Content);
   FMessages.AddElement(Message);
   if Assigned(FPendingAnnotations) then
   begin
-    Content.AddPair('annotations', FPendingAnnotations);
+    Content.AddPair(MCP_KEY_ANNOTATIONS, FPendingAnnotations);
     FPendingAnnotations := nil;
   end;
   Result := Self;
@@ -189,7 +189,7 @@ begin
   if HasMessage then
   begin
     const LastMessage = TJSONObject(FMessages.Items[FMessages.Count - 1]);
-    TJSONObject(LastMessage.GetValue('content')).AddPair('annotations', Annotations);
+    TJSONObject(LastMessage.GetValue(MCP_KEY_CONTENT)).AddPair(MCP_KEY_ANNOTATIONS, Annotations);
   end
   else
   begin

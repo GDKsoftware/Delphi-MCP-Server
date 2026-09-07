@@ -78,7 +78,6 @@ uses
   MCPServer.Logger;
 
 const
-  JSONRPC_VERSION = '2.0';
   FILTER_TOOLS = 'toolsListChanged';
   FILTER_PROMPTS = 'promptsListChanged';
   FILTER_RESOURCES = 'resourcesListChanged';
@@ -213,12 +212,12 @@ end;
 function TMCPSubscription.Notification(const Method: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('jsonrpc', JSONRPC_VERSION);
-  Result.AddPair('method', Method);
+  Result.AddPair(MCP_KEY_JSONRPC, JSONRPC_VERSION);
+  Result.AddPair(MCP_KEY_METHOD, Method);
   var Params := TJSONObject.Create;
-  Result.AddPair('params', Params);
+  Result.AddPair(MCP_KEY_PARAMS, Params);
   var Meta := TJSONObject.Create;
-  Params.AddPair('_meta', Meta);
+  Params.AddPair(MCP_KEY_META, Meta);
   Meta.AddPair(MCP_META_SUBSCRIPTION_ID, TJSONValue(FId.Clone));
 end;
 
@@ -277,7 +276,7 @@ procedure TMCPSubscriptionsManager.Acknowledge(const Subscription: IMCPSubscript
 begin
   var Notification := Subscription.Notification(MCP_METHOD_NOTIFICATIONS_SUBSCRIPTIONS_ACKNOWLEDGED);
   try
-    TJSONObject(Notification.GetValue('params')).AddPair(PARAM_NOTIFICATIONS, Subscription.Filter.ToJson);
+    TJSONObject(Notification.GetValue(MCP_KEY_PARAMS)).AddPair(PARAM_NOTIFICATIONS, Subscription.Filter.ToJson);
     Subscription.Sink.Send(Notification.ToJSON);
   finally
     Notification.Free;
@@ -289,7 +288,7 @@ begin
   var Notification := Subscription.Notification('');
   try
     Result := TJSONObject.Create;
-    Result.AddPair('_meta', TJSONObject(Notification.FindValue('params._meta').Clone));
+    Result.AddPair(MCP_KEY_META, TJSONObject(Notification.FindValue('params._meta').Clone));
   finally
     Notification.Free;
   end;
@@ -361,7 +360,7 @@ begin
     var Notification := Subscription.Notification(Method);
     try
       if Uri <> '' then
-        TJSONObject(Notification.GetValue('params')).AddPair('uri', Uri);
+        TJSONObject(Notification.GetValue(MCP_KEY_PARAMS)).AddPair(MCP_KEY_URI, Uri);
       Subscription.Sink.Send(Notification.ToJSON);
     finally
       Notification.Free;

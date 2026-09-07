@@ -58,6 +58,10 @@ const
 
 implementation
 
+const
+  KEY_REQUIRED_SCOPE = 'requiredScope';
+  MESSAGE_RESOURCE_NOT_FOUND = 'Resource not found';
+
 { EMCPError }
 
 constructor EMCPError.Create(ACode: Integer; const AMessage: string; AData: TJSONValue; AHttpStatus: Integer);
@@ -136,14 +140,14 @@ end;
 class function EMCPError.UnknownTool(const Name: string): EMCPError;
 begin
   var Data := TJSONObject.Create;
-  Data.AddPair('name', Name);
+  Data.AddPair(MCP_KEY_NAME, Name);
   Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown tool: ' + Name, Data);
 end;
 
 class function EMCPError.UnknownPrompt(const Name: string): EMCPError;
 begin
   var Data := TJSONObject.Create;
-  Data.AddPair('name', Name);
+  Data.AddPair(MCP_KEY_NAME, Name);
   Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown prompt: ' + Name, Data);
 end;
 
@@ -151,24 +155,24 @@ function EMCPError.RequiredScope: string;
 begin
   Result := '';
   if Data is TJSONObject then
-    Result := TJSONObject(Data).GetValue<string>('requiredScope', '');
+    Result := TJSONObject(Data).GetValue<string>(KEY_REQUIRED_SCOPE, '');
 end;
 
 class function EMCPError.InsufficientScope(const Scope: string): EMCPError;
 begin
   var Data := TJSONObject.Create;
-  Data.AddPair('requiredScope', Scope);
+  Data.AddPair(KEY_REQUIRED_SCOPE, Scope);
   Result := EMCPError.Create(JSONRPC_INVALID_REQUEST, Format('The %s scope is required', [Scope]), Data, HTTP_STATUS_FORBIDDEN);
 end;
 
 class function EMCPError.ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
 begin
   var Data := TJSONObject.Create;
-  Data.AddPair('uri', Uri);
+  Data.AddPair(MCP_KEY_URI, Uri);
   if Era = TMCPProtocolEra.Modern then
-    Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Resource not found', Data)
+    Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, MESSAGE_RESOURCE_NOT_FOUND, Data)
   else
-    Result := EMCPError.Create(MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY, 'Resource not found', Data);
+    Result := EMCPError.Create(MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY, MESSAGE_RESOURCE_NOT_FOUND, Data);
 end;
 
 end.

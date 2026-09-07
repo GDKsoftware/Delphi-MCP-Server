@@ -112,6 +112,15 @@ implementation
 uses
   MCPServer.Logger;
 
+const
+  SECTION_SERVER = 'Server';
+  SECTION_SECURITY = 'Security';
+  SECTION_AUTH = 'Auth';
+  SECTION_SSL = 'SSL';
+  SECTION_PROTOCOL = 'Protocol';
+  SECTION_CORS = 'CORS';
+
+
 { TMCPSettings }
 
 constructor TMCPSettings.Create(const ASettingsFile: string; const ACreateFile: Boolean);
@@ -228,57 +237,57 @@ var
 begin
   IniFile := TIniFile.Create(FSettingsFile);
   try
-    IniFile.WriteString('Server', '; Server configuration', '');
-    IniFile.WriteInteger('Server', 'Port', FPort);
-    IniFile.WriteString('Server', 'Host', FHost);
-    IniFile.WriteString('Server', 'Name', FServerName);
-    IniFile.WriteString('Server', 'Version', FServerVersion);
-    IniFile.WriteString('Server', 'Endpoint', FEndpoint);
-    IniFile.WriteString('Server', '; Optional identity reported to clients', '');
-    IniFile.WriteString('Server', 'Title', FServerTitle);
-    IniFile.WriteString('Server', 'Description', FServerDescription);
-    IniFile.WriteString('Server', 'WebsiteUrl', FServerWebsiteUrl);
-    IniFile.WriteString('Server', 'Instructions', FInstructions);
-    IniFile.WriteString('Server', '; Network: BindAddress empty = derived from Host (loopback for localhost)', '');
-    IniFile.WriteString('Server', 'BindAddress', FBindAddress);
-    IniFile.WriteString('Server', 'EndpointInfoPath', FEndpointInfoPath);
-    IniFile.WriteInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
-    IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
-    IniFile.WriteInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
-    IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
-    IniFile.WriteString('Server', '; Serve logs://recent, logs://{level} and server://status (0 = keep diagnostics private)', '');
-    IniFile.WriteBool('Server', 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
+    IniFile.WriteString(SECTION_SERVER, '; Server configuration', '');
+    IniFile.WriteInteger(SECTION_SERVER, 'Port', FPort);
+    IniFile.WriteString(SECTION_SERVER, 'Host', FHost);
+    IniFile.WriteString(SECTION_SERVER, 'Name', FServerName);
+    IniFile.WriteString(SECTION_SERVER, 'Version', FServerVersion);
+    IniFile.WriteString(SECTION_SERVER, 'Endpoint', FEndpoint);
+    IniFile.WriteString(SECTION_SERVER, '; Optional identity reported to clients', '');
+    IniFile.WriteString(SECTION_SERVER, 'Title', FServerTitle);
+    IniFile.WriteString(SECTION_SERVER, 'Description', FServerDescription);
+    IniFile.WriteString(SECTION_SERVER, 'WebsiteUrl', FServerWebsiteUrl);
+    IniFile.WriteString(SECTION_SERVER, 'Instructions', FInstructions);
+    IniFile.WriteString(SECTION_SERVER, '; Network: BindAddress empty = derived from Host (loopback for localhost)', '');
+    IniFile.WriteString(SECTION_SERVER, 'BindAddress', FBindAddress);
+    IniFile.WriteString(SECTION_SERVER, 'EndpointInfoPath', FEndpointInfoPath);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxJsonDepth', FMaxJsonDepth);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxConcurrentRequests', FMaxConcurrentRequests);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxConnections', FMaxConnections);
+    IniFile.WriteString(SECTION_SERVER, '; Serve logs://recent, logs://{level} and server://status (0 = keep diagnostics private)', '');
+    IniFile.WriteBool(SECTION_SERVER, 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
 
-    IniFile.WriteString('Security', '; Origins allowed next to the loopback origins (empty = [CORS] AllowedOrigins)', '');
-    IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
-    IniFile.WriteString('Security', '; Host header values accepted, comma-separated host[:port] (empty = any)', '');
-    IniFile.WriteString('Security', 'AllowedHosts', FAllowedHosts);
-    IniFile.WriteString('Security', '; Secret that signs requestState tokens (empty = random per process)', '');
-    IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
-    IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
+    IniFile.WriteString(SECTION_SECURITY, '; Origins allowed next to the loopback origins (empty = [CORS] AllowedOrigins)', '');
+    IniFile.WriteString(SECTION_SECURITY, 'AllowedOrigins', FSecurityAllowedOrigins);
+    IniFile.WriteString(SECTION_SECURITY, '; Host header values accepted, comma-separated host[:port] (empty = any)', '');
+    IniFile.WriteString(SECTION_SECURITY, 'AllowedHosts', FAllowedHosts);
+    IniFile.WriteString(SECTION_SECURITY, '; Secret that signs requestState tokens (empty = random per process)', '');
+    IniFile.WriteString(SECTION_SECURITY, 'RequestStateKey', FRequestStateKey);
+    IniFile.WriteInteger(SECTION_SECURITY, 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
-    IniFile.WriteString('Auth', '; Bearer tokens accepted on the HTTP endpoint (comma-separated; empty = open server)', '');
-    IniFile.WriteString('Auth', 'BearerTokens', FBearerTokens);
-    IniFile.WriteString('Auth', '; OAuth authorization servers published in the protected resource metadata', '');
-    IniFile.WriteString('Auth', 'AuthorizationServers', FAuthorizationServers);
-    IniFile.WriteString('Auth', 'ResourceUri', FResourceUri);
-    IniFile.WriteString('Auth', 'ScopesSupported', FScopesSupported);
+    IniFile.WriteString(SECTION_AUTH, '; Bearer tokens accepted on the HTTP endpoint (comma-separated; empty = open server)', '');
+    IniFile.WriteString(SECTION_AUTH, 'BearerTokens', FBearerTokens);
+    IniFile.WriteString(SECTION_AUTH, '; OAuth authorization servers published in the protected resource metadata', '');
+    IniFile.WriteString(SECTION_AUTH, 'AuthorizationServers', FAuthorizationServers);
+    IniFile.WriteString(SECTION_AUTH, 'ResourceUri', FResourceUri);
+    IniFile.WriteString(SECTION_AUTH, 'ScopesSupported', FScopesSupported);
 
-    IniFile.WriteString('Protocol', '; Protocol options (1 = on, 0 = off)', '');
-    IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
-    IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
-    IniFile.WriteInteger('Protocol', 'DiscoverTtlMs', FDiscoverTtlMs);
+    IniFile.WriteString(SECTION_PROTOCOL, '; Protocol options (1 = on, 0 = off)', '');
+    IniFile.WriteBool(SECTION_PROTOCOL, 'LenientModernPing', FLenientModernPing);
+    IniFile.WriteBool(SECTION_PROTOCOL, 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
+    IniFile.WriteInteger(SECTION_PROTOCOL, 'DiscoverTtlMs', FDiscoverTtlMs);
 
-    IniFile.WriteString('CORS', '; Cross-Origin Resource Sharing configuration', '');
-    IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
-    IniFile.WriteString('CORS', '; Comma-separated list of allowed origins', '');
-    IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
+    IniFile.WriteString(SECTION_CORS, '; Cross-Origin Resource Sharing configuration', '');
+    IniFile.WriteBool(SECTION_CORS, 'Enabled', FCorsEnabled);
+    IniFile.WriteString(SECTION_CORS, '; Comma-separated list of allowed origins', '');
+    IniFile.WriteString(SECTION_CORS, 'AllowedOrigins', FCorsAllowedOrigins);
 
-    IniFile.WriteString('SSL', '; SSL/TLS configuration (optional)', '');
-    IniFile.WriteBool('SSL', 'Enabled', FSSLEnabled);
-    IniFile.WriteString('SSL', 'CertFile', FSSLCertFile);
-    IniFile.WriteString('SSL', 'KeyFile', FSSLKeyFile);
-    IniFile.WriteString('SSL', 'RootCertFile', FSSLRootCertFile);
+    IniFile.WriteString(SECTION_SSL, '; SSL/TLS configuration (optional)', '');
+    IniFile.WriteBool(SECTION_SSL, 'Enabled', FSSLEnabled);
+    IniFile.WriteString(SECTION_SSL, 'CertFile', FSSLCertFile);
+    IniFile.WriteString(SECTION_SSL, 'KeyFile', FSSLKeyFile);
+    IniFile.WriteString(SECTION_SSL, 'RootCertFile', FSSLRootCertFile);
   finally
     IniFile.Free;
   end;
@@ -293,44 +302,44 @@ begin
 
   IniFile := TIniFile.Create(FSettingsFile);
   try
-    FPort := IniFile.ReadInteger('Server', 'Port', FPort);
-    FHost := IniFile.ReadString('Server', 'Host', FHost);
-    FServerName := IniFile.ReadString('Server', 'Name', FServerName);
-    FServerVersion := IniFile.ReadString('Server', 'Version', FServerVersion);
-    FEndpoint := IniFile.ReadString('Server', 'Endpoint', FEndpoint);
-    FServerTitle := IniFile.ReadString('Server', 'Title', FServerTitle);
-    FServerDescription := IniFile.ReadString('Server', 'Description', FServerDescription);
-    FServerWebsiteUrl := IniFile.ReadString('Server', 'WebsiteUrl', FServerWebsiteUrl);
-    FInstructions := IniFile.ReadString('Server', 'Instructions', FInstructions);
-    FBindAddress := IniFile.ReadString('Server', 'BindAddress', FBindAddress);
-    FEndpointInfoPath := IniFile.ReadString('Server', 'EndpointInfoPath', FEndpointInfoPath);
-    FMaxRequestBodyBytes := IniFile.ReadInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
-    FMaxJsonDepth := IniFile.ReadInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
-    FMaxConcurrentRequests := IniFile.ReadInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
-    FMaxConnections := IniFile.ReadInteger('Server', 'MaxConnections', FMaxConnections);
+    FPort := IniFile.ReadInteger(SECTION_SERVER, 'Port', FPort);
+    FHost := IniFile.ReadString(SECTION_SERVER, 'Host', FHost);
+    FServerName := IniFile.ReadString(SECTION_SERVER, 'Name', FServerName);
+    FServerVersion := IniFile.ReadString(SECTION_SERVER, 'Version', FServerVersion);
+    FEndpoint := IniFile.ReadString(SECTION_SERVER, 'Endpoint', FEndpoint);
+    FServerTitle := IniFile.ReadString(SECTION_SERVER, 'Title', FServerTitle);
+    FServerDescription := IniFile.ReadString(SECTION_SERVER, 'Description', FServerDescription);
+    FServerWebsiteUrl := IniFile.ReadString(SECTION_SERVER, 'WebsiteUrl', FServerWebsiteUrl);
+    FInstructions := IniFile.ReadString(SECTION_SERVER, 'Instructions', FInstructions);
+    FBindAddress := IniFile.ReadString(SECTION_SERVER, 'BindAddress', FBindAddress);
+    FEndpointInfoPath := IniFile.ReadString(SECTION_SERVER, 'EndpointInfoPath', FEndpointInfoPath);
+    FMaxRequestBodyBytes := IniFile.ReadInteger(SECTION_SERVER, 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
+    FMaxJsonDepth := IniFile.ReadInteger(SECTION_SERVER, 'MaxJsonDepth', FMaxJsonDepth);
+    FMaxConcurrentRequests := IniFile.ReadInteger(SECTION_SERVER, 'MaxConcurrentRequests', FMaxConcurrentRequests);
+    FMaxConnections := IniFile.ReadInteger(SECTION_SERVER, 'MaxConnections', FMaxConnections);
 
-    FSecurityAllowedOrigins := IniFile.ReadString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
-    FAllowedHosts := IniFile.ReadString('Security', 'AllowedHosts', FAllowedHosts);
-    FExposeDiagnosticsResources := IniFile.ReadBool('Server', 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
-    FRequestStateKey := IniFile.ReadString('Security', 'RequestStateKey', FRequestStateKey);
-    FRequestStateTtlSeconds := IniFile.ReadInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
+    FSecurityAllowedOrigins := IniFile.ReadString(SECTION_SECURITY, 'AllowedOrigins', FSecurityAllowedOrigins);
+    FAllowedHosts := IniFile.ReadString(SECTION_SECURITY, 'AllowedHosts', FAllowedHosts);
+    FExposeDiagnosticsResources := IniFile.ReadBool(SECTION_SERVER, 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
+    FRequestStateKey := IniFile.ReadString(SECTION_SECURITY, 'RequestStateKey', FRequestStateKey);
+    FRequestStateTtlSeconds := IniFile.ReadInteger(SECTION_SECURITY, 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
-    FBearerTokens := IniFile.ReadString('Auth', 'BearerTokens', FBearerTokens);
-    FAuthorizationServers := IniFile.ReadString('Auth', 'AuthorizationServers', FAuthorizationServers);
-    FResourceUri := IniFile.ReadString('Auth', 'ResourceUri', FResourceUri);
-    FScopesSupported := IniFile.ReadString('Auth', 'ScopesSupported', FScopesSupported);
+    FBearerTokens := IniFile.ReadString(SECTION_AUTH, 'BearerTokens', FBearerTokens);
+    FAuthorizationServers := IniFile.ReadString(SECTION_AUTH, 'AuthorizationServers', FAuthorizationServers);
+    FResourceUri := IniFile.ReadString(SECTION_AUTH, 'ResourceUri', FResourceUri);
+    FScopesSupported := IniFile.ReadString(SECTION_AUTH, 'ScopesSupported', FScopesSupported);
 
-    FLenientModernPing := IniFile.ReadBool('Protocol', 'LenientModernPing', FLenientModernPing);
-    FDiscoverListsLegacyVersions := IniFile.ReadBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
-    FDiscoverTtlMs := IniFile.ReadInteger('Protocol', 'DiscoverTtlMs', FDiscoverTtlMs);
+    FLenientModernPing := IniFile.ReadBool(SECTION_PROTOCOL, 'LenientModernPing', FLenientModernPing);
+    FDiscoverListsLegacyVersions := IniFile.ReadBool(SECTION_PROTOCOL, 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
+    FDiscoverTtlMs := IniFile.ReadInteger(SECTION_PROTOCOL, 'DiscoverTtlMs', FDiscoverTtlMs);
 
-    FCorsEnabled := IniFile.ReadBool('CORS', 'Enabled', FCorsEnabled);
-    FCorsAllowedOrigins := IniFile.ReadString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
+    FCorsEnabled := IniFile.ReadBool(SECTION_CORS, 'Enabled', FCorsEnabled);
+    FCorsAllowedOrigins := IniFile.ReadString(SECTION_CORS, 'AllowedOrigins', FCorsAllowedOrigins);
 
-    FSSLEnabled := IniFile.ReadBool('SSL', 'Enabled', FSSLEnabled);
-    FSSLCertFile := IniFile.ReadString('SSL', 'CertFile', FSSLCertFile);
-    FSSLKeyFile := IniFile.ReadString('SSL', 'KeyFile', FSSLKeyFile);
-    FSSLRootCertFile := IniFile.ReadString('SSL', 'RootCertFile', FSSLRootCertFile);
+    FSSLEnabled := IniFile.ReadBool(SECTION_SSL, 'Enabled', FSSLEnabled);
+    FSSLCertFile := IniFile.ReadString(SECTION_SSL, 'CertFile', FSSLCertFile);
+    FSSLKeyFile := IniFile.ReadString(SECTION_SSL, 'KeyFile', FSSLKeyFile);
+    FSSLRootCertFile := IniFile.ReadString(SECTION_SSL, 'RootCertFile', FSSLRootCertFile);
 
     TLogger.Info('Settings loaded from: ' + FSettingsFile);
     TLogger.Info('Server: ' + Protocol + '://' + FHost + ':' + IntToStr(FPort));
@@ -354,44 +363,44 @@ var
 begin
   IniFile := TIniFile.Create(FSettingsFile);
   try
-    IniFile.WriteInteger('Server', 'Port', FPort);
-    IniFile.WriteString('Server', 'Host', FHost);
-    IniFile.WriteString('Server', 'Name', FServerName);
-    IniFile.WriteString('Server', 'Version', FServerVersion);
-    IniFile.WriteString('Server', 'Endpoint', FEndpoint);
-    IniFile.WriteString('Server', 'Title', FServerTitle);
-    IniFile.WriteString('Server', 'Description', FServerDescription);
-    IniFile.WriteString('Server', 'WebsiteUrl', FServerWebsiteUrl);
-    IniFile.WriteString('Server', 'Instructions', FInstructions);
-    IniFile.WriteString('Server', 'BindAddress', FBindAddress);
-    IniFile.WriteString('Server', 'EndpointInfoPath', FEndpointInfoPath);
-    IniFile.WriteInteger('Server', 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
-    IniFile.WriteInteger('Server', 'MaxJsonDepth', FMaxJsonDepth);
-    IniFile.WriteInteger('Server', 'MaxConcurrentRequests', FMaxConcurrentRequests);
-    IniFile.WriteInteger('Server', 'MaxConnections', FMaxConnections);
-    IniFile.WriteBool('Server', 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
+    IniFile.WriteInteger(SECTION_SERVER, 'Port', FPort);
+    IniFile.WriteString(SECTION_SERVER, 'Host', FHost);
+    IniFile.WriteString(SECTION_SERVER, 'Name', FServerName);
+    IniFile.WriteString(SECTION_SERVER, 'Version', FServerVersion);
+    IniFile.WriteString(SECTION_SERVER, 'Endpoint', FEndpoint);
+    IniFile.WriteString(SECTION_SERVER, 'Title', FServerTitle);
+    IniFile.WriteString(SECTION_SERVER, 'Description', FServerDescription);
+    IniFile.WriteString(SECTION_SERVER, 'WebsiteUrl', FServerWebsiteUrl);
+    IniFile.WriteString(SECTION_SERVER, 'Instructions', FInstructions);
+    IniFile.WriteString(SECTION_SERVER, 'BindAddress', FBindAddress);
+    IniFile.WriteString(SECTION_SERVER, 'EndpointInfoPath', FEndpointInfoPath);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxRequestBodyBytes', FMaxRequestBodyBytes);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxJsonDepth', FMaxJsonDepth);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxConcurrentRequests', FMaxConcurrentRequests);
+    IniFile.WriteInteger(SECTION_SERVER, 'MaxConnections', FMaxConnections);
+    IniFile.WriteBool(SECTION_SERVER, 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
 
-    IniFile.WriteString('Security', 'AllowedOrigins', FSecurityAllowedOrigins);
-    IniFile.WriteString('Security', 'AllowedHosts', FAllowedHosts);
-    IniFile.WriteString('Security', 'RequestStateKey', FRequestStateKey);
-    IniFile.WriteInteger('Security', 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
+    IniFile.WriteString(SECTION_SECURITY, 'AllowedOrigins', FSecurityAllowedOrigins);
+    IniFile.WriteString(SECTION_SECURITY, 'AllowedHosts', FAllowedHosts);
+    IniFile.WriteString(SECTION_SECURITY, 'RequestStateKey', FRequestStateKey);
+    IniFile.WriteInteger(SECTION_SECURITY, 'RequestStateTtlSeconds', FRequestStateTtlSeconds);
 
-    IniFile.WriteString('Auth', 'BearerTokens', FBearerTokens);
-    IniFile.WriteString('Auth', 'AuthorizationServers', FAuthorizationServers);
-    IniFile.WriteString('Auth', 'ResourceUri', FResourceUri);
-    IniFile.WriteString('Auth', 'ScopesSupported', FScopesSupported);
+    IniFile.WriteString(SECTION_AUTH, 'BearerTokens', FBearerTokens);
+    IniFile.WriteString(SECTION_AUTH, 'AuthorizationServers', FAuthorizationServers);
+    IniFile.WriteString(SECTION_AUTH, 'ResourceUri', FResourceUri);
+    IniFile.WriteString(SECTION_AUTH, 'ScopesSupported', FScopesSupported);
 
-    IniFile.WriteBool('Protocol', 'LenientModernPing', FLenientModernPing);
-    IniFile.WriteBool('Protocol', 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
-    IniFile.WriteInteger('Protocol', 'DiscoverTtlMs', FDiscoverTtlMs);
+    IniFile.WriteBool(SECTION_PROTOCOL, 'LenientModernPing', FLenientModernPing);
+    IniFile.WriteBool(SECTION_PROTOCOL, 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
+    IniFile.WriteInteger(SECTION_PROTOCOL, 'DiscoverTtlMs', FDiscoverTtlMs);
 
-    IniFile.WriteBool('CORS', 'Enabled', FCorsEnabled);
-    IniFile.WriteString('CORS', 'AllowedOrigins', FCorsAllowedOrigins);
+    IniFile.WriteBool(SECTION_CORS, 'Enabled', FCorsEnabled);
+    IniFile.WriteString(SECTION_CORS, 'AllowedOrigins', FCorsAllowedOrigins);
 
-    IniFile.WriteBool('SSL', 'Enabled', FSSLEnabled);
-    IniFile.WriteString('SSL', 'CertFile', FSSLCertFile);
-    IniFile.WriteString('SSL', 'KeyFile', FSSLKeyFile);
-    IniFile.WriteString('SSL', 'RootCertFile', FSSLRootCertFile);
+    IniFile.WriteBool(SECTION_SSL, 'Enabled', FSSLEnabled);
+    IniFile.WriteString(SECTION_SSL, 'CertFile', FSSLCertFile);
+    IniFile.WriteString(SECTION_SSL, 'KeyFile', FSSLKeyFile);
+    IniFile.WriteString(SECTION_SSL, 'RootCertFile', FSSLRootCertFile);
   finally
     IniFile.Free;
   end;

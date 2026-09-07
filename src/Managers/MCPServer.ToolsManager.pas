@@ -77,6 +77,10 @@ uses
   MCPServer.Schema.Validator;
 
 const
+  CAPABILITY_NAME = 'tools';
+
+
+const
   TOOL_NAME_PATTERN = '^[A-Za-z0-9_.\-]{1,128}$';
 
 {$IFDEF DEBUG}
@@ -121,20 +125,20 @@ end;
 
 function TMCPToolsManager.GetCapabilityName: string;
 begin
-  Result := 'tools';
+  Result := CAPABILITY_NAME;
 end;
 
 function TMCPToolsManager.HandlesMethod(const Method: string): Boolean;
 begin
-  Result := (Method = 'tools/list') or (Method = 'tools/call');
+  Result := (Method = MCP_METHOD_TOOLS_LIST) or (Method = MCP_METHOD_TOOLS_CALL);
 end;
 
 procedure TMCPToolsManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 begin
   var Announces := Assigned(FChangeNotifier) and (Era = TMCPProtocolEra.Modern);
   var Tools := TJSONObject.Create;
-  Tools.AddPair('listChanged', TJSONBool.Create(Announces));
-  Capabilities.AddPair('tools', Tools);
+  Tools.AddPair(MCP_KEY_LIST_CHANGED, TJSONBool.Create(Announces));
+  Capabilities.AddPair(CAPABILITY_NAME, Tools);
 end;
 
 function TMCPToolsManager.EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
@@ -153,9 +157,9 @@ end;
 function TMCPToolsManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
   const Context: IMCPRequestContext): TValue;
 begin
-  if Method = 'tools/list' then
+  if Method = MCP_METHOD_TOOLS_LIST then
     Result := ListTools(Params, EraOf(Context))
-  else if Method = 'tools/call' then
+  else if Method = MCP_METHOD_TOOLS_CALL then
     Result := CallTool(Params, EraOf(Context))
   else
     raise EMCPError.MethodNotFound(Method);
@@ -251,7 +255,7 @@ end;
 
 procedure TMCPToolsManager.CheckCursor(const Params: TJSONObject);
 begin
-  if Assigned(Params) and Assigned(Params.GetValue('cursor')) then
+  if Assigned(Params) and Assigned(Params.GetValue(MCP_KEY_CURSOR)) then
     raise EMCPError.InvalidParams('Invalid cursor');
 end;
 
@@ -280,7 +284,7 @@ begin
   if ResultValue.IsType<TJSONArray> then
   begin
     Result := TJSONObject.Create;
-    Result.AddPair('content', ResultValue.AsType<TJSONArray>);
+    Result.AddPair(MCP_KEY_CONTENT, ResultValue.AsType<TJSONArray>);
     Exit;
   end;
 
@@ -296,7 +300,7 @@ begin
     begin
       var Structured := ResultValue.AsType<TJSONObject>;
       ToolResult.SetStructuredContent(Structured);
-      var ErrorValue := Structured.GetValue('error');
+      var ErrorValue := Structured.GetValue(MCP_KEY_ERROR);
       ToolResult.IsError := Assigned(ErrorValue) and (ErrorValue.Value <> '');
     end
     else if not ResultValue.IsEmpty then
@@ -352,10 +356,10 @@ var
   Metadata: IMCPToolMetadata;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('name', Tool.Name);
+  Result.AddPair(MCP_KEY_NAME, Tool.Name);
   if Tool.Title <> Tool.Name then
-    Result.AddPair('title', Tool.Title);
-  Result.AddPair('description', Tool.Description);
+    Result.AddPair(MCP_KEY_TITLE, Tool.Title);
+  Result.AddPair(MCP_KEY_DESCRIPTION, Tool.Description);
 
   var Schema := Tool.InputSchema;
   if Assigned(Schema) then
@@ -368,9 +372,9 @@ begin
   if Supports(Tool, IMCPToolMetadata, Metadata) then
   begin
     if Assigned(Metadata.Annotations) then
-      Result.AddPair('annotations', TJSONObject(Metadata.Annotations.Clone));
+      Result.AddPair(MCP_KEY_ANNOTATIONS, TJSONObject(Metadata.Annotations.Clone));
     if Assigned(Metadata.Icons) then
-      Result.AddPair('icons', TJSONArray(Metadata.Icons.Clone));
+      Result.AddPair(MCP_KEY_ICONS, TJSONArray(Metadata.Icons.Clone));
   end;
 end;
 
@@ -378,7 +382,7 @@ function TMCPToolsManager.BuildToolListResponse(Era: TMCPProtocolEra): TJSONObje
 begin
   Result := TJSONObject.Create;
   var ToolsArray := TJSONArray.Create;
-  Result.AddPair('tools', ToolsArray);
+  Result.AddPair(CAPABILITY_NAME, ToolsArray);
 
   FLock.Enter;
   try
@@ -392,8 +396,8 @@ begin
 
   if Era = TMCPProtocolEra.Modern then
   begin
-    Result.AddPair('ttlMs', TJSONNumber.Create(FListTtlMs));
-    Result.AddPair('cacheScope', FListCacheScope);
+    Result.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FListTtlMs));
+    Result.AddPair(MCP_KEY_CACHE_SCOPE, FListCacheScope);
   end;
 end;
 
@@ -421,12 +425,12 @@ begin
   if not Assigned(Params) then
     raise EMCPError.InvalidParams('params.name is required');
 
-  var NameValue := Params.GetValue('name');
+  var NameValue := Params.GetValue(MCP_KEY_NAME);
   if not (NameValue is TJSONString) or (TJSONString(NameValue).Value = '') then
     raise EMCPError.InvalidParams('params.name is required and must be a non-empty string');
   var ToolName := TJSONString(NameValue).Value;
 
-  var ArgumentsValue := Params.GetValue('arguments');
+  var ArgumentsValue := Params.GetValue(MCP_KEY_ARGUMENTS);
   if Assigned(ArgumentsValue) and not (ArgumentsValue is TJSONObject) and not (ArgumentsValue is TJSONNull) then
     raise EMCPError.InvalidParams('params.arguments must be an object');
   var Arguments: TJSONObject := nil;

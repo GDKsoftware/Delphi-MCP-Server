@@ -35,12 +35,17 @@ uses
   MCPServer.Resource.Logs,
   System.NetEncoding;
 
+const
+  ROLE_USER = 'user';
+  PROMPT_NAME = 'summarize_logs';
+
+
 { TSummarizeLogsPrompt }
 
 constructor TSummarizeLogsPrompt.Create;
 begin
   inherited;
-  FName := 'summarize_logs';
+  FName := PROMPT_NAME;
   FDescription := 'Summarizes the server''s recent log entries, optionally filtered by level';
 end;
 
@@ -52,12 +57,12 @@ var
 begin
   if Params.Level = '' then
   begin
-    Messages.AddText('user', 'Summarize the server''s recent log entries, calling out anything unusual.');
+    Messages.AddText(ROLE_USER, 'Summarize the server''s recent log entries, calling out anything unusual.');
     ResourceUri := 'logs://recent';
   end
   else
   begin
-    Messages.AddText('user', Format(
+    Messages.AddText(ROLE_USER, Format(
       'Summarize the server''s recent "%s" log entries, calling out anything unusual.', [Params.Level]));
     ResourceUri := Format('logs://%s', [TNetEncoding.URL.Encode(Params.Level)]);
   end;
@@ -77,7 +82,7 @@ begin
     Entries.Free;
   end;
 
-  Messages.AddEmbeddedText('user', ResourceUri, 'text/plain', ResourceText);
+  Messages.AddEmbeddedText(ROLE_USER, ResourceUri, 'text/plain', ResourceText);
   Result := 'Log summary request';
 end;
 
@@ -106,7 +111,7 @@ begin
 end;
 
 initialization
-  TMCPRegistry.RegisterPrompt('summarize_logs',
+  TMCPRegistry.RegisterPrompt(PROMPT_NAME,
     function: IMCPPrompt
     begin
       Result := TSummarizeLogsPrompt.Create;
