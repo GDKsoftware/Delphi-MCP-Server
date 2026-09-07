@@ -90,6 +90,7 @@
         <DCCReference Include="..\src\Core\MCPServer.Registration.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.ManagerRegistry.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Base.pas"/>
+        <DCCReference Include="..\src\Tools\MCPServer.Tool.Method.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Base.pas"/>
         <DCCReference Include="..\src\Prompts\MCPServer.Prompt.Base.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.JsonRpcProcessor.pas"/>
@@ -140,6 +141,7 @@
         <DCCReference Include="MCPServer.Tests.Serializer.pas"/>
         <DCCReference Include="MCPServer.Tests.Schema.pas"/>
         <DCCReference Include="MCPServer.Tests.SchemaFromMethod.pas"/>
+        <DCCReference Include="MCPServer.Tests.MethodTool.pas"/>
         <DCCReference Include="MCPServer.Tests.ToolsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.ResourcesManager.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
