@@ -60,6 +60,7 @@ uses
   MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas',
   MCPServer.Tests.Constants in 'MCPServer.Tests.Constants.pas',
   MCPServer.Tests.ServerStatus in 'MCPServer.Tests.ServerStatus.pas',
+  MCPServer.Tests.Settings in 'MCPServer.Tests.Settings.pas',
   MCPServer.Tests.Registration in 'MCPServer.Tests.Registration.pas',
   MCPServer.Tests.Logger in 'MCPServer.Tests.Logger.pas',
   MCPServer.Tests.PathBoundary in 'MCPServer.Tests.PathBoundary.pas',

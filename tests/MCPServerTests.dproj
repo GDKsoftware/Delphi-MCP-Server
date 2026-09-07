@@ -125,6 +125,7 @@
         <DCCReference Include="MCPServer.Tests.Golden.Legacy.pas"/>
         <DCCReference Include="MCPServer.Tests.Constants.pas"/>
         <DCCReference Include="MCPServer.Tests.ServerStatus.pas"/>
+        <DCCReference Include="MCPServer.Tests.Settings.pas"/>
         <DCCReference Include="MCPServer.Tests.Registration.pas"/>
         <DCCReference Include="MCPServer.Tests.Logger.pas"/>
         <DCCReference Include="MCPServer.Tests.PathBoundary.pas"/>
