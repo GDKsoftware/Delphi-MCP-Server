@@ -117,7 +117,8 @@ uses
   System.Net.HttpClient,
   System.Net.URLClient,
   System.NetConsts,
-  MCPServer.Logger;
+  MCPServer.Logger,
+  MCPServer.Errors;
 
 const
   CLAIM_SUBJECT = 'sub';
@@ -126,12 +127,10 @@ const
   CLAIM_SCOPE = 'scope';
   CLAIM_SCOPE_ARRAY = 'scp';
   CLAIM_ACTIVE = 'active';
-  SCOPE_ANY = '*';
   SCOPE_OFFLINE_ACCESS = 'offline_access';
   SCOPE_SEPARATOR = ' ';
   STATIC_SUBJECT_FORMAT = 'token-%d';
   MEDIA_TYPE_FORM = 'application/x-www-form-urlencoded';
-  HTTP_STATUS_OK = 200;
 
 { TMCPPrincipal }
 
@@ -144,7 +143,7 @@ function TMCPPrincipal.HasScope(const Scope: string): Boolean;
 begin
   for var Granted in Scopes do
   begin
-    if (Granted = Scope) or (Granted = SCOPE_ANY) then
+    if (Granted = Scope) or (Granted = MCP_SCOPE_ANY) then
       Exit(True);
   end;
   Result := False;
@@ -284,7 +283,7 @@ begin
     raise EMCPAuthorizationConfiguration.Create('A static bearer authorizer needs at least one token');
   FScopes := Scopes;
   if Length(FScopes) = 0 then
-    FScopes := [SCOPE_ANY];
+    FScopes := [MCP_SCOPE_ANY];
 end;
 
 class function TMCPStaticBearerAuthorizer.SameToken(const Presented, Expected: TBytes): Boolean;

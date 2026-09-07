@@ -40,12 +40,16 @@ implementation
 uses
   MCPServer.Registration;
 
+const
+  TOOL_NAME = 'calculate';
+
+
 { TCalculateTool }
 
 constructor TCalculateTool.Create;
 begin
   inherited;
-  FName := 'calculate';
+  FName := TOOL_NAME;
   FDescription := 'Perform basic arithmetic calculations';
 end;
 
@@ -81,7 +85,7 @@ begin
 end;
 
 initialization
-  TMCPRegistry.RegisterTool('calculate',
+  TMCPRegistry.RegisterTool(TOOL_NAME,
     function: IMCPTool
     begin
       Result := TCalculateTool.Create;

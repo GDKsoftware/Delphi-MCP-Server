@@ -46,6 +46,10 @@ uses
   MCPServer.Prompt.Base,
   MCPServer.Resource.Base;
 
+const
+  CAPABILITY_NAME = 'completions';
+
+
 { TMCPCompletionManager }
 
 constructor TMCPCompletionManager.Create(const Prompts: TMCPPromptsManager; const Resources: TMCPResourcesManager);
@@ -59,17 +63,17 @@ end;
 
 function TMCPCompletionManager.GetCapabilityName: string;
 begin
-  Result := 'completions';
+  Result := CAPABILITY_NAME;
 end;
 
 function TMCPCompletionManager.HandlesMethod(const Method: string): Boolean;
 begin
-  Result := Method = 'completion/complete';
+  Result := Method = MCP_METHOD_COMPLETION_COMPLETE;
 end;
 
 procedure TMCPCompletionManager.DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
 begin
-  Capabilities.AddPair('completions', TJSONObject.Create);
+  Capabilities.AddPair(CAPABILITY_NAME, TJSONObject.Create);
 end;
 
 function TMCPCompletionManager.EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
@@ -88,7 +92,7 @@ end;
 function TMCPCompletionManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
   const Context: IMCPRequestContext): TValue;
 begin
-  if Method = 'completion/complete' then
+  if Method = MCP_METHOD_COMPLETION_COMPLETE then
     Result := Complete(Params, EraOf(Context))
   else
     raise EMCPError.MethodNotFound(Method);
@@ -100,14 +104,14 @@ var
   Template: IMCPResourceTemplate;
   Resource: IMCPResource;
 begin
-  var TypeValue := Ref.GetValue('type');
+  var TypeValue := Ref.GetValue(MCP_KEY_TYPE);
   if not (TypeValue is TJSONString) then
     raise EMCPError.InvalidParams('params.ref.type is required');
   var RefType := TJSONString(TypeValue).Value;
 
   if RefType = 'ref/prompt' then
   begin
-    var NameValue := Ref.GetValue('name');
+    var NameValue := Ref.GetValue(MCP_KEY_NAME);
     if not (NameValue is TJSONString) or (TJSONString(NameValue).Value = '') then
       raise EMCPError.InvalidParams('params.ref.name is required for ref/prompt');
     var PromptName := TJSONString(NameValue).Value;
@@ -117,7 +121,7 @@ begin
   end
   else if RefType = 'ref/resource' then
   begin
-    var UriValue := Ref.GetValue('uri');
+    var UriValue := Ref.GetValue(MCP_KEY_URI);
     if not (UriValue is TJSONString) or (TJSONString(UriValue).Value = '') then
       raise EMCPError.InvalidParams('params.ref.uri is required for ref/resource');
     var Uri := TJSONString(UriValue).Value;
@@ -138,7 +142,7 @@ begin
   var ContextValue := Params.GetValue('context');
   if not (ContextValue is TJSONObject) then
     Exit;
-  var ArgumentsValue := TJSONObject(ContextValue).GetValue('arguments');
+  var ArgumentsValue := TJSONObject(ContextValue).GetValue(MCP_KEY_ARGUMENTS);
   if not (ArgumentsValue is TJSONObject) then
     Exit;
 
@@ -186,7 +190,7 @@ begin
   if not (ArgumentValue is TJSONObject) then
     raise EMCPError.InvalidParams('params.argument is required and must be an object');
   var Argument := TJSONObject(ArgumentValue);
-  var ArgumentNameValue := Argument.GetValue('name');
+  var ArgumentNameValue := Argument.GetValue(MCP_KEY_NAME);
   if not (ArgumentNameValue is TJSONString) or (TJSONString(ArgumentNameValue).Value = '') then
     raise EMCPError.InvalidParams('params.argument.name is required and must be a non-empty string');
   var ArgumentValueValue := Argument.GetValue('value');

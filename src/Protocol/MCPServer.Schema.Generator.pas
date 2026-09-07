@@ -34,6 +34,21 @@ uses
   System.Generics.Collections,
   MCPServer.Types;
 
+const
+  SCHEMA_KEY_ADDITIONAL_PROPERTIES = 'additionalProperties';
+  SCHEMA_TYPE_STRING = 'string';
+  SCHEMA_TYPE_ARRAY = 'array';
+  SCHEMA_TYPE_OBJECT = 'object';
+  SCHEMA_TYPE_INTEGER = 'integer';
+  SCHEMA_TYPE_NUMBER = 'number';
+  SCHEMA_TYPE_BOOLEAN = 'boolean';
+  SCHEMA_KEY_FORMAT = 'format';
+  SCHEMA_KEY_ENUM = 'enum';
+  SCHEMA_KEY_ITEMS = 'items';
+  SCHEMA_KEY_PROPERTIES = 'properties';
+  SCHEMA_KEY_REQUIRED = 'required';
+
+
 { TMCPSchemaGenerator }
 
 class constructor TMCPSchemaGenerator.Create;
@@ -101,77 +116,77 @@ begin
   try
     case RttiType.TypeKind of
       tkInteger, tkInt64:
-        Result.AddPair('type', 'integer');
+        Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_INTEGER);
 
       tkFloat:
         if RttiType.Handle = TypeInfo(TDateTime) then
         begin
-          Result.AddPair('type', 'string');
-          Result.AddPair('format', 'date-time');
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+          Result.AddPair(SCHEMA_KEY_FORMAT, 'date-time');
         end
         else if RttiType.Handle = TypeInfo(TDate) then
         begin
-          Result.AddPair('type', 'string');
-          Result.AddPair('format', 'date');
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+          Result.AddPair(SCHEMA_KEY_FORMAT, 'date');
         end
         else if RttiType.Handle = TypeInfo(TTime) then
         begin
-          Result.AddPair('type', 'string');
-          Result.AddPair('format', 'time');
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+          Result.AddPair(SCHEMA_KEY_FORMAT, 'time');
         end
         else
-          Result.AddPair('type', 'number');
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_NUMBER);
 
       tkString, tkLString, tkWString, tkUString, tkChar, tkWChar:
-        Result.AddPair('type', 'string');
+        Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
 
       tkEnumeration:
         if RttiType.Handle = TypeInfo(Boolean) then
-          Result.AddPair('type', 'boolean')
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_BOOLEAN)
         else
         begin
-          Result.AddPair('type', 'string');
-          Result.AddPair('enum', CreateEnumValuesArray(RttiType));
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+          Result.AddPair(SCHEMA_KEY_ENUM, CreateEnumValuesArray(RttiType));
         end;
 
       tkSet:
         begin
-          Result.AddPair('type', 'array');
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
           var Items := TJSONObject.Create;
-          Result.AddPair('items', Items);
-          Items.AddPair('type', 'string');
+          Result.AddPair(SCHEMA_KEY_ITEMS, Items);
+          Items.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
           var ElementType := TRttiSetType(RttiType).ElementType;
           var Names := CreateEnumValuesArray(ElementType);
           if Assigned(Names) then
-            Items.AddPair('enum', Names);
+            Items.AddPair(SCHEMA_KEY_ENUM, Names);
         end;
 
       tkDynArray:
         begin
-          Result.AddPair('type', 'array');
-          Result.AddPair('items', TypeSchema(TRttiDynamicArrayType(RttiType).ElementType, Depth + 1));
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
+          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(TRttiDynamicArrayType(RttiType).ElementType, Depth + 1));
         end;
 
       tkArray:
         begin
-          Result.AddPair('type', 'array');
-          Result.AddPair('items', TypeSchema(TRttiArrayType(RttiType).ElementType, Depth + 1));
+          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
+          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(TRttiArrayType(RttiType).ElementType, Depth + 1));
         end;
 
       tkClass:
         begin
           var Metaclass := TRttiInstanceType(RttiType).MetaclassType;
           if Metaclass.InheritsFrom(TJSONArray) then
-            Result.AddPair('type', 'array')
+            Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY)
           else if Metaclass.InheritsFrom(TJSONValue) then
-            Result.AddPair('type', 'object')
+            Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT)
           else
           begin
             var ItemType := ListItemType(RttiType);
             if Assigned(ItemType) then
             begin
-              Result.AddPair('type', 'array');
-              Result.AddPair('items', TypeSchema(ItemType, Depth + 1));
+              Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
+              Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ItemType, Depth + 1));
             end
             else if Depth < MAX_NESTING_DEPTH then
             begin
@@ -179,11 +194,11 @@ begin
               Result := ObjectSchema(RttiType, Depth + 1);
             end
             else
-              Result.AddPair('type', 'object');
+              Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
           end;
         end;
     else
-      Result.AddPair('type', 'string');
+      Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
     end;
   except
     Result.Free;
@@ -204,13 +219,13 @@ begin
   for var Attr in Prop.GetAttributes do
   begin
     if Attr is SchemaDescriptionAttribute then
-      PropSchema.AddPair('description', SchemaDescriptionAttribute(Attr).Description)
+      PropSchema.AddPair(MCP_KEY_DESCRIPTION, SchemaDescriptionAttribute(Attr).Description)
     else if Attr is SchemaTitleAttribute then
-      PropSchema.AddPair('title', SchemaTitleAttribute(Attr).Title)
+      PropSchema.AddPair(MCP_KEY_TITLE, SchemaTitleAttribute(Attr).Title)
     else if Attr is SchemaFormatAttribute then
     begin
-      PropSchema.RemovePair('format').Free;
-      PropSchema.AddPair('format', SchemaFormatAttribute(Attr).Format);
+      PropSchema.RemovePair(SCHEMA_KEY_FORMAT).Free;
+      PropSchema.AddPair(SCHEMA_KEY_FORMAT, SchemaFormatAttribute(Attr).Format);
     end
     else if Attr is SchemaMinimumAttribute then
       PropSchema.AddPair('minimum', NumberValue(SchemaMinimumAttribute(Attr).Minimum))
@@ -218,11 +233,11 @@ begin
       PropSchema.AddPair('maximum', NumberValue(SchemaMaximumAttribute(Attr).Maximum))
     else if Attr is SchemaEnumAttribute then
     begin
-      PropSchema.RemovePair('enum').Free;
+      PropSchema.RemovePair(SCHEMA_KEY_ENUM).Free;
       var EnumArray := TJSONArray.Create;
       for var Value in SchemaEnumAttribute(Attr).Values do
         EnumArray.Add(Value);
-      PropSchema.AddPair('enum', EnumArray);
+      PropSchema.AddPair(SCHEMA_KEY_ENUM, EnumArray);
     end
     else if Attr is SchemaMinLengthAttribute then
       PropSchema.AddPair('minLength', TJSONNumber.Create(SchemaMinLengthAttribute(Attr).MinLength))
@@ -250,9 +265,9 @@ begin
         if Attr is SchemaDialectAttribute then
           Result.AddPair('$schema', SchemaDialectAttribute(Attr).Uri);
 
-    Result.AddPair('type', 'object');
+    Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
     var Properties := TJSONObject.Create;
-    Result.AddPair('properties', Properties);
+    Result.AddPair(SCHEMA_KEY_PROPERTIES, Properties);
     var RequiredArray := TJSONArray.Create;
 
     for var RttiProp in RttiType.GetProperties do
@@ -270,7 +285,7 @@ begin
     end;
 
     if RequiredArray.Count > 0 then
-      Result.AddPair('required', RequiredArray)
+      Result.AddPair(SCHEMA_KEY_REQUIRED, RequiredArray)
     else
       RequiredArray.Free;
 
@@ -278,12 +293,12 @@ begin
     for var Attr in RttiType.GetAttributes do
       if Attr is SchemaAdditionalPropertiesAttribute then
       begin
-        Result.AddPair('additionalProperties', TJSONBool.Create(SchemaAdditionalPropertiesAttribute(Attr).Allowed));
+        Result.AddPair(SCHEMA_KEY_ADDITIONAL_PROPERTIES, TJSONBool.Create(SchemaAdditionalPropertiesAttribute(Attr).Allowed));
         ExplicitAdditionalProperties := True;
       end;
 
     if not ExplicitAdditionalProperties and (Properties.Count = 0) then
-      Result.AddPair('additionalProperties', TJSONBool.Create(False));
+      Result.AddPair(SCHEMA_KEY_ADDITIONAL_PROPERTIES, TJSONBool.Create(False));
   except
     Result.Free;
     raise;

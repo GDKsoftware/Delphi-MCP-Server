@@ -65,6 +65,10 @@ uses
   MCPServer.Registration;
 
 const
+  FENCE = '```';
+  FENCE_BASH = '```bash';
+  URI_INFO = 'project://info';
+  URI_README = 'project://readme';
   PROJECT_RESOURCE_TTL_MS = 3600000;
 
 { TProjectInfo }
@@ -86,7 +90,7 @@ end;
 constructor TProjectInfoResource.Create;
 begin
   inherited;
-  FURI := 'project://info';
+  FURI := URI_INFO;
   FName := 'Project Information';
   FDescription := 'Basic information about the Delphi MCP Server project';
   FMimeType := 'application/json';
@@ -118,7 +122,7 @@ end;
 constructor TProjectReadmeResource.Create;
 begin
   inherited;
-  FURI := 'project://readme';
+  FURI := URI_README;
   FName := 'Project README';
   FDescription := 'README.md file contents';
   FMimeType := 'text/markdown';
@@ -142,31 +146,31 @@ begin
 '- CORS support for cross-origin requests' + sLineBreak +
 '' + sLineBreak +
 '## Building' + sLineBreak +
-'```bash' + sLineBreak +
+FENCE_BASH + sLineBreak +
 'build.bat' + sLineBreak +
-'```' + sLineBreak +
+FENCE + sLineBreak +
 '' + sLineBreak +
 '## Running' + sLineBreak +
-'```bash' + sLineBreak +
+FENCE_BASH + sLineBreak +
 'Win32\Debug\MCPServer.exe' + sLineBreak +
-'```' + sLineBreak +
+FENCE + sLineBreak +
 '' + sLineBreak +
 '## Testing' + sLineBreak +
-'```bash' + sLineBreak +
+FENCE_BASH + sLineBreak +
 'npx @wong2/mcp-cli --url http://localhost:8080/mcp' + sLineBreak +
-'```' + sLineBreak +
+FENCE + sLineBreak +
 '''';
 end;
 
 initialization
-  TMCPRegistry.RegisterResource('project://info',
+  TMCPRegistry.RegisterResource(URI_INFO,
     function: IMCPResource
     begin
       Result := TProjectInfoResource.Create;
     end
   );
 
-  TMCPRegistry.RegisterResource('project://readme',
+  TMCPRegistry.RegisterResource(URI_README,
     function: IMCPResource
     begin
       Result := TProjectReadmeResource.Create;

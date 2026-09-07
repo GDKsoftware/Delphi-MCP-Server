@@ -69,7 +69,7 @@ class function TMCPSchemaValidator.TryCheckType(const Schema: TJSONObject; const
 begin
   Result := True;
   ErrorMessage := '';
-  var TypeValue := Schema.GetValue('type');
+  var TypeValue := Schema.GetValue(MCP_KEY_TYPE);
   if not Assigned(TypeValue) then
     Exit;
 

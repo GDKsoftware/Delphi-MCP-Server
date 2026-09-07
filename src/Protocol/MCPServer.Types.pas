@@ -52,15 +52,6 @@ const
   MCP_CACHE_SCOPE_PUBLIC = 'public';
   MCP_CACHE_SCOPE_PRIVATE = 'private';
 
-  MCP_CACHEABLE_METHODS: array[0..5] of string = (
-    'server/discover',
-    'tools/list',
-    'prompts/list',
-    'resources/list',
-    'resources/templates/list',
-    'resources/read'
-  );
-
   MCP_METHOD_NOTIFICATIONS_MESSAGE = 'notifications/message';
   MCP_SCOPE_ANY = '*';
   MCP_METHOD_SUBSCRIPTIONS_LISTEN = 'subscriptions/listen';
@@ -69,6 +60,66 @@ const
   MCP_METHOD_NOTIFICATIONS_PROMPTS_LIST_CHANGED = 'notifications/prompts/list_changed';
   MCP_METHOD_NOTIFICATIONS_RESOURCES_LIST_CHANGED = 'notifications/resources/list_changed';
   MCP_METHOD_NOTIFICATIONS_RESOURCES_UPDATED = 'notifications/resources/updated';
+  MCP_METHOD_INITIALIZE = 'initialize';
+  MCP_METHOD_NOTIFICATIONS_INITIALIZED = 'notifications/initialized';
+  MCP_METHOD_PING = 'ping';
+  MCP_METHOD_SERVER_DISCOVER = 'server/discover';
+  MCP_METHOD_LOGGING_SET_LEVEL = 'logging/setLevel';
+  MCP_METHOD_TOOLS_LIST = 'tools/list';
+  MCP_METHOD_TOOLS_CALL = 'tools/call';
+  MCP_METHOD_PROMPTS_LIST = 'prompts/list';
+  MCP_METHOD_PROMPTS_GET = 'prompts/get';
+  MCP_METHOD_RESOURCES_LIST = 'resources/list';
+  MCP_METHOD_RESOURCES_READ = 'resources/read';
+  MCP_METHOD_RESOURCES_TEMPLATES_LIST = 'resources/templates/list';
+  MCP_METHOD_RESOURCES_SUBSCRIBE = 'resources/subscribe';
+  MCP_METHOD_RESOURCES_UNSUBSCRIBE = 'resources/unsubscribe';
+  MCP_METHOD_COMPLETION_COMPLETE = 'completion/complete';
+
+  JSONRPC_VERSION = '2.0';
+  MEDIA_TYPE_JSON = 'application/json';
+  MEDIA_TYPE_EVENT_STREAM = 'text/event-stream';
+  CHARSET_UTF8 = 'utf-8';
+
+  MCP_KEY_JSONRPC = 'jsonrpc';
+  MCP_KEY_ID = 'id';
+  MCP_KEY_METHOD = 'method';
+  MCP_KEY_PARAMS = 'params';
+  MCP_KEY_RESULT = 'result';
+  MCP_KEY_ERROR = 'error';
+  MCP_KEY_META = '_meta';
+  MCP_KEY_INPUT_RESPONSES = 'inputResponses';
+  MCP_KEY_REQUEST_STATE = 'requestState';
+  MCP_KEY_RESULT_TYPE = 'resultType';
+  MCP_KEY_TTL_MS = 'ttlMs';
+  MCP_KEY_CACHE_SCOPE = 'cacheScope';
+  MCP_KEY_NAME = 'name';
+  MCP_KEY_TITLE = 'title';
+  MCP_KEY_DESCRIPTION = 'description';
+  MCP_KEY_URI = 'uri';
+  MCP_KEY_MIME_TYPE = 'mimeType';
+  MCP_KEY_TYPE = 'type';
+  MCP_KEY_TEXT = 'text';
+  MCP_KEY_CONTENT = 'content';
+  MCP_KEY_CURSOR = 'cursor';
+  MCP_KEY_ARGUMENTS = 'arguments';
+  MCP_KEY_ANNOTATIONS = 'annotations';
+  MCP_KEY_ICONS = 'icons';
+  MCP_KEY_CAPABILITIES = 'capabilities';
+  MCP_KEY_PROTOCOL_VERSION = 'protocolVersion';
+  MCP_KEY_INSTRUCTIONS = 'instructions';
+  MCP_KEY_VERSION = 'version';
+  MCP_KEY_LIST_CHANGED = 'listChanged';
+  MCP_KEY_SUBSCRIBE = 'subscribe';
+
+  MCP_CACHEABLE_METHODS: array[0..5] of string = (
+    MCP_METHOD_SERVER_DISCOVER,
+    MCP_METHOD_TOOLS_LIST,
+    MCP_METHOD_PROMPTS_LIST,
+    MCP_METHOD_RESOURCES_LIST,
+    MCP_METHOD_RESOURCES_TEMPLATES_LIST,
+    MCP_METHOD_RESOURCES_READ
+  );
   MCP_LOG_LEVELS: array[0..7] of string = (
     'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
 

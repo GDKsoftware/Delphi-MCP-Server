@@ -64,6 +64,10 @@ uses
   MCPServer.Tool.ContentSamples;
 
 const
+  MIME_TYPE_JSON = 'application/json';
+  URI_STATIC_BINARY = 'test://static-binary';
+  TEMPLATE_DATA_TITLE = 'Template data';
+  URI_TEMPLATE_DATA = 'test://template/{id}/data';
   SAMPLE_RESOURCE_TTL_MS = 3600000;
 
 { TStaticTextResource }
@@ -91,7 +95,7 @@ end;
 constructor TStaticBinaryResource.Create;
 begin
   inherited;
-  FURI := 'test://static-binary';
+  FURI := URI_STATIC_BINARY;
   FName := 'Static binary';
   FTitle := 'Static binary resource';
   FDescription := 'A fixed PNG image';
@@ -118,9 +122,9 @@ begin
   inherited Create;
   FId := AId;
   FURI := AUri;
-  FName := 'Template data';
+  FName := TEMPLATE_DATA_TITLE;
   FDescription := 'Data keyed by the id captured from the template';
-  FMimeType := 'application/json';
+  FMimeType := MIME_TYPE_JSON;
 end;
 
 function TTemplateDataResource.GetResourceData: TTemplateData;
@@ -136,10 +140,10 @@ end;
 constructor TTemplateDataResourceTemplate.Create;
 begin
   inherited;
-  FUriTemplate := 'test://template/{id}/data';
-  FName := 'Template data';
+  FUriTemplate := URI_TEMPLATE_DATA;
+  FName := TEMPLATE_DATA_TITLE;
   FDescription := 'Data keyed by an id path segment';
-  FMimeType := 'application/json';
+  FMimeType := MIME_TYPE_JSON;
 end;
 
 function TTemplateDataResourceTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
@@ -153,12 +157,12 @@ initialization
     begin
       Result := TStaticTextResource.Create;
     end);
-  TMCPRegistry.RegisterResource('test://static-binary',
+  TMCPRegistry.RegisterResource(URI_STATIC_BINARY,
     function: IMCPResource
     begin
       Result := TStaticBinaryResource.Create;
     end);
-  TMCPRegistry.RegisterResourceTemplate('test://template/{id}/data',
+  TMCPRegistry.RegisterResourceTemplate(URI_TEMPLATE_DATA,
     function: IMCPResourceTemplate
     begin
       Result := TTemplateDataResourceTemplate.Create;

@@ -50,6 +50,12 @@ implementation
 uses
   System.NetEncoding;
 
+const
+  SCHEME_HTTP = 'http';
+  SCHEME_HTTPS = 'https';
+  AUTHORITY_FORMAT = 'http://%s';
+
+
 { TMCPHeaderValue }
 
 class function TMCPHeaderValue.IsHeaderSafe(const Value: string): Boolean;
@@ -168,9 +174,9 @@ end;
 
 function TMCPOriginParts.DefaultPort: string;
 begin
-  if Scheme = 'https' then
+  if Scheme = SCHEME_HTTPS then
     Result := '443'
-  else if Scheme = 'http' then
+  else if Scheme = SCHEME_HTTP then
     Result := '80'
   else
     Result := '';
@@ -179,7 +185,7 @@ end;
 class function TMCPOriginPolicy.IsLoopback(const Origin: string): Boolean;
 begin
   const Parts = TMCPOriginParts.Parse(Origin);
-  const IsHttp = ((Parts.Scheme = 'http') or (Parts.Scheme = 'https'));
+  const IsHttp = ((Parts.Scheme = SCHEME_HTTP) or (Parts.Scheme = SCHEME_HTTPS));
   const IsLocal = ((Parts.Host = 'localhost') or (Parts.Host = '127.0.0.1') or (Parts.Host = '[::1]'));
   Result := IsHttp and IsLocal;
 end;
@@ -228,8 +234,8 @@ begin
   if Pattern.Trim = TMCPOriginPolicy.ALLOW_ALL then
     Exit(True);
 
-  const Wanted = TMCPOriginParts.Parse(Format('http://%s', [HostHeader.Trim]));
-  const Allowed = TMCPOriginParts.Parse(Format('http://%s', [Pattern.Trim]));
+  const Wanted = TMCPOriginParts.Parse(Format(AUTHORITY_FORMAT, [HostHeader.Trim]));
+  const Allowed = TMCPOriginParts.Parse(Format(AUTHORITY_FORMAT, [Pattern.Trim]));
   const SameHost = ((Wanted.Host <> '') and (Allowed.Host <> '') and (Wanted.Host = Allowed.Host));
   if not SameHost then
     Exit(False);

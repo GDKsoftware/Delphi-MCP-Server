@@ -23,12 +23,12 @@ uses
 class procedure TMCPCapabilityBuilder.AddDefaultCapabilities(const Capabilities: TJSONObject);
 begin
   var Tools := TJSONObject.Create;
-  Tools.AddPair('listChanged', TJSONBool.Create(False));
+  Tools.AddPair(MCP_KEY_LIST_CHANGED, TJSONBool.Create(False));
   Capabilities.AddPair('tools', Tools);
 
   var Resources := TJSONObject.Create;
-  Resources.AddPair('subscribe', TJSONBool.Create(False));
-  Resources.AddPair('listChanged', TJSONBool.Create(False));
+  Resources.AddPair(MCP_KEY_SUBSCRIBE, TJSONBool.Create(False));
+  Resources.AddPair(MCP_KEY_LIST_CHANGED, TJSONBool.Create(False));
   Capabilities.AddPair('resources', Resources);
 end;
 

@@ -90,15 +90,18 @@ const
 
 implementation
 
+
 const
-  JSONRPC_VERSION = '2.0';
+  MESSAGE_NOT_A_JSON_RESULT = '%s answered with a %s instead of a JSON object';
+  META_PATH_PREFIX = 'params._meta.';
+  MESSAGE_PARAMS_NOT_OBJECT = 'params must be an object';
+  MESSAGE_HEADER_MISMATCH = 'Header mismatch: %s header value ''%s'' does not match body value ''%s''';
   RESULT_TYPE_COMPLETE = 'complete';
-  CACHE_SCOPE_PRIVATE = 'private';
 
   LEGACY_ONLY_METHODS: array[0..4] of string = (
-    'ping', 'initialize', 'logging/setLevel', 'resources/subscribe', 'resources/unsubscribe');
-  MODERN_ONLY_METHODS: array[0..1] of string = ('server/discover', 'subscriptions/listen');
-  INPUT_REQUIRED_METHODS: array[0..2] of string = ('tools/call', 'resources/read', 'prompts/get');
+    MCP_METHOD_PING, MCP_METHOD_INITIALIZE, MCP_METHOD_LOGGING_SET_LEVEL, MCP_METHOD_RESOURCES_SUBSCRIBE, MCP_METHOD_RESOURCES_UNSUBSCRIBE);
+  MODERN_ONLY_METHODS: array[0..1] of string = (MCP_METHOD_SERVER_DISCOVER, 'subscriptions/listen');
+  INPUT_REQUIRED_METHODS: array[0..2] of string = (MCP_METHOD_TOOLS_CALL, MCP_METHOD_RESOURCES_READ, MCP_METHOD_PROMPTS_GET);
   PARAM_INPUT_RESPONSES = 'inputResponses';
   PARAM_REQUEST_STATE = 'requestState';
 
@@ -155,12 +158,12 @@ end;
 function TMCPJsonRpcProcessor.BuildServerInfo: TJSONObject;
 begin
   Result := TJSONObject.Create;
-  Result.AddPair('name', FSettings.ServerName);
-  Result.AddPair('version', FSettings.ServerVersion);
+  Result.AddPair(MCP_KEY_NAME, FSettings.ServerName);
+  Result.AddPair(MCP_KEY_VERSION, FSettings.ServerVersion);
   if FSettings.ServerTitle <> '' then
-    Result.AddPair('title', FSettings.ServerTitle);
+    Result.AddPair(MCP_KEY_TITLE, FSettings.ServerTitle);
   if FSettings.ServerDescription <> '' then
-    Result.AddPair('description', FSettings.ServerDescription);
+    Result.AddPair(MCP_KEY_DESCRIPTION, FSettings.ServerDescription);
   if FSettings.ServerWebsiteUrl <> '' then
     Result.AddPair('websiteUrl', FSettings.ServerWebsiteUrl);
 end;
@@ -168,7 +171,7 @@ end;
 function TMCPJsonRpcProcessor.IsLegacyOnlyMethod(const Method: string): Boolean;
 begin
   Result := TMCPStrings.Contains(Method, LEGACY_ONLY_METHODS);
-  if Result and (Method = 'ping') and FSettings.LenientModernPing then
+  if Result and (Method = MCP_METHOD_PING) and FSettings.LenientModernPing then
     Result := False;
 end;
 
@@ -239,7 +242,7 @@ begin
   if (Result = TMCPProtocolEra.Modern) or not Assigned(Params) then
     Exit;
 
-  var MetaValue := Params.GetValue('_meta');
+  var MetaValue := Params.GetValue(MCP_KEY_META);
   if (MetaValue is TJSONObject) and (TJSONObject(MetaValue).GetValue(MCP_META_PROTOCOL_VERSION) is TJSONString) then
     Result := TMCPProtocolEra.Modern;
 end;
@@ -250,7 +253,7 @@ begin
   if not Assigned(Params) then
     Exit;
 
-  var MetaValue := Params.GetValue('_meta');
+  var MetaValue := Params.GetValue(MCP_KEY_META);
   if not Assigned(MetaValue) then
     Exit;
   if not (MetaValue is TJSONObject) then
@@ -263,18 +266,18 @@ begin
   var Capabilities := Meta.GetValue(MCP_META_CLIENT_CAPABILITIES);
   if not (Capabilities is TJSONObject) then
     raise EMCPError.Create(JSONRPC_INVALID_PARAMS,
-      'params._meta.' + MCP_META_CLIENT_CAPABILITIES + ' is required and must be an object',
+      META_PATH_PREFIX + MCP_META_CLIENT_CAPABILITIES + ' is required and must be an object',
       nil, HTTP_STATUS_BAD_REQUEST);
 
   var ClientInfo := Meta.GetValue(MCP_META_CLIENT_INFO);
   if Assigned(ClientInfo) and not (ClientInfo is TJSONObject) then
     raise EMCPError.Create(JSONRPC_INVALID_PARAMS,
-      'params._meta.' + MCP_META_CLIENT_INFO + ' must be an object', nil, HTTP_STATUS_BAD_REQUEST);
+      META_PATH_PREFIX + MCP_META_CLIENT_INFO + ' must be an object', nil, HTTP_STATUS_BAD_REQUEST);
 
   var LogLevel := Meta.GetValue(MCP_META_LOG_LEVEL);
   if Assigned(LogLevel) and (not IsJsonString(LogLevel) or not TMCPLogLevel.IsKnown(TJSONString(LogLevel).Value)) then
     raise EMCPError.Create(JSONRPC_INVALID_PARAMS,
-      'params._meta.' + MCP_META_LOG_LEVEL + ' must be one of debug, info, notice, warning, error, critical, alert, emergency',
+      META_PATH_PREFIX + MCP_META_LOG_LEVEL + ' must be one of debug, info, notice, warning, error, critical, alert, emergency',
       nil, HTTP_STATUS_BAD_REQUEST);
 end;
 
@@ -286,14 +289,13 @@ begin
   if not Hints.HasMethodHeader then
     raise EMCPError.HeaderMismatch('Mcp-Method header is missing');
   if Hints.MethodHeader <> Method then
-    raise EMCPError.HeaderMismatch(Format(
-      'Header mismatch: Mcp-Method header value ''%s'' does not match body value ''%s''',
-      [Hints.MethodHeader, Method]));
+    raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
+      ['Mcp-Method', Hints.MethodHeader, Method]));
 
   var SourceField := '';
-  if (Method = 'tools/call') or (Method = 'prompts/get') then
+  if (Method = MCP_METHOD_TOOLS_CALL) or (Method = MCP_METHOD_PROMPTS_GET) then
     SourceField := 'name'
-  else if Method = 'resources/read' then
+  else if Method = MCP_METHOD_RESOURCES_READ then
     SourceField := 'uri';
   if SourceField = '' then
     Exit;
@@ -311,9 +313,8 @@ begin
       BodyValue := TJSONString(Source).Value;
   end;
   if Decoded <> BodyValue then
-    raise EMCPError.HeaderMismatch(Format(
-      'Header mismatch: Mcp-Name header value ''%s'' does not match body value ''%s''',
-      [Decoded, BodyValue]));
+    raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
+      ['Mcp-Name', Decoded, BodyValue]));
 end;
 
 function TMCPJsonRpcProcessor.NewContext(Era: TMCPProtocolEra; const Version, Method: string;
@@ -344,9 +345,8 @@ begin
       if not Hints.HasProtocolVersionHeader then
         raise EMCPError.HeaderMismatch('MCP-Protocol-Version header is missing');
       if Hints.ProtocolVersionHeader <> Version then
-        raise EMCPError.HeaderMismatch(Format(
-          'Header mismatch: MCP-Protocol-Version header value ''%s'' does not match body value ''%s''',
-          [Hints.ProtocolVersionHeader, Version]));
+        raise EMCPError.HeaderMismatch(Format(MESSAGE_HEADER_MISMATCH,
+          ['MCP-Protocol-Version', Hints.ProtocolVersionHeader, Version]));
     end;
 
     if not TMCPProtocolVersion.IsModern(Version) then
@@ -374,12 +374,12 @@ begin
     Exit(NewContext(TMCPProtocolEra.Modern, Version, Method, RequestId, Meta, Hints, InputResponses, RequestState));
   end;
 
-  if Method = 'initialize' then
+  if Method = MCP_METHOD_INITIALIZE then
   begin
     var Requested := '';
     if Assigned(Params) then
     begin
-      var RequestedValue := Params.GetValue('protocolVersion');
+      var RequestedValue := Params.GetValue(MCP_KEY_PROTOCOL_VERSION);
       if IsJsonString(RequestedValue) then
         Requested := TJSONString(RequestedValue).Value;
     end;
@@ -494,7 +494,7 @@ begin
 
   var ResultObject := TJSONObject.Create;
   try
-    ResultObject.AddPair('resultType', RESULT_TYPE_INPUT_REQUIRED);
+    ResultObject.AddPair(MCP_KEY_RESULT_TYPE, RESULT_TYPE_INPUT_REQUIRED);
     if Required.Requests.Count > 0 then
       ResultObject.AddPair('inputRequests', Required.Requests.ToJson);
     if Assigned(Required.State) then
@@ -504,9 +504,9 @@ begin
 
     const Response = TJSONObject.Create;
     try
-      Response.AddPair('jsonrpc', JSONRPC_VERSION);
-      Response.AddPair('id', Context.RequestId.ToJson);
-      Response.AddPair('result', TJSONObject(ResultObject.Clone));
+      Response.AddPair(MCP_KEY_JSONRPC, JSONRPC_VERSION);
+      Response.AddPair(MCP_KEY_ID, Context.RequestId.ToJson);
+      Response.AddPair(MCP_KEY_RESULT, TJSONObject(ResultObject.Clone));
       Result.Body := Response.ToJSON;
     finally
       Response.Free;
@@ -549,29 +549,29 @@ end;
 
 procedure TMCPJsonRpcProcessor.ApplyModernEnvelope(const ResultObject: TJSONObject; const Method: string);
 begin
-  if not Assigned(ResultObject.GetValue('resultType')) then
-    ResultObject.AddPair('resultType', RESULT_TYPE_COMPLETE);
+  if not Assigned(ResultObject.GetValue(MCP_KEY_RESULT_TYPE)) then
+    ResultObject.AddPair(MCP_KEY_RESULT_TYPE, RESULT_TYPE_COMPLETE);
 
-  var MetaValue := ResultObject.GetValue('_meta');
+  var MetaValue := ResultObject.GetValue(MCP_KEY_META);
   var Meta: TJSONObject := nil;
   if MetaValue is TJSONObject then
     Meta := TJSONObject(MetaValue)
   else if not Assigned(MetaValue) then
   begin
     Meta := TJSONObject.Create;
-    ResultObject.AddPair('_meta', Meta);
+    ResultObject.AddPair(MCP_KEY_META, Meta);
   end;
   if Assigned(Meta) and not Assigned(Meta.GetValue(MCP_META_SERVER_INFO)) then
     Meta.AddPair(MCP_META_SERVER_INFO, BuildServerInfo);
 
-  var ResultType := ResultObject.GetValue('resultType');
+  var ResultType := ResultObject.GetValue(MCP_KEY_RESULT_TYPE);
   if IsCacheableMethod(Method) and (ResultType is TJSONString)
     and (TJSONString(ResultType).Value = RESULT_TYPE_COMPLETE) then
   begin
-    if not Assigned(ResultObject.GetValue('ttlMs')) then
-      ResultObject.AddPair('ttlMs', TJSONNumber.Create(0));
-    if not Assigned(ResultObject.GetValue('cacheScope')) then
-      ResultObject.AddPair('cacheScope', CACHE_SCOPE_PRIVATE);
+    if not Assigned(ResultObject.GetValue(MCP_KEY_TTL_MS)) then
+      ResultObject.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(0));
+    if not Assigned(ResultObject.GetValue(MCP_KEY_CACHE_SCOPE)) then
+      ResultObject.AddPair(MCP_KEY_CACHE_SCOPE, MCP_CACHE_SCOPE_PRIVATE);
   end;
 end;
 
@@ -588,7 +588,7 @@ begin
     else
     begin
       if Value.IsObject then
-        raise EMCPError.InternalError(Format('%s answered with a %s instead of a JSON object',
+        raise EMCPError.InternalError(Format(MESSAGE_NOT_A_JSON_RESULT,
           [Context.Method, Value.AsObject.ClassName]));
       Result := TJSONString.Create(Value.ToString);
     end;
@@ -601,7 +601,7 @@ begin
   else
   begin
     if Value.IsObject then
-      raise EMCPError.InternalError(Format('%s answered with a %s instead of a JSON object',
+      raise EMCPError.InternalError(Format(MESSAGE_NOT_A_JSON_RESULT,
         [Context.Method, Value.AsObject.ClassName]));
     ResultObject := TJSONObject.Create;
     if not Value.IsEmpty then
@@ -646,11 +646,11 @@ begin
 
   var Response := TJSONObject.Create;
   try
-    Response.AddPair('jsonrpc', JSONRPC_VERSION);
-    Response.AddPair('id', RequestId.ToJson);
+    Response.AddPair(MCP_KEY_JSONRPC, JSONRPC_VERSION);
+    Response.AddPair(MCP_KEY_ID, RequestId.ToJson);
 
     var ErrorObject := TJSONObject.Create;
-    Response.AddPair('error', ErrorObject);
+    Response.AddPair(MCP_KEY_ERROR, ErrorObject);
     ErrorObject.AddPair('code', TJSONNumber.Create(Error.Code));
     ErrorObject.AddPair('message', Error.Message);
     if Assigned(Error.Data) then
@@ -714,7 +714,7 @@ begin
 
       var Request := TJSONObject(Message);
 
-      RequestId := TMCPRequestId.FromJson(Request.GetValue('id'));
+      RequestId := TMCPRequestId.FromJson(Request.GetValue(MCP_KEY_ID));
       if RequestId.Kind = TMCPRequestIdKind.Null then
         raise EMCPError.InvalidRequest('id must not be null');
       if RequestId.Kind = TMCPRequestIdKind.Invalid then
@@ -723,14 +723,14 @@ begin
         raise EMCPError.InvalidRequest('id must be a string or an integer');
       end;
 
-      var JsonRpc := Request.GetValue('jsonrpc');
+      var JsonRpc := Request.GetValue(MCP_KEY_JSONRPC);
       if not IsJsonString(JsonRpc) or (TJSONString(JsonRpc).Value <> JSONRPC_VERSION) then
         raise EMCPError.InvalidRequest('jsonrpc must be "2.0"');
 
-      var MethodValue := Request.GetValue('method');
+      var MethodValue := Request.GetValue(MCP_KEY_METHOD);
       if not IsJsonString(MethodValue) then
       begin
-        if Assigned(Request.GetValue('result')) or Assigned(Request.GetValue('error')) then
+        if Assigned(Request.GetValue(MCP_KEY_RESULT)) or Assigned(Request.GetValue(MCP_KEY_ERROR)) then
         begin
           if Era = TMCPProtocolEra.Modern then
             raise EMCPError.InvalidRequest('JSON-RPC responses are not accepted');
@@ -744,15 +744,15 @@ begin
       end;
       var Method := TJSONString(MethodValue).Value;
 
-      var ParamsValue := Request.GetValue('params');
+      var ParamsValue := Request.GetValue(MCP_KEY_PARAMS);
       var Params: TJSONObject := nil;
       if Assigned(ParamsValue) then
       begin
         if not (ParamsValue is TJSONObject) then
         begin
           if Era = TMCPProtocolEra.Modern then
-            raise EMCPError.Create(JSONRPC_INVALID_PARAMS, 'params must be an object', nil, HTTP_STATUS_BAD_REQUEST);
-          raise EMCPError.InvalidParams('params must be an object');
+            raise EMCPError.Create(JSONRPC_INVALID_PARAMS, MESSAGE_PARAMS_NOT_OBJECT, nil, HTTP_STATUS_BAD_REQUEST);
+          raise EMCPError.InvalidParams(MESSAGE_PARAMS_NOT_OBJECT);
         end;
         Params := TJSONObject(ParamsValue);
       end;
@@ -788,11 +788,11 @@ begin
 
       var Response := TJSONObject.Create;
       try
-        Response.AddPair('jsonrpc', JSONRPC_VERSION);
-        Response.AddPair('id', RequestId.ToJson);
+        Response.AddPair(MCP_KEY_JSONRPC, JSONRPC_VERSION);
+        Response.AddPair(MCP_KEY_ID, RequestId.ToJson);
         var ResultJson := ResultToJson(ExecuteResult, Context);
         if Assigned(ResultJson) then
-          Response.AddPair('result', ResultJson);
+          Response.AddPair(MCP_KEY_RESULT, ResultJson);
         Result.Body := Response.ToJSON;
       finally
         Response.Free;

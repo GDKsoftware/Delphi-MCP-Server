@@ -94,6 +94,21 @@ uses
   MCPServer.Tool.Result;
 
 const
+  ASK_STEP_ONE = 'Step 1: What is your name?';
+  ASK_STEP_TWO = 'Step 2: What is your favorite color?';
+  TOOL_ELICITATION = 'test_input_required_result_elicitation';
+  TOOL_SAMPLING = 'test_input_required_result_sampling';
+  TOOL_LIST_ROOTS = 'test_input_required_result_list_roots';
+  TOOL_REQUEST_STATE = 'test_input_required_result_request_state';
+  TOOL_MULTIPLE_INPUTS = 'test_input_required_result_multiple_inputs';
+  TOOL_MULTI_ROUND = 'test_input_required_result_multi_round';
+  TOOL_TAMPERED_STATE = 'test_input_required_result_tampered_state';
+  TOOL_CAPABILITIES = 'test_input_required_result_capabilities';
+  TOOL_MISSING_CAPABILITY = 'test_missing_capability';
+  TOOL_STREAMING_ELICITATION = 'test_streaming_elicitation';
+  ASK_CONFIRM = 'Please confirm';
+  SCHEMA_TYPE_BOOLEAN = 'boolean';
+  VALUE_TRUE = 'true';
   KEY_USER_NAME = 'user_name';
   KEY_CAPITAL_QUESTION = 'capital_question';
   KEY_CLIENT_ROOTS = 'client_roots';
@@ -125,7 +140,7 @@ begin
     for var Root in Roots do
     begin
       if Root is TJSONObject then
-        Uris := Uris + [TJSONObject(Root).GetValue<string>('uri', '')];
+        Uris := Uris + [TJSONObject(Root).GetValue<string>(MCP_KEY_URI, '')];
     end;
   end;
   Result := Format('Roots: %s', [string.Join(', ', Uris)]);
@@ -142,7 +157,7 @@ end;
 constructor TElicitationInputTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_elicitation';
+  FName := TOOL_ELICITATION;
   FDescription := 'Asks the client for a name through an elicitation input request, then greets it';
 end;
 
@@ -165,7 +180,7 @@ end;
 constructor TSamplingInputTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_sampling';
+  FName := TOOL_SAMPLING;
   FDescription := 'Asks the client to sample an answer, then returns that answer';
 end;
 
@@ -188,7 +203,7 @@ end;
 constructor TListRootsInputTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_list_roots';
+  FName := TOOL_LIST_ROOTS;
   FDescription := 'Asks the client for its roots, then lists them';
 end;
 
@@ -208,7 +223,7 @@ end;
 constructor TRequestStateInputTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_request_state';
+  FName := TOOL_REQUEST_STATE;
   FDescription := 'Asks for a confirmation and carries a signed requestState across the round trip';
 end;
 
@@ -217,14 +232,14 @@ var
   Response: TJSONObject;
 begin
   var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response)
-    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = 'true');
+    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
   var HasState := Assigned(Context.RequestState) and Assigned(Context.RequestState.GetValue(STATE_NONCE));
   if not Confirmed or not HasState then
   begin
     var State := TJSONObject.Create;
     State.AddPair(STATE_NONCE, TGUID.NewGuid.ToString);
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
-      .AddElicitation(KEY_CONFIRM, 'Please confirm', TMCPInputRequests.FieldSchema(FIELD_OK, 'boolean')), State);
+      .AddElicitation(KEY_CONFIRM, ASK_CONFIRM, TMCPInputRequests.FieldSchema(FIELD_OK, SCHEMA_TYPE_BOOLEAN)), State);
   end;
 
   Result := TMCPToolResult.Text(Format('state-ok: confirmed with nonce %s',
@@ -236,7 +251,7 @@ end;
 constructor TMultipleInputsTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_multiple_inputs';
+  FName := TOOL_MULTIPLE_INPUTS;
   FDescription := 'Asks for a name, a sampled greeting and the client roots in one round trip';
 end;
 
@@ -265,7 +280,7 @@ end;
 constructor TMultiRoundInputTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_multi_round';
+  FName := TOOL_MULTI_ROUND;
   FDescription := 'Asks for a name and then a colour in two consecutive round trips';
 end;
 
@@ -279,7 +294,7 @@ begin
 
   if Round < 1 then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
-      .AddElicitation(KEY_STEP1, 'Step 1: What is your name?', TMCPInputRequests.FieldSchema(FIELD_NAME)), TInputSample.NewState(1));
+      .AddElicitation(KEY_STEP1, ASK_STEP_ONE, TMCPInputRequests.FieldSchema(FIELD_NAME)), TInputSample.NewState(1));
 
   if Round = 1 then
   begin
@@ -288,12 +303,12 @@ begin
       Name := TMCPInputResponse.ElicitationField(Response, FIELD_NAME);
     if Name = '' then
       raise EMCPInputRequired.Create(TMCPInputRequests.Create
-        .AddElicitation(KEY_STEP1, 'Step 1: What is your name?', TMCPInputRequests.FieldSchema(FIELD_NAME)), TInputSample.NewState(1));
+        .AddElicitation(KEY_STEP1, ASK_STEP_ONE, TMCPInputRequests.FieldSchema(FIELD_NAME)), TInputSample.NewState(1));
 
     var State := TInputSample.NewState(2);
     State.AddPair(STATE_NAME, Name);
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
-      .AddElicitation(KEY_STEP2, 'Step 2: What is your favorite color?', TMCPInputRequests.FieldSchema(FIELD_COLOR)), State);
+      .AddElicitation(KEY_STEP2, ASK_STEP_TWO, TMCPInputRequests.FieldSchema(FIELD_COLOR)), State);
   end;
 
   var Color := '';
@@ -304,7 +319,7 @@ begin
     var State := TInputSample.NewState(2);
     State.AddPair(STATE_NAME, Context.RequestState.GetValue<string>(STATE_NAME, ''));
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
-      .AddElicitation(KEY_STEP2, 'Step 2: What is your favorite color?', TMCPInputRequests.FieldSchema(FIELD_COLOR)), State);
+      .AddElicitation(KEY_STEP2, ASK_STEP_TWO, TMCPInputRequests.FieldSchema(FIELD_COLOR)), State);
   end;
 
   Result := TMCPToolResult.Text(Format('Hello, %s! Your favorite color is %s.',
@@ -316,7 +331,7 @@ end;
 constructor TTamperedStateInputTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_tampered_state';
+  FName := TOOL_TAMPERED_STATE;
   FDescription := 'Asks for a confirmation with a signed requestState that must come back unchanged';
 end;
 
@@ -325,10 +340,10 @@ var
   Response: TJSONObject;
 begin
   var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response)
-    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = 'true');
+    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
   if not Confirmed or not Assigned(Context.RequestState) then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
-      .AddElicitation(KEY_CONFIRM, 'Please confirm', TMCPInputRequests.FieldSchema(FIELD_OK, 'boolean')), TInputSample.NewState(1));
+      .AddElicitation(KEY_CONFIRM, ASK_CONFIRM, TMCPInputRequests.FieldSchema(FIELD_OK, SCHEMA_TYPE_BOOLEAN)), TInputSample.NewState(1));
 
   Result := TMCPToolResult.Text('state-ok: the requestState verified');
 end;
@@ -338,7 +353,7 @@ end;
 constructor TCapabilityAwareInputTool.Create;
 begin
   inherited;
-  FName := 'test_input_required_result_capabilities';
+  FName := TOOL_CAPABILITIES;
   FDescription := 'Asks only for the kinds of input the client declared it can provide';
 end;
 
@@ -391,7 +406,7 @@ end;
 constructor TMissingCapabilityTool.Create;
 begin
   inherited;
-  FName := 'test_missing_capability';
+  FName := TOOL_MISSING_CAPABILITY;
   FDescription := 'Requires the sampling client capability and fails with -32021 when it is absent';
 end;
 
@@ -406,7 +421,7 @@ end;
 constructor TStreamingElicitationTool.Create;
 begin
   inherited;
-  FName := 'test_streaming_elicitation';
+  FName := TOOL_STREAMING_ELICITATION;
   FDescription := 'Logs to the response stream, then asks the client for a confirmation';
 end;
 
@@ -414,63 +429,63 @@ function TStreamingElicitationTool.ExecuteWithContext(const Params: TNoParams; c
 var
   Response: TJSONObject;
 begin
-  Context.Log('info', 'Asking the client to confirm', 'test_streaming_elicitation');
+  Context.Log('info', 'Asking the client to confirm', TOOL_STREAMING_ELICITATION);
   var Confirmed := Context.TryGetInputResponse(KEY_CONFIRM, Response)
-    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = 'true');
+    and (TMCPInputResponse.ElicitationField(Response, FIELD_OK) = VALUE_TRUE);
   if not Confirmed then
     raise EMCPInputRequired.Create(TMCPInputRequests.Create
-      .AddElicitation(KEY_CONFIRM, 'Please confirm', TMCPInputRequests.FieldSchema(FIELD_OK, 'boolean')));
+      .AddElicitation(KEY_CONFIRM, ASK_CONFIRM, TMCPInputRequests.FieldSchema(FIELD_OK, SCHEMA_TYPE_BOOLEAN)));
 
   Result := TMCPToolResult.Text('Confirmed');
 end;
 
 initialization
-  TMCPRegistry.RegisterTool('test_input_required_result_elicitation',
+  TMCPRegistry.RegisterTool(TOOL_ELICITATION,
     function: IMCPTool
     begin
       Result := TElicitationInputTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_input_required_result_sampling',
+  TMCPRegistry.RegisterTool(TOOL_SAMPLING,
     function: IMCPTool
     begin
       Result := TSamplingInputTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_input_required_result_list_roots',
+  TMCPRegistry.RegisterTool(TOOL_LIST_ROOTS,
     function: IMCPTool
     begin
       Result := TListRootsInputTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_input_required_result_request_state',
+  TMCPRegistry.RegisterTool(TOOL_REQUEST_STATE,
     function: IMCPTool
     begin
       Result := TRequestStateInputTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_input_required_result_multiple_inputs',
+  TMCPRegistry.RegisterTool(TOOL_MULTIPLE_INPUTS,
     function: IMCPTool
     begin
       Result := TMultipleInputsTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_input_required_result_multi_round',
+  TMCPRegistry.RegisterTool(TOOL_MULTI_ROUND,
     function: IMCPTool
     begin
       Result := TMultiRoundInputTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_input_required_result_tampered_state',
+  TMCPRegistry.RegisterTool(TOOL_TAMPERED_STATE,
     function: IMCPTool
     begin
       Result := TTamperedStateInputTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_input_required_result_capabilities',
+  TMCPRegistry.RegisterTool(TOOL_CAPABILITIES,
     function: IMCPTool
     begin
       Result := TCapabilityAwareInputTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_missing_capability',
+  TMCPRegistry.RegisterTool(TOOL_MISSING_CAPABILITY,
     function: IMCPTool
     begin
       Result := TMissingCapabilityTool.Create;
     end);
-  TMCPRegistry.RegisterTool('test_streaming_elicitation',
+  TMCPRegistry.RegisterTool(TOOL_STREAMING_ELICITATION,
     function: IMCPTool
     begin
       Result := TStreamingElicitationTool.Create;
