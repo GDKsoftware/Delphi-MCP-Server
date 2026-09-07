@@ -4,7 +4,6 @@ interface
 
 uses
   DUnitX.TestFramework,
-  System.Generics.Collections,
   MCPServer.Types;
 
 type
@@ -121,7 +120,8 @@ uses
   System.SysUtils,
   System.DateUtils,
   System.JSON,
-  MCPServer.Serializer;
+  MCPServer.Serializer,
+  System.Generics.Collections;
 
 { TSampleParams }
 

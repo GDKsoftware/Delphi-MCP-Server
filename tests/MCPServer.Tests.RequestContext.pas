@@ -4,7 +4,6 @@ interface
 
 uses
   DUnitX.TestFramework,
-  System.Generics.Collections,
   System.JSON,
   MCPServer.Types,
   MCPServer.Settings,
@@ -113,7 +112,8 @@ implementation
 
 uses
   System.SysUtils,
-  MCPServer.Errors;
+  MCPServer.Errors,
+  System.Generics.Collections;
 
 const
   META_MODERN = '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",'

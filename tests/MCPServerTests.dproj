@@ -117,6 +117,7 @@
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Calculate.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Logs.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Project.pas"/>
+        <DCCReference Include="MCPServer.Tests.Support.pas"/>
         <DCCReference Include="MCPServer.Tests.Harness.pas"/>
         <DCCReference Include="MCPServer.Tests.Golden.pas"/>
         <DCCReference Include="MCPServer.Tests.Golden.Legacy.pas"/>

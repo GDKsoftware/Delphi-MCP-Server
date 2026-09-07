@@ -23,11 +23,11 @@ implementation
 
 uses
   System.SysUtils,
-  System.Generics.Collections,
   System.JSON,
   MCPServer.Types,
   MCPServer.Capabilities,
-  MCPServer.Tests.Harness;
+  MCPServer.Tests.Harness,
+  System.Generics.Collections;
 
 type
   TOpaqueRegistry = class(TInterfacedObject, IMCPManagerRegistry)

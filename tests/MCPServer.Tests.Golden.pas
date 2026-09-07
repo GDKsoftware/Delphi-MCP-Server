@@ -5,7 +5,6 @@ interface
 uses
   System.SysUtils,
   System.Classes,
-  System.Generics.Collections,
   System.JSON;
 
 type
@@ -79,7 +78,9 @@ type
 implementation
 
 uses
-  System.IOUtils;
+  System.IOUtils,
+  System.Generics.Collections,
+  DUnitX.TestFramework;
 
 const
   MAX_PARENT_LEVELS = 6;
@@ -418,10 +419,7 @@ begin
 
     var Expected := GoldenCase.ExpectedText;
     var Actual := GoldenCase.NormalizeResponse(Response);
-    const IsNotActual = (Expected <> Actual);
-    if IsNotActual then
-      raise EGoldenError.CreateFmt('Golden mismatch for %s/%s'#13#10'--- expected ---'#13#10'%s'#13#10'--- actual ---'#13#10'%s',
-        [Suite, CaseName, Expected, Actual]);
+    Assert.AreEqual(Expected, Actual, Format('golden %s/%s', [Suite, CaseName]));
   finally
     GoldenCase.Free;
   end;

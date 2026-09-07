@@ -22,6 +22,7 @@ type
       const Separator: string = #10): TArray<string>;
     function ParseLine(const Line: string): TJSONObject;
     function FindById(const Lines: TArray<string>; const Id: string): TJSONObject;
+    function GetById(const Lines: TArray<string>; const Id: string): TJSONObject;
     function FindNotification(const Lines: TArray<string>; const Method: string): TJSONObject;
   public
     [Setup]
@@ -134,6 +135,12 @@ begin
   Result := nil;
 end;
 
+function TStdioTransportTests.GetById(const Lines: TArray<string>; const Id: string): TJSONObject;
+begin
+  Result := FindById(Lines, Id);
+  Assert.IsNotNull(Result, Format('no message with id %s in %s', [Id, string.Join(' | ', Lines)]));
+end;
+
 function TStdioTransportTests.FindNotification(const Lines: TArray<string>; const Method: string): TJSONObject;
 begin
   for var Line in Lines do
@@ -151,8 +158,8 @@ procedure TStdioTransportTests.Handshake_And_ToolsList;
 begin
   var Lines := Run([INITIALIZE, INITIALIZED, '{"jsonrpc":"2.0","id":2,"method":"tools/list"}']);
   Assert.AreEqual(2, Integer(Length(Lines)));
-  var Init := FindById(Lines, '1');
-  var Tools := FindById(Lines, '2');
+  var Init := GetById(Lines, '1');
+  var Tools := GetById(Lines, '2');
   try
     Assert.AreEqual('2025-06-18', Init.GetValue<string>('result.protocolVersion'));
     Assert.AreEqual('echo', Tools.GetValue<string>('result.tools[0].name'));
@@ -167,7 +174,7 @@ begin
   var Probe := 'h' + Char($00E9) + 'llo w' + Char($00F6) + 'rld ' + Char($D83D) + Char($DE00);
   var Lines := Run([INITIALIZE, INITIALIZED,
     '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"' + Probe + '"}}}']);
-  var Echo := FindById(Lines, '3');
+  var Echo := GetById(Lines, '3');
   try
     Assert.AreEqual('Echo: ' + Probe, Echo.GetValue<string>('result.content[0].text'));
   finally
@@ -184,7 +191,7 @@ end;
 procedure TStdioTransportTests.CrLf_Input_IsAccepted;
 begin
   var Lines := Run([INITIALIZE, INITIALIZED, '{"jsonrpc":"2.0","id":2,"method":"ping"}'], 2000, #13#10);
-  var Pong := FindById(Lines, '2');
+  var Pong := GetById(Lines, '2');
   try
     Assert.IsNotNull(Pong);
     Assert.IsNotNull(Pong.GetValue('result'));
@@ -236,7 +243,7 @@ begin
     '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":5,"reason":"test"}}',
     '{"jsonrpc":"2.0","id":6,"method":"ping"}']);
   Assert.AreEqual(1, Integer(Length(Lines)), 'only the ping is answered');
-  var Pong := FindById(Lines, '6');
+  var Pong := GetById(Lines, '6');
   try
     Assert.IsNotNull(Pong);
   finally
@@ -283,7 +290,7 @@ procedure TStdioTransportTests.ModernRequest_OverStdio;
 begin
   var Lines := Run([
     '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}']);
-  var Json := FindById(Lines, '1');
+  var Json := GetById(Lines, '1');
   try
     Assert.AreEqual('complete', Json.GetValue<string>('result.resultType'));
     Assert.AreEqual(0, Json.GetValue<Integer>('result.ttlMs'));
@@ -317,7 +324,7 @@ begin
   finally
     Ack.Free;
   end;
-  var Pong := FindById(Lines, '10');
+  var Pong := GetById(Lines, '10');
   try
     Assert.IsNotNull(Pong, 'ping is answered while a subscription is open');
   finally
@@ -348,7 +355,7 @@ begin
       Changed := True;
   end;
   Assert.IsTrue(Changed, 'the prompt change reached the subscription');
-  var Response := FindById(Lines, '9');
+  var Response := GetById(Lines, '9');
   try
     Assert.IsNotNull(Response, 'stdin closing ends the subscription with a response');
     Assert.AreEqual('complete', Response.GetValue<string>('result.resultType'));
