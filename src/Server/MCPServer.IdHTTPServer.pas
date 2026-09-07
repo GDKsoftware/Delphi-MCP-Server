@@ -135,8 +135,9 @@ const
 
   CORS_MAX_AGE = 86400;
   CORS_ALLOW_METHODS = 'POST, OPTIONS';
-  CORS_ALLOW_HEADERS = 'Accept, Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID';
-  CORS_EXPOSE_HEADERS = 'Mcp-Session-Id, WWW-Authenticate';
+  CORS_ALLOW_HEADERS = 'Accept, Content-Type, Authorization, ' + MCP_HEADER_PROTOCOL_VERSION + ', ' +
+    MCP_HEADER_METHOD + ', ' + MCP_HEADER_NAME + ', ' + MCP_HEADER_SESSION_ID + ', Last-Event-ID';
+  CORS_EXPOSE_HEADERS = MCP_HEADER_SESSION_ID + ', WWW-Authenticate';
   ALLOW_HEADER = 'POST, OPTIONS';
 
   HEADER_ORIGIN = 'Origin';
@@ -145,10 +146,6 @@ const
   BEARER_PREFIX = 'Bearer ';
   METADATA_CACHE_CONTROL = 'max-age=3600';
   HEADER_ACCEPT = 'Accept';
-  HEADER_SESSION_ID = 'Mcp-Session-Id';
-  HEADER_PROTOCOL_VERSION = 'MCP-Protocol-Version';
-  HEADER_METHOD = 'Mcp-Method';
-  HEADER_NAME = 'Mcp-Name';
 
 
   LOOPBACK_IPV4 = '127.0.0.1';
@@ -651,19 +648,19 @@ end;
 function TMCPIdHTTPServer.BuildTransportHints(RequestInfo: TIdHTTPRequestInfo): TMCPTransportHints;
 begin
   Result := TMCPTransportHints.ForHttp(
-    HeaderPresent(RequestInfo, HEADER_PROTOCOL_VERSION), HeaderValue(RequestInfo, HEADER_PROTOCOL_VERSION));
-  Result.HasMethodHeader := HeaderPresent(RequestInfo, HEADER_METHOD);
-  Result.MethodHeader := HeaderValue(RequestInfo, HEADER_METHOD);
-  Result.HasNameHeader := HeaderPresent(RequestInfo, HEADER_NAME);
-  Result.NameHeader := HeaderValue(RequestInfo, HEADER_NAME);
+    HeaderPresent(RequestInfo, MCP_HEADER_PROTOCOL_VERSION), HeaderValue(RequestInfo, MCP_HEADER_PROTOCOL_VERSION));
+  Result.HasMethodHeader := HeaderPresent(RequestInfo, MCP_HEADER_METHOD);
+  Result.MethodHeader := HeaderValue(RequestInfo, MCP_HEADER_METHOD);
+  Result.HasNameHeader := HeaderPresent(RequestInfo, MCP_HEADER_NAME);
+  Result.NameHeader := HeaderValue(RequestInfo, MCP_HEADER_NAME);
   Result.RemoteAddress := RequestInfo.RemoteIP;
 end;
 
 procedure TMCPIdHTTPServer.EchoLegacySessionId(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
 begin
-  var SessionId := HeaderValue(RequestInfo, HEADER_SESSION_ID);
+  var SessionId := HeaderValue(RequestInfo, MCP_HEADER_SESSION_ID);
   if (SessionId <> '') and TMCPHeaderValue.IsHeaderSafe(SessionId) and not SessionId.Contains(' ') then
-    ResponseInfo.CustomHeaders.Values[HEADER_SESSION_ID] := SessionId;
+    ResponseInfo.CustomHeaders.Values[MCP_HEADER_SESSION_ID] := SessionId;
 end;
 
 procedure TMCPIdHTTPServer.HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo;

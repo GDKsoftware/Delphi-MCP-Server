@@ -132,6 +132,7 @@
         <DCCReference Include="MCPServer.Tests.Capabilities.pas"/>
         <DCCReference Include="MCPServer.Tests.Golden.Modern.pas"/>
         <DCCReference Include="MCPServer.Tests.HttpHeaders.pas"/>
+        <DCCReference Include="MCPServer.Tests.HeaderEncoding.pas"/>
         <DCCReference Include="MCPServer.Tests.Http.pas"/>
         <DCCReference Include="MCPServer.Tests.ToolResult.pas"/>
         <DCCReference Include="MCPServer.Tests.Serializer.pas"/>
