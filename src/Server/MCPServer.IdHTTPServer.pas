@@ -99,6 +99,7 @@ type
     procedure Start;
     procedure Stop;
     function BoundAddresses: TArray<string>;
+    function BoundPort: Word;
     property Port: Word read FPort write FPort;
     property Active: Boolean read FActive;
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry write FManagerRegistry;
@@ -264,6 +265,14 @@ begin
     else
       Result := Result + [Format('%s:%d', [Binding.IP, Binding.Port])];
   end;
+end;
+
+function TMCPIdHTTPServer.BoundPort: Word;
+begin
+  if FHTTPServer.Bindings.Count > 0 then
+    Result := Word(FHTTPServer.Bindings[0].Port)
+  else
+    Result := FPort;
 end;
 
 procedure TMCPIdHTTPServer.AddBinding(const IP: string; IPVersion: TIdIPVersion);
