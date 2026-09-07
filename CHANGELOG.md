@@ -220,6 +220,19 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- The content block helpers, the protocol version helpers and the redaction
+  helpers are class functions on `TMCPContentBlock`, `TMCPProtocolVersion` and
+  `TLogger`; `MCPServer.Schema.Generator` keeps its RTTI context in a class
+  variable instead of an `initialization` section.
+- `IMCPAuthorizer.Authorize` returns a `TMCPAuthResult`, a custom authorizer
+  overrides `TryValidateToken`, `TMCPLineReader.TryReadLine` returns a
+  `TMCPLine`, `TMCPSchemaValidator.TryValidate` replaces `Validate`, and
+  `TMCPResourceTemplateBase.CompilePattern` returns a `TMCPCompiledTemplate`.
+- `TMCPRegistry` raises `EMCPRegistryNotFound`, the managers raise
+  `EMCPError.MethodNotFound` for a method they do not handle, and
+  `TMCPIdHTTPServer` raises `EMCPConfigurationError`; no code path raises the
+  base `Exception` any more.
+
 - `TMCPToolBase` (the non-generic, hand-written-schema base) now validates
   its arguments against `BuildSchema` before calling the tool: the abstract
   method a descendant overrides is `DoExecute`, not `Execute`, which is now

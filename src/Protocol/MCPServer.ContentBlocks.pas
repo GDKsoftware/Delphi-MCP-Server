@@ -6,22 +6,26 @@ uses
   System.SysUtils,
   System.JSON;
 
-function CreateTextBlock(const Text: string): TJSONObject;
-function CreateImageBlock(const Base64Data, MimeType: string): TJSONObject;
-function CreateAudioBlock(const Base64Data, MimeType: string): TJSONObject;
-function CreateResourceLinkBlock(const Uri, Name: string; const Description: string = '';
-  const MimeType: string = ''): TJSONObject;
-function CreateEmbeddedTextBlock(const Uri, MimeType, Text: string): TJSONObject;
-function CreateEmbeddedBlobBlock(const Uri, MimeType, Base64Blob: string): TJSONObject;
-
-function EncodeBase64Blob(const Data: TBytes): string;
+type
+  TMCPContentBlock = record
+    class function Text(const Value: string): TJSONObject; static;
+    class function Image(const Base64Data, MimeType: string): TJSONObject; static;
+    class function Audio(const Base64Data, MimeType: string): TJSONObject; static;
+    class function ResourceLink(const Uri, Name: string; const Description: string = '';
+      const MimeType: string = ''): TJSONObject; static;
+    class function EmbeddedText(const Uri, MimeType, Text: string): TJSONObject; static;
+    class function EmbeddedBlob(const Uri, MimeType, Base64Blob: string): TJSONObject; static;
+    class function EncodeBlob(const Data: TBytes): string; static;
+  end;
 
 implementation
 
 uses
   System.NetEncoding;
 
-function EncodeBase64Blob(const Data: TBytes): string;
+{ TMCPContentBlock }
+
+class function TMCPContentBlock.EncodeBlob(const Data: TBytes): string;
 begin
   var Encoding := TBase64Encoding.Create(0);
   try
@@ -31,14 +35,14 @@ begin
   end;
 end;
 
-function CreateTextBlock(const Text: string): TJSONObject;
+class function TMCPContentBlock.Text(const Value: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('type', 'text');
-  Result.AddPair('text', Text);
+  Result.AddPair('text', Value);
 end;
 
-function CreateImageBlock(const Base64Data, MimeType: string): TJSONObject;
+class function TMCPContentBlock.Image(const Base64Data, MimeType: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('type', 'image');
@@ -46,7 +50,7 @@ begin
   Result.AddPair('mimeType', MimeType);
 end;
 
-function CreateAudioBlock(const Base64Data, MimeType: string): TJSONObject;
+class function TMCPContentBlock.Audio(const Base64Data, MimeType: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('type', 'audio');
@@ -54,7 +58,7 @@ begin
   Result.AddPair('mimeType', MimeType);
 end;
 
-function CreateResourceLinkBlock(const Uri, Name, Description, MimeType: string): TJSONObject;
+class function TMCPContentBlock.ResourceLink(const Uri, Name, Description, MimeType: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.AddPair('type', 'resource_link');
@@ -66,7 +70,7 @@ begin
     Result.AddPair('mimeType', MimeType);
 end;
 
-function CreateEmbeddedTextBlock(const Uri, MimeType, Text: string): TJSONObject;
+class function TMCPContentBlock.EmbeddedText(const Uri, MimeType, Text: string): TJSONObject;
 begin
   var Resource := TJSONObject.Create;
   Resource.AddPair('uri', Uri);
@@ -77,7 +81,7 @@ begin
   Result.AddPair('resource', Resource);
 end;
 
-function CreateEmbeddedBlobBlock(const Uri, MimeType, Base64Blob: string): TJSONObject;
+class function TMCPContentBlock.EmbeddedBlob(const Uri, MimeType, Base64Blob: string): TJSONObject;
 begin
   var Resource := TJSONObject.Create;
   Resource.AddPair('uri', Uri);

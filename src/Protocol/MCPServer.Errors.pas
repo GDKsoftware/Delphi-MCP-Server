@@ -44,6 +44,9 @@ type
   EMCPTransportError = class(Exception)
   end;
 
+  EMCPConfigurationError = class(Exception)
+  end;
+
   EMCPRequestCancelled = class(Exception);
 
 const

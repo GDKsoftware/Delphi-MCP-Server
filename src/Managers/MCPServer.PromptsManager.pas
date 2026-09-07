@@ -121,7 +121,7 @@ begin
   else if Method = 'prompts/get' then
     Result := GetPrompt(Params, EraOf(Context))
   else
-    raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+    raise EMCPError.MethodNotFound(Method);
 end;
 
 procedure TMCPPromptsManager.RegisterPrompt(const Prompt: IMCPPrompt);

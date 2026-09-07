@@ -69,47 +69,47 @@ end;
 
 function TMCPToolResult.AddText(const Text: string): TMCPToolResult;
 begin
-  AddBlock(CreateTextBlock(Text));
+  AddBlock(TMCPContentBlock.Text(Text));
   Result := Self;
 end;
 
 function TMCPToolResult.AddImage(const Data: TBytes; const MimeType: string): TMCPToolResult;
 begin
-  Result := AddImage(EncodeBase64Blob(Data), MimeType);
+  Result := AddImage(TMCPContentBlock.EncodeBlob(Data), MimeType);
 end;
 
 function TMCPToolResult.AddImage(const Base64Data, MimeType: string): TMCPToolResult;
 begin
-  AddBlock(CreateImageBlock(Base64Data, MimeType));
+  AddBlock(TMCPContentBlock.Image(Base64Data, MimeType));
   Result := Self;
 end;
 
 function TMCPToolResult.AddAudio(const Data: TBytes; const MimeType: string): TMCPToolResult;
 begin
-  Result := AddAudio(EncodeBase64Blob(Data), MimeType);
+  Result := AddAudio(TMCPContentBlock.EncodeBlob(Data), MimeType);
 end;
 
 function TMCPToolResult.AddAudio(const Base64Data, MimeType: string): TMCPToolResult;
 begin
-  AddBlock(CreateAudioBlock(Base64Data, MimeType));
+  AddBlock(TMCPContentBlock.Audio(Base64Data, MimeType));
   Result := Self;
 end;
 
 function TMCPToolResult.AddResourceLink(const Uri, Name, Description, MimeType: string): TMCPToolResult;
 begin
-  AddBlock(CreateResourceLinkBlock(Uri, Name, Description, MimeType));
+  AddBlock(TMCPContentBlock.ResourceLink(Uri, Name, Description, MimeType));
   Result := Self;
 end;
 
 function TMCPToolResult.AddEmbeddedText(const Uri, MimeType, Text: string): TMCPToolResult;
 begin
-  AddBlock(CreateEmbeddedTextBlock(Uri, MimeType, Text));
+  AddBlock(TMCPContentBlock.EmbeddedText(Uri, MimeType, Text));
   Result := Self;
 end;
 
 function TMCPToolResult.AddEmbeddedBlob(const Uri, MimeType: string; const Data: TBytes): TMCPToolResult;
 begin
-  AddBlock(CreateEmbeddedBlobBlock(Uri, MimeType, EncodeBase64Blob(Data)));
+  AddBlock(TMCPContentBlock.EmbeddedBlob(Uri, MimeType, TMCPContentBlock.EncodeBlob(Data)));
   Result := Self;
 end;
 

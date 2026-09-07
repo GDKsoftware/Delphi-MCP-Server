@@ -142,7 +142,7 @@ begin
   else if Method = 'resources/templates/list' then
     Result := ListResourceTemplates(Params, EraOf(Context))
   else
-    raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+    raise EMCPError.MethodNotFound(Method);
 end;
 
 procedure TMCPResourcesManager.RegisterResource(const Resource: IMCPResource);
@@ -353,7 +353,7 @@ begin
       Result.AddPair('mimeType', Resource.MimeType);
 
     if Supports(Resource, IMCPBinaryResource, Binary) then
-      Result.AddPair('blob', EncodeBase64Blob(Binary.ReadBinary))
+      Result.AddPair('blob', TMCPContentBlock.EncodeBlob(Binary.ReadBinary))
     else
       Result.AddPair('text', Resource.Read);
   except

@@ -131,46 +131,46 @@ end;
 
 function TMCPPromptMessages.AddText(const Role, Text: string): TMCPPromptMessages;
 begin
-  Result := AddMessage(Role, CreateTextBlock(Text));
+  Result := AddMessage(Role, TMCPContentBlock.Text(Text));
 end;
 
 function TMCPPromptMessages.AddImage(const Role: string; const Data: TBytes;
   const MimeType: string): TMCPPromptMessages;
 begin
-  Result := AddImage(Role, EncodeBase64Blob(Data), MimeType);
+  Result := AddImage(Role, TMCPContentBlock.EncodeBlob(Data), MimeType);
 end;
 
 function TMCPPromptMessages.AddImage(const Role, Base64Data, MimeType: string): TMCPPromptMessages;
 begin
-  Result := AddMessage(Role, CreateImageBlock(Base64Data, MimeType));
+  Result := AddMessage(Role, TMCPContentBlock.Image(Base64Data, MimeType));
 end;
 
 function TMCPPromptMessages.AddAudio(const Role: string; const Data: TBytes;
   const MimeType: string): TMCPPromptMessages;
 begin
-  Result := AddAudio(Role, EncodeBase64Blob(Data), MimeType);
+  Result := AddAudio(Role, TMCPContentBlock.EncodeBlob(Data), MimeType);
 end;
 
 function TMCPPromptMessages.AddAudio(const Role, Base64Data, MimeType: string): TMCPPromptMessages;
 begin
-  Result := AddMessage(Role, CreateAudioBlock(Base64Data, MimeType));
+  Result := AddMessage(Role, TMCPContentBlock.Audio(Base64Data, MimeType));
 end;
 
 function TMCPPromptMessages.AddResourceLink(const Role, Uri, Name, Description,
   MimeType: string): TMCPPromptMessages;
 begin
-  Result := AddMessage(Role, CreateResourceLinkBlock(Uri, Name, Description, MimeType));
+  Result := AddMessage(Role, TMCPContentBlock.ResourceLink(Uri, Name, Description, MimeType));
 end;
 
 function TMCPPromptMessages.AddEmbeddedText(const Role, Uri, MimeType, Text: string): TMCPPromptMessages;
 begin
-  Result := AddMessage(Role, CreateEmbeddedTextBlock(Uri, MimeType, Text));
+  Result := AddMessage(Role, TMCPContentBlock.EmbeddedText(Uri, MimeType, Text));
 end;
 
 function TMCPPromptMessages.AddEmbeddedBlob(const Role, Uri, MimeType: string;
   const Data: TBytes): TMCPPromptMessages;
 begin
-  Result := AddMessage(Role, CreateEmbeddedBlobBlock(Uri, MimeType, EncodeBase64Blob(Data)));
+  Result := AddMessage(Role, TMCPContentBlock.EmbeddedBlob(Uri, MimeType, TMCPContentBlock.EncodeBlob(Data)));
 end;
 
 function TMCPPromptMessages.AddEmbeddedResource(const Role: string; const Resource: IMCPResource): TMCPPromptMessages;

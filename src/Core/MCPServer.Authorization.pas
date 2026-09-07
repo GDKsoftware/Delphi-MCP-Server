@@ -27,10 +27,17 @@ type
     class function InsufficientScope(const Scope: string): TMCPAuthChallenge; static;
   end;
 
+  TMCPAuthResult = record
+    Decision: TMCPAuthDecision;
+    Principal: TMCPPrincipal;
+    Challenge: TMCPAuthChallenge;
+    class function Allowed(const Principal: TMCPPrincipal): TMCPAuthResult; static;
+    class function Denied(const Decision: TMCPAuthDecision; const Challenge: TMCPAuthChallenge): TMCPAuthResult; static;
+  end;
+
   IMCPAuthorizer = interface
     ['{7B3D5F1A-9C2E-4A8B-B6D0-1E3F5A7C9B2D}']
-    function Authorize(const BearerToken, HttpMethod, Path: string; out Principal: TMCPPrincipal;
-      out Challenge: TMCPAuthChallenge): TMCPAuthDecision;
+    function Authorize(const BearerToken, HttpMethod, Path: string): TMCPAuthResult;
   end;
 
   RequiresScopeAttribute = class(TCustomAttribute)
@@ -63,8 +70,7 @@ type
     FScopes: TArray<string>;
   public
     constructor Create(const Tokens: TArray<string>; const Scopes: TArray<string> = nil);
-    function Authorize(const BearerToken, HttpMethod, Path: string; out Principal: TMCPPrincipal;
-      out Challenge: TMCPAuthChallenge): TMCPAuthDecision;
+    function Authorize(const BearerToken, HttpMethod, Path: string): TMCPAuthResult;
     class function SameToken(const Presented, Expected: TBytes): Boolean; static;
   end;
 
@@ -73,14 +79,13 @@ type
     FExpectedAudience: string;
     FRequiredScopes: TArray<string>;
   protected
-    function ValidateToken(const Token: string; out Claims: TJSONObject): Boolean; virtual; abstract;
+    function TryValidateToken(const Token: string; out Claims: TJSONObject): Boolean; virtual; abstract;
     function AudienceMatches(const Claims: TJSONObject): Boolean; virtual;
     function IsExpired(const Claims: TJSONObject): Boolean; virtual;
     function ScopesOf(const Claims: TJSONObject): TArray<string>; virtual;
   public
     constructor Create(const ExpectedAudience: string);
-    function Authorize(const BearerToken, HttpMethod, Path: string; out Principal: TMCPPrincipal;
-      out Challenge: TMCPAuthChallenge): TMCPAuthDecision;
+    function Authorize(const BearerToken, HttpMethod, Path: string): TMCPAuthResult;
     property ExpectedAudience: string read FExpectedAudience;
     property RequiredScopes: TArray<string> read FRequiredScopes write FRequiredScopes;
   end;
@@ -92,7 +97,7 @@ type
     FClientSecret: string;
     FTimeoutMs: Integer;
   protected
-    function ValidateToken(const Token: string; out Claims: TJSONObject): Boolean; override;
+    function TryValidateToken(const Token: string; out Claims: TJSONObject): Boolean; override;
   public
     const DEFAULT_TIMEOUT_MS = 5000;
     constructor Create(const ExpectedAudience, IntrospectionUrl, ClientId, ClientSecret: string);
@@ -143,6 +148,23 @@ begin
       Exit(True);
   end;
   Result := False;
+end;
+
+{ TMCPAuthResult }
+
+class function TMCPAuthResult.Allowed(const Principal: TMCPPrincipal): TMCPAuthResult;
+begin
+  Result := Default(TMCPAuthResult);
+  Result.Decision := TMCPAuthDecision.Allow;
+  Result.Principal := Principal;
+end;
+
+class function TMCPAuthResult.Denied(const Decision: TMCPAuthDecision;
+  const Challenge: TMCPAuthChallenge): TMCPAuthResult;
+begin
+  Result := Default(TMCPAuthResult);
+  Result.Decision := Decision;
+  Result.Challenge := Challenge;
 end;
 
 { TMCPAuthChallenge }
@@ -270,27 +292,25 @@ begin
   Result := TMCPConstantTime.SameBytes(Presented, Expected);
 end;
 
-function TMCPStaticBearerAuthorizer.Authorize(const BearerToken, HttpMethod, Path: string;
-  out Principal: TMCPPrincipal; out Challenge: TMCPAuthChallenge): TMCPAuthDecision;
+function TMCPStaticBearerAuthorizer.Authorize(const BearerToken, HttpMethod, Path: string): TMCPAuthResult;
 begin
-  Principal := TMCPPrincipal.None;
-  Challenge := TMCPAuthChallenge.None;
-  var Presented := TEncoding.UTF8.GetBytes(BearerToken);
+  const Presented = TEncoding.UTF8.GetBytes(BearerToken);
   var Matched: Integer := -1;
-  for var I := 0 to High(FTokens) do
+  for var Index := 0 to High(FTokens) do
   begin
-    if SameToken(Presented, FTokens[I]) then
-      Matched := Integer(I);
+    if SameToken(Presented, FTokens[Index]) then
+      Matched := Integer(Index);
   end;
 
-  if Matched < 0 then
-  begin
-    Challenge := TMCPAuthChallenge.InvalidToken('The bearer token is not recognised');
-    Exit(TMCPAuthDecision.Unauthorized);
-  end;
+  const IsKnown = (Matched >= 0);
+  if not IsKnown then
+    Exit(TMCPAuthResult.Denied(TMCPAuthDecision.Unauthorized,
+      TMCPAuthChallenge.InvalidToken('The bearer token is not recognised')));
+
+  var Principal := TMCPPrincipal.None;
   Principal.Subject := Format(STATIC_SUBJECT_FORMAT, [Matched + 1]);
   Principal.Scopes := FScopes;
-  Result := TMCPAuthDecision.Allow;
+  Result := TMCPAuthResult.Allowed(Principal);
 end;
 
 { TMCPOAuthResourceServerAuthorizer }
@@ -345,42 +365,36 @@ begin
   end;
 end;
 
-function TMCPOAuthResourceServerAuthorizer.Authorize(const BearerToken, HttpMethod, Path: string;
-  out Principal: TMCPPrincipal; out Challenge: TMCPAuthChallenge): TMCPAuthDecision;
+function TMCPOAuthResourceServerAuthorizer.Authorize(const BearerToken, HttpMethod, Path: string): TMCPAuthResult;
 var
   Claims: TJSONObject;
 begin
-  Principal := TMCPPrincipal.None;
-  Challenge := TMCPAuthChallenge.None;
-  if not ValidateToken(BearerToken, Claims) then
-  begin
-    Challenge := TMCPAuthChallenge.InvalidToken('The access token is not valid');
-    Exit(TMCPAuthDecision.Unauthorized);
-  end;
+  const IsValid = TryValidateToken(BearerToken, Claims);
+  if not IsValid then
+    Exit(TMCPAuthResult.Denied(TMCPAuthDecision.Unauthorized,
+      TMCPAuthChallenge.InvalidToken('The access token is not valid')));
 
   try
-    if not AudienceMatches(Claims) then
-    begin
-      Challenge := TMCPAuthChallenge.InvalidToken('The access token was not issued for this server');
-      Exit(TMCPAuthDecision.Unauthorized);
-    end;
-    if IsExpired(Claims) then
-    begin
-      Challenge := TMCPAuthChallenge.InvalidToken('The access token has expired');
-      Exit(TMCPAuthDecision.Unauthorized);
-    end;
+    const IsForThisServer = AudienceMatches(Claims);
+    if not IsForThisServer then
+      Exit(TMCPAuthResult.Denied(TMCPAuthDecision.Unauthorized,
+        TMCPAuthChallenge.InvalidToken('The access token was not issued for this server')));
 
+    const HasExpired = IsExpired(Claims);
+    if HasExpired then
+      Exit(TMCPAuthResult.Denied(TMCPAuthDecision.Unauthorized,
+        TMCPAuthChallenge.InvalidToken('The access token has expired')));
+
+    var Principal := TMCPPrincipal.None;
     Principal.Subject := Claims.GetValue<string>(CLAIM_SUBJECT, '');
     Principal.Scopes := ScopesOf(Claims);
     for var Required in FRequiredScopes do
     begin
       if not Principal.HasScope(Required) then
-      begin
-        Challenge := TMCPAuthChallenge.InsufficientScope(string.Join(SCOPE_SEPARATOR, FRequiredScopes));
-        Exit(TMCPAuthDecision.Forbidden);
-      end;
+        Exit(TMCPAuthResult.Denied(TMCPAuthDecision.Forbidden,
+          TMCPAuthChallenge.InsufficientScope(string.Join(SCOPE_SEPARATOR, FRequiredScopes))));
     end;
-    Result := TMCPAuthDecision.Allow;
+    Result := TMCPAuthResult.Allowed(Principal);
   finally
     Claims.Free;
   end;
@@ -399,7 +413,7 @@ begin
   FTimeoutMs := DEFAULT_TIMEOUT_MS;
 end;
 
-function TMCPIntrospectionAuthorizer.ValidateToken(const Token: string; out Claims: TJSONObject): Boolean;
+function TMCPIntrospectionAuthorizer.TryValidateToken(const Token: string; out Claims: TJSONObject): Boolean;
 begin
   Claims := nil;
   const Client = THTTPClient.Create;

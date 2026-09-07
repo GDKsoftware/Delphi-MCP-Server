@@ -49,6 +49,8 @@ type
     constructor CreateInstance;
     procedure DoWriteLog(const Level: TLogLevel; const Message: string);
     procedure EnsureLogFile;
+    function OpenSharedLogStream: TFileStream;
+    procedure DisableFileLogging(const Reason: string);
     procedure DoCloseLogFile;
   public
     class constructor Create;
@@ -70,6 +72,8 @@ type
     class procedure Error(const Format: string; const Args: array of const); overload;
     class procedure Error(const Exception: Exception); overload;
 
+    class function IsSensitiveKey(const Key: string): Boolean;
+    class procedure RedactValue(const Value: TJSONValue);
     class function RedactJson(const Json: string): string;
 
     class property LogToConsole: Boolean read GetLogToConsole write SetLogToConsole;
@@ -137,11 +141,43 @@ end;
 
 procedure TLogger.EnsureLogFile;
 begin
-  if FLogToFile and not Assigned(FLogFile) then
-  begin
-    FLogFile := TStreamWriter.Create(FLogFileName, True, TEncoding.UTF8);
+  const AlreadyOpen = (not FLogToFile) or Assigned(FLogFile);
+  if AlreadyOpen then
+    Exit;
+
+  try
+    const LogStream = OpenSharedLogStream;
+    FLogFile := TStreamWriter.Create(LogStream, TEncoding.UTF8);
+    FLogFile.OwnStream;
     FLogFile.AutoFlush := True;
+  except
+    on E: Exception do
+      DisableFileLogging(E.Message);
   end;
+end;
+
+function TLogger.OpenSharedLogStream: TFileStream;
+begin
+  const Exists = FileExists(FLogFileName);
+  if Exists then
+    Result := TFileStream.Create(FLogFileName, fmOpenReadWrite or fmShareDenyNone)
+  else
+    Result := TFileStream.Create(FLogFileName, fmCreate or fmShareDenyNone);
+  Result.Seek(0, soEnd);
+end;
+
+procedure TLogger.DisableFileLogging(const Reason: string);
+begin
+  FLogToFile := False;
+  if not FLogToConsole then
+    Exit;
+
+  const Warning = Format('[WARN ] File logging disabled, cannot open "%s": %s', [FLogFileName, Reason]);
+  const ToStdErr = (FUseStdErr or FStdoutReserved);
+  if ToStdErr then
+    WriteLn(ErrOutput, Warning)
+  else
+    WriteLn(Warning);
 end;
 
 procedure TLogger.DoCloseLogFile;
@@ -198,7 +234,10 @@ begin
     begin
       EnsureLogFile;
       if Assigned(FLogFile) then
+      begin
+        FLogFile.BaseStream.Seek(0, soEnd);
         FLogFile.WriteLine(LogLine);
+      end;
     end;
 
     if Assigned(FOnLogMessage) then
@@ -253,7 +292,7 @@ begin
   Instance.DoWriteLog(TLogLevel.Error, System.SysUtils.Format('%s: %s', [Exception.ClassName, Exception.Message]));
 end;
 
-function IsSensitiveKey(const Key: string): Boolean;
+class function TLogger.IsSensitiveKey(const Key: string): Boolean;
 const
   EXACT_KEYS: array[0..2] of string = ('_meta', 'requestState', 'inputResponses');
   PARTIAL_KEYS: array[0..5] of string = ('token', 'secret', 'password', 'authorization', 'apikey', 'api_key');
@@ -269,7 +308,7 @@ begin
   Result := False;
 end;
 
-procedure RedactValue(const Value: TJSONValue);
+class procedure TLogger.RedactValue(const Value: TJSONValue);
 begin
   if Value is TJSONObject then
   begin

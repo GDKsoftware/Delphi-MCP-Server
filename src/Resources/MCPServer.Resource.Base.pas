@@ -85,6 +85,11 @@ type
     property MimeType: string read GetMimeType;
   end;
 
+  TMCPCompiledTemplate = record
+    Pattern: string;
+    VariableNames: TArray<string>;
+  end;
+
   TMCPResourceTemplateBase = class(TInterfacedObject, IMCPResourceTemplate)
   strict private
     FPattern: string;
@@ -93,7 +98,7 @@ type
     FCompileLock: TCriticalSection;
     procedure EnsureCompiled;
     class function PercentDecode(const Text: string): string; static;
-    class function CompilePattern(const UriTemplate: string; out VariableNames: TArray<string>): string; static;
+    class function CompilePattern(const UriTemplate: string): TMCPCompiledTemplate; static;
   protected
     FUriTemplate: string;
     FName: string;
@@ -263,8 +268,7 @@ begin
   Result := TEncoding.UTF8.GetString(Bytes);
 end;
 
-class function TMCPResourceTemplateBase.CompilePattern(const UriTemplate: string;
-  out VariableNames: TArray<string>): string;
+class function TMCPResourceTemplateBase.CompilePattern(const UriTemplate: string): TMCPCompiledTemplate;
 var
   Names: TList<string>;
   Position: Integer;
@@ -273,7 +277,7 @@ var
 begin
   Names := TList<string>.Create;
   try
-    Result := '';
+    Result.Pattern := '';
     Position := 1;
     while Position <= Length(UriTemplate) do
     begin
@@ -287,12 +291,12 @@ begin
         if (Expr <> '') and (Expr[1] = '+') then
         begin
           VarName := Copy(Expr, 2, MaxInt);
-          Result := Result + Format('(?<%s>.+)', [VarName]);
+          Result.Pattern := Result.Pattern + Format('(?<%s>.+)', [VarName]);
         end
         else
         begin
           VarName := Expr;
-          Result := Result + Format('(?<%s>[^/]+)', [VarName]);
+          Result.Pattern := Result.Pattern + Format('(?<%s>[^/]+)', [VarName]);
         end;
         if VarName = '' then
           raise EArgumentException.CreateFmt('Empty variable name in URI template "%s"', [UriTemplate]);
@@ -313,11 +317,11 @@ begin
         while (Position <= Length(UriTemplate)) and (UriTemplate[Position] <> '{') do
           Inc(Position);
         LiteralRun := Copy(UriTemplate, LiteralStart, Position - LiteralStart);
-        Result := Result + TRegEx.Escape(LiteralRun);
+        Result.Pattern := Result.Pattern + TRegEx.Escape(LiteralRun);
       end;
     end;
-    Result := '^' + Result + '$';
-    VariableNames := Names.ToArray;
+    Result.Pattern := Format('^%s$', [Result.Pattern]);
+    Result.VariableNames := Names.ToArray;
   finally
     Names.Free;
   end;
@@ -329,7 +333,9 @@ begin
   try
     if not FCompiled then
     begin
-      FPattern := CompilePattern(FUriTemplate, FVariableNames);
+      const Compiled = CompilePattern(FUriTemplate);
+      FPattern := Compiled.Pattern;
+      FVariableNames := Compiled.VariableNames;
       FCompiled := True;
     end;
   finally

@@ -6,10 +6,15 @@ uses
   DUnitX.TestFramework;
 
 type
+  TServerCounters = record
+    RequestCount: Int64;
+    ActiveConnections: Integer;
+  end;
+
   [TestFixture]
   TServerStatusResourceTests = class
   private
-    procedure ReadCounters(out RequestCount: Int64; out ActiveConnections: Integer);
+    function ReadCounters: TServerCounters;
   public
     [Setup]
     procedure Setup;
@@ -41,14 +46,15 @@ begin
   TServerStatusResource.Initialize;
 end;
 
-procedure TServerStatusResourceTests.ReadCounters(out RequestCount: Int64; out ActiveConnections: Integer);
+function TServerStatusResourceTests.ReadCounters: TServerCounters;
 begin
+  Result := Default(TServerCounters);
   var Resource: IMCPResource := TServerStatusResource.Create;
-  var Status := TJSONObject.ParseJSONValue(Resource.Read) as TJSONObject;
+  const Status = TJSONObject.ParseJSONValue(Resource.Read) as TJSONObject;
   try
     Assert.IsNotNull(Status, 'server://status must return a JSON object');
-    RequestCount := Status.GetValue<Int64>('requestcount');
-    ActiveConnections := Status.GetValue<Integer>('activeconnections');
+    Result.RequestCount := Status.GetValue<Int64>('requestcount');
+    Result.ActiveConnections := Status.GetValue<Integer>('activeconnections');
   finally
     Status.Free;
   end;
@@ -56,12 +62,10 @@ end;
 
 procedure TServerStatusResourceTests.Counters_StartAtZero;
 begin
-  var RequestCount: Int64;
-  var ActiveConnections: Integer;
-  ReadCounters(RequestCount, ActiveConnections);
+  const Counters = ReadCounters;
 
-  Assert.AreEqual(Int64(0), RequestCount);
-  Assert.AreEqual(0, ActiveConnections);
+  Assert.AreEqual(Int64(0), Counters.RequestCount);
+  Assert.AreEqual(0, Counters.ActiveConnections);
 end;
 
 procedure TServerStatusResourceTests.Counters_AreExactUnderConcurrentUpdates;
@@ -81,12 +85,10 @@ begin
       end);
   TTask.WaitForAll(Tasks);
 
-  var RequestCount: Int64;
-  var ActiveConnections: Integer;
-  ReadCounters(RequestCount, ActiveConnections);
+  const Counters = ReadCounters;
 
-  Assert.AreEqual(Int64(THREAD_COUNT) * ITERATIONS_PER_THREAD, RequestCount, 'lost request increments');
-  Assert.AreEqual(0, ActiveConnections, 'every opened connection was closed');
+  Assert.AreEqual(Int64(THREAD_COUNT) * ITERATIONS_PER_THREAD, Counters.RequestCount, 'lost request increments');
+  Assert.AreEqual(0, Counters.ActiveConnections, 'every opened connection was closed');
 end;
 
 procedure TServerStatusResourceTests.ConnectionClosed_NeverGoesBelowZero;
@@ -97,11 +99,9 @@ begin
   TServerStatusResource.ConnectionClosed;
   TServerStatusResource.ConnectionClosed;
 
-  var RequestCount: Int64;
-  var ActiveConnections: Integer;
-  ReadCounters(RequestCount, ActiveConnections);
+  const Counters = ReadCounters;
 
-  Assert.AreEqual(0, ActiveConnections);
+  Assert.AreEqual(0, Counters.ActiveConnections);
 end;
 
 procedure TServerStatusResourceTests.Read_ProducesJsonWithStatusFields;

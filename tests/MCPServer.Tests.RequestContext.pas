@@ -21,6 +21,7 @@ type
     FProcessor: TMCPJsonRpcProcessor;
     FSession: TMCPLegacySession;
     function Build(const RequestJson: string; const Hints: TMCPTransportHints): IMCPRequestContext;
+    function Request(const Method: string; const ParamsJson: string = ''): string;
     procedure ExpectError(const RequestJson: string; const Hints: TMCPTransportHints;
       ExpectedCode, ExpectedStatus: Integer; const Because: string);
   public
@@ -69,15 +70,15 @@ const
     + '"io.modelcontextprotocol/clientInfo":{"name":"ctx-client","version":"2.0"},'
     + '"io.modelcontextprotocol/logLevel":"info"}';
 
-function Request(const Method: string; const ParamsJson: string = ''): string;
+{ TRequestContextTests }
+
+function TRequestContextTests.Request(const Method: string; const ParamsJson: string): string;
 begin
   if ParamsJson = '' then
     Result := Format('{"jsonrpc":"2.0","id":1,"method":"%s"}', [Method])
   else
     Result := Format('{"jsonrpc":"2.0","id":1,"method":"%s","params":%s}', [Method, ParamsJson]);
 end;
-
-{ TRequestContextTests }
 
 procedure TRequestContextTests.Setup;
 begin

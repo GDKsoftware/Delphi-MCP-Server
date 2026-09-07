@@ -68,7 +68,7 @@ type
     function ResourceUri: string;
     function ResourceMetadataUrl: string;
     procedure HandleProtectedResourceMetadata(ResponseInfo: TIdHTTPResponseInfo);
-    function Authenticate(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+    function TryAuthenticate(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
       out Principal: TMCPPrincipal): Boolean;
     procedure SendChallenge(ResponseInfo: TIdHTTPResponseInfo; Status: Integer; const Challenge: TMCPAuthChallenge;
       const Message: string);
@@ -190,7 +190,7 @@ begin
     Exit;
 
   if not Assigned(FManagerRegistry) then
-    raise Exception.Create('Manager registry not assigned');
+    raise EMCPConfigurationError.Create('Manager registry not assigned');
 
   FJsonRpcProcessor.Free;
   FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(FManagerRegistry, FSettings);
@@ -309,14 +309,14 @@ procedure TMCPIdHTTPServer.ConfigureSSL;
 begin
   if not TFile.Exists(FSettings.SSLCertFile) then
   begin
-    TLogger.Error('SSL Certificate file not found: ' + FSettings.SSLCertFile);
-    raise Exception.Create('SSL Certificate file not found: ' + FSettings.SSLCertFile);
+    TLogger.Error(Format('SSL certificate file not found: %s', [FSettings.SSLCertFile]));
+    raise EMCPConfigurationError.CreateFmt('SSL certificate file not found: %s', [FSettings.SSLCertFile]);
   end;
 
   if not TFile.Exists(FSettings.SSLKeyFile) then
   begin
-    TLogger.Error('SSL Key file not found: ' + FSettings.SSLKeyFile);
-    raise Exception.Create('SSL Key file not found: ' + FSettings.SSLKeyFile);
+    TLogger.Error(Format('SSL key file not found: %s', [FSettings.SSLKeyFile]));
+    raise EMCPConfigurationError.CreateFmt('SSL key file not found: %s', [FSettings.SSLKeyFile]);
   end;
 
   {$IFDEF USE_TAURUS_TLS}
@@ -440,7 +440,7 @@ begin
     end;
 
     var Principal := TMCPPrincipal.None;
-    if Assigned(FAuthorizer) and not Authenticate(RequestInfo, ResponseInfo, Principal) then
+    if Assigned(FAuthorizer) and not TryAuthenticate(RequestInfo, ResponseInfo, Principal) then
       Exit;
 
     if RequestInfo.CommandType = hcPOST then
@@ -590,39 +590,42 @@ begin
   SendJsonRpcError(ResponseInfo, Status, JSONRPC_INVALID_REQUEST, Message);
 end;
 
-function TMCPIdHTTPServer.Authenticate(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+function TMCPIdHTTPServer.TryAuthenticate(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
   out Principal: TMCPPrincipal): Boolean;
-var
-  Challenge: TMCPAuthChallenge;
 begin
   Principal := TMCPPrincipal.None;
   Result := False;
 
-  var Header := HeaderValue(RequestInfo, HEADER_AUTHORIZATION);
-  if Header = '' then
+  const Header = HeaderValue(RequestInfo, HEADER_AUTHORIZATION);
+  const IsMissing = (Header = '');
+  if IsMissing then
   begin
     SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, TMCPAuthChallenge.None, 'Authorization required');
     Exit;
   end;
-  if not Header.StartsWith(BEARER_PREFIX, True) or (Header.Length <= BEARER_PREFIX.Length) then
+
+  const IsBearer = (Header.StartsWith(BEARER_PREFIX, True) and (Header.Length > BEARER_PREFIX.Length));
+  if not IsBearer then
   begin
     SendChallenge(ResponseInfo, HTTP_STATUS_BAD_REQUEST,
       TMCPAuthChallenge.InvalidRequest('Only the Bearer scheme is supported'), 'Malformed Authorization header');
     Exit;
   end;
 
-  var Token := Header.Substring(BEARER_PREFIX.Length).Trim;
-  case FAuthorizer.Authorize(Token, RequestInfo.Command, RequestInfo.Document, Principal, Challenge) of
+  const Token = Header.Substring(BEARER_PREFIX.Length).Trim;
+  const Outcome = FAuthorizer.Authorize(Token, RequestInfo.Command, RequestInfo.Document);
+  Principal := Outcome.Principal;
+  case Outcome.Decision of
     TMCPAuthDecision.Allow:
       Result := True;
     TMCPAuthDecision.Unauthorized:
-      SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, Challenge, 'Unauthorized');
+      SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, Outcome.Challenge, 'Unauthorized');
     TMCPAuthDecision.Forbidden:
-      SendChallenge(ResponseInfo, HTTP_FORBIDDEN, Challenge, 'Forbidden');
+      SendChallenge(ResponseInfo, HTTP_FORBIDDEN, Outcome.Challenge, 'Forbidden');
     TMCPAuthDecision.BadRequest:
-      SendChallenge(ResponseInfo, HTTP_STATUS_BAD_REQUEST, Challenge, 'Malformed authorization request');
+      SendChallenge(ResponseInfo, HTTP_STATUS_BAD_REQUEST, Outcome.Challenge, 'Malformed authorization request');
   else
-    SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, Challenge, 'Unauthorized');
+    SendChallenge(ResponseInfo, HTTP_UNAUTHORIZED, Outcome.Challenge, 'Unauthorized');
   end;
 end;
 

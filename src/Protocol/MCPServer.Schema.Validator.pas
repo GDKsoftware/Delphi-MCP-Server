@@ -12,15 +12,15 @@ type
   public
     const MAX_DEPTH = 32;
 
-    class function Validate(const Schema: TJSONObject; const Instance: TJSONValue;
+    class function TryValidate(const Schema: TJSONObject; const Instance: TJSONValue;
       out Errors: TArray<string>): Boolean;
   private
     class function ValidateNode(const Schema: TJSONObject; const Instance: TJSONValue;
       const Path: string; Depth: Integer; const RootSchema: TJSONObject; Errors: TStrings): Boolean;
-    class function ResolveRef(const RootSchema: TJSONObject; const Ref: string;
+    class function TryResolveRef(const RootSchema: TJSONObject; const Ref: string;
       out Resolved: TJSONObject): Boolean;
     class function MatchesType(const Instance: TJSONValue; const TypeName: string): Boolean;
-    class function CheckType(const Schema: TJSONObject; const Instance: TJSONValue;
+    class function TryCheckType(const Schema: TJSONObject; const Instance: TJSONValue;
       out ErrorMessage: string): Boolean;
     class function JsonEquals(A, B: TJSONValue): Boolean;
     class procedure AddError(Errors: TStrings; const Path, Message: string);
@@ -64,7 +64,7 @@ begin
     Result := False;
 end;
 
-class function TMCPSchemaValidator.CheckType(const Schema: TJSONObject; const Instance: TJSONValue;
+class function TMCPSchemaValidator.TryCheckType(const Schema: TJSONObject; const Instance: TJSONValue;
   out ErrorMessage: string): Boolean;
 begin
   Result := True;
@@ -115,7 +115,7 @@ begin
   Result := A.ToJSON = B.ToJSON;
 end;
 
-class function TMCPSchemaValidator.ResolveRef(const RootSchema: TJSONObject; const Ref: string;
+class function TMCPSchemaValidator.TryResolveRef(const RootSchema: TJSONObject; const Ref: string;
   out Resolved: TJSONObject): Boolean;
 const
   DEFS_PREFIX = '#/$defs/';
@@ -162,7 +162,7 @@ begin
   var RefValue := Schema.GetValue('$ref');
   if (RefValue is TJSONString) and not (RefValue is TJSONNumber) then
   begin
-    if not ResolveRef(RootSchema, TJSONString(RefValue).Value, ResolvedSchema) then
+    if not TryResolveRef(RootSchema, TJSONString(RefValue).Value, ResolvedSchema) then
     begin
       AddError(Errors, Path, 'unsupported $ref "' + TJSONString(RefValue).Value + '"');
       Exit(False);
@@ -194,7 +194,7 @@ begin
   end;
 
   var TypeError: string;
-  if not CheckType(ResolvedSchema, Instance, TypeError) then
+  if not TryCheckType(ResolvedSchema, Instance, TypeError) then
   begin
     AddError(Errors, Path, TypeError);
     Exit(False);
@@ -304,7 +304,7 @@ begin
   end;
 end;
 
-class function TMCPSchemaValidator.Validate(const Schema: TJSONObject; const Instance: TJSONValue;
+class function TMCPSchemaValidator.TryValidate(const Schema: TJSONObject; const Instance: TJSONValue;
   out Errors: TArray<string>): Boolean;
 begin
   var ErrorList := TStringList.Create;

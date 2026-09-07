@@ -102,14 +102,6 @@ const
   PARAM_INPUT_RESPONSES = 'inputResponses';
   PARAM_REQUEST_STATE = 'requestState';
 
-function InArray(const Value: string; const Values: array of string): Boolean;
-begin
-  for var Item in Values do
-    if Item = Value then
-      Exit(True);
-  Result := False;
-end;
-
 { TMCPJsonRpcProcessor }
 
 constructor TMCPJsonRpcProcessor.Create(ManagerRegistry: IMCPManagerRegistry);
@@ -175,24 +167,24 @@ end;
 
 function TMCPJsonRpcProcessor.IsLegacyOnlyMethod(const Method: string): Boolean;
 begin
-  Result := InArray(Method, LEGACY_ONLY_METHODS);
+  Result := TMCPStrings.Contains(Method, LEGACY_ONLY_METHODS);
   if Result and (Method = 'ping') and FSettings.LenientModernPing then
     Result := False;
 end;
 
 function TMCPJsonRpcProcessor.IsModernOnlyMethod(const Method: string): Boolean;
 begin
-  Result := InArray(Method, MODERN_ONLY_METHODS);
+  Result := TMCPStrings.Contains(Method, MODERN_ONLY_METHODS);
 end;
 
 function TMCPJsonRpcProcessor.IsCacheableMethod(const Method: string): Boolean;
 begin
-  Result := InArray(Method, MCP_CACHEABLE_METHODS);
+  Result := TMCPStrings.Contains(Method, MCP_CACHEABLE_METHODS);
 end;
 
 function TMCPJsonRpcProcessor.IsInputRequiredMethod(const Method: string): Boolean;
 begin
-  Result := InArray(Method, INPUT_REQUIRED_METHODS);
+  Result := TMCPStrings.Contains(Method, INPUT_REQUIRED_METHODS);
 end;
 
 function TMCPJsonRpcProcessor.ClientInputResponses(const Params: TJSONObject): TJSONObject;
@@ -234,7 +226,7 @@ end;
 function TMCPJsonRpcProcessor.EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
 begin
   if Hints.HasHeaderLayer and Hints.HasProtocolVersionHeader
-    and IsModernProtocolVersion(Hints.ProtocolVersionHeader) then
+    and TMCPProtocolVersion.IsModern(Hints.ProtocolVersionHeader) then
     Result := TMCPProtocolEra.Modern
   else
     Result := TMCPProtocolEra.Legacy;
@@ -357,7 +349,7 @@ begin
           [Hints.ProtocolVersionHeader, Version]));
     end;
 
-    if not IsModernProtocolVersion(Version) then
+    if not TMCPProtocolVersion.IsModern(Version) then
       raise EMCPError.UnsupportedProtocolVersion(Version, SupportedModernVersions);
 
     if Hints.HasHeaderLayer then
@@ -391,7 +383,7 @@ begin
       if IsJsonString(RequestedValue) then
         Requested := TJSONString(RequestedValue).Value;
     end;
-    Exit(NewContext(TMCPProtocolEra.Legacy, NegotiateLegacyProtocolVersion(Requested), Method, RequestId, Meta, Hints));
+    Exit(NewContext(TMCPProtocolEra.Legacy, TMCPProtocolVersion.NegotiateLegacy(Requested), Method, RequestId, Meta, Hints));
   end;
 
   if IsModernOnlyMethod(Method) then
@@ -401,11 +393,11 @@ begin
   if Hints.HasHeaderLayer and Hints.HasProtocolVersionHeader then
   begin
     var Header := Hints.ProtocolVersionHeader;
-    if IsModernProtocolVersion(Header) then
+    if TMCPProtocolVersion.IsModern(Header) then
       raise EMCPError.Create(JSONRPC_INVALID_PARAMS,
         Format('MCP-Protocol-Version %s requires params._meta.%s', [Header, MCP_META_PROTOCOL_VERSION]),
         nil, HTTP_STATUS_BAD_REQUEST);
-    if not IsLegacyProtocolVersion(Header) and (Header <> MCP_PROTOCOL_VERSION_2025_03_26) then
+    if not TMCPProtocolVersion.IsLegacy(Header) and (Header <> MCP_PROTOCOL_VERSION_2025_03_26) then
       raise EMCPError.Create(JSONRPC_INVALID_REQUEST,
         'Unsupported MCP-Protocol-Version header: ' + Header, nil, HTTP_STATUS_BAD_REQUEST);
 

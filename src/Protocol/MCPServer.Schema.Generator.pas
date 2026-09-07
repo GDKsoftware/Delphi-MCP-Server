@@ -12,6 +12,7 @@ type
   TMCPSchemaGenerator = class
   private
     const MAX_NESTING_DEPTH = 8;
+    class var FContext: TRttiContext;
     class function GetPropertyJsonName(Prop: TRttiProperty): string;
     class function IsRequiredProperty(Prop: TRttiProperty): Boolean;
     class function CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
@@ -21,6 +22,8 @@ type
     class function NumberValue(const Value: Double): TJSONNumber;
     class procedure ApplyAttributes(Prop: TRttiProperty; const PropSchema: TJSONObject);
   public
+    class constructor Create;
+    class destructor Destroy;
     class function GenerateSchema(Cls: TClass): TJSONObject;
     class function GenerateSchemaFromInstance(Instance: TObject): TJSONObject;
   end;
@@ -31,14 +34,21 @@ uses
   System.Generics.Collections,
   MCPServer.Types;
 
-var
-  RttiContext: TRttiContext;
-
 { TMCPSchemaGenerator }
+
+class constructor TMCPSchemaGenerator.Create;
+begin
+  FContext := TRttiContext.Create;
+end;
+
+class destructor TMCPSchemaGenerator.Destroy;
+begin
+  FContext.Free;
+end;
 
 class function TMCPSchemaGenerator.GenerateSchema(Cls: TClass): TJSONObject;
 begin
-  Result := ObjectSchema(RttiContext.GetType(Cls), 0);
+  Result := ObjectSchema(FContext.GetType(Cls), 0);
 end;
 
 class function TMCPSchemaGenerator.GenerateSchemaFromInstance(Instance: TObject): TJSONObject;
@@ -279,11 +289,5 @@ begin
     raise;
   end;
 end;
-
-initialization
-  RttiContext := TRttiContext.Create;
-
-finalization
-  RttiContext.Free;
 
 end.
