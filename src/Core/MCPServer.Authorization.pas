@@ -326,7 +326,10 @@ function TMCPOAuthResourceServerAuthorizer.AudienceMatches(const Claims: TJSONOb
 begin
   var Audience := Claims.GetValue(CLAIM_AUDIENCE);
   if IsJsonString(Audience) then
-    Exit(SameText(TJSONString(Audience).Value, FExpectedAudience));
+    begin
+      Result := SameText(TJSONString(Audience).Value, FExpectedAudience);
+      Exit;
+    end;
   if Audience is TJSONArray then
   begin
     for var Item in TJSONArray(Audience) do
@@ -351,7 +354,10 @@ begin
   Result := nil;
   var Scope := Claims.GetValue(CLAIM_SCOPE);
   if IsJsonString(Scope) then
-    Exit(TJSONString(Scope).Value.Split([SCOPE_SEPARATOR], TStringSplitOptions.ExcludeEmpty));
+    begin
+      Result := TJSONString(Scope).Value.Split([SCOPE_SEPARATOR], TStringSplitOptions.ExcludeEmpty);
+      Exit;
+    end;
 
   var ScopeArray := Claims.GetValue(CLAIM_SCOPE_ARRAY);
   if ScopeArray is TJSONArray then

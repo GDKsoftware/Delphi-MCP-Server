@@ -20,6 +20,16 @@ type
     class function TryResolveRef(const RootSchema: TJSONObject; const Ref: string;
       out Resolved: TJSONObject): Boolean;
     class function MatchesType(const Instance: TJSONValue; const TypeName: string): Boolean;
+    class function ValidateConstAndEnum(const Schema: TJSONObject; const Instance: TJSONValue;
+      const Path: string; Errors: TStrings): Boolean;
+    class function ValidateString(const Schema: TJSONObject; const Text: string;
+      const Path: string; Errors: TStrings): Boolean;
+    class function ValidateNumber(const Schema: TJSONObject; const Value: Double;
+      const Path: string; Errors: TStrings): Boolean;
+    class function ValidateObject(const Schema: TJSONObject; const Instance: TJSONObject;
+      const Path: string; Depth: Integer; const RootSchema: TJSONObject; Errors: TStrings): Boolean;
+    class function ValidateArray(const Schema: TJSONObject; const Instance: TJSONArray;
+      const Path: string; Depth: Integer; const RootSchema: TJSONObject; Errors: TStrings): Boolean;
     class function TryCheckType(const Schema: TJSONObject; const Instance: TJSONValue;
       out ErrorMessage: string): Boolean;
     class function JsonEquals(A, B: TJSONValue): Boolean;
@@ -33,6 +43,13 @@ uses
   System.RegularExpressions,
   System.RegularExpressionsCore,
   MCPServer.Types;
+
+const
+  SCHEMA_KEY_REQUIRED = 'required';
+  SCHEMA_KEY_PROPERTIES = 'properties';
+  SCHEMA_KEY_ITEMS = 'items';
+  SCHEMA_KEY_ADDITIONAL_PROPERTIES = 'additionalProperties';
+
 
 { TMCPSchemaValidator }
 
@@ -103,15 +120,30 @@ end;
 class function TMCPSchemaValidator.JsonEquals(A, B: TJSONValue): Boolean;
 begin
   if not Assigned(A) or not Assigned(B) then
-    Exit(not Assigned(A) and not Assigned(B));
+    begin
+      Result := not Assigned(A) and not Assigned(B);
+      Exit;
+    end;
   if (A is TJSONNull) or (B is TJSONNull) then
-    Exit((A is TJSONNull) and (B is TJSONNull));
+    begin
+      Result := (A is TJSONNull) and (B is TJSONNull);
+      Exit;
+    end;
   if (A is TJSONBool) or (B is TJSONBool) then
-    Exit((A is TJSONBool) and (B is TJSONBool) and (TJSONBool(A).AsBoolean = TJSONBool(B).AsBoolean));
+    begin
+      Result := (A is TJSONBool) and (B is TJSONBool) and (TJSONBool(A).AsBoolean = TJSONBool(B).AsBoolean);
+      Exit;
+    end;
   if (A is TJSONNumber) or (B is TJSONNumber) then
-    Exit((A is TJSONNumber) and (B is TJSONNumber) and (TJSONNumber(A).AsDouble = TJSONNumber(B).AsDouble));
+    begin
+      Result := (A is TJSONNumber) and (B is TJSONNumber) and (TJSONNumber(A).AsDouble = TJSONNumber(B).AsDouble);
+      Exit;
+    end;
   if (A is TJSONString) or (B is TJSONString) then
-    Exit((A is TJSONString) and (B is TJSONString) and (TJSONString(A).Value = TJSONString(B).Value));
+    begin
+      Result := (A is TJSONString) and (B is TJSONString) and (TJSONString(A).Value = TJSONString(B).Value);
+      Exit;
+    end;
   Result := A.ToJSON = B.ToJSON;
 end;
 
@@ -148,10 +180,171 @@ begin
   Result := True;
 end;
 
-class function TMCPSchemaValidator.ValidateNode(const Schema: TJSONObject; const Instance: TJSONValue;
+class function TMCPSchemaValidator.ValidateConstAndEnum(const Schema: TJSONObject; const Instance: TJSONValue;
+  const Path: string; Errors: TStrings): Boolean;
+begin
+  Result := True;
+  const ConstValue = Schema.GetValue('const');
+  const MatchesConst = (not Assigned(ConstValue) or JsonEquals(ConstValue, Instance));
+  if not MatchesConst then
+  begin
+    AddError(Errors, Path, 'does not match const');
+    Result := False;
+  end;
+
+  const EnumValue = Schema.GetValue('enum');
+  if not (EnumValue is TJSONArray) then
+    Exit;
+
+  var Found := False;
+  for var Item in TJSONArray(EnumValue) do
+  begin
+    if JsonEquals(Item, Instance) then
+    begin
+      Found := True;
+      Break;
+    end;
+  end;
+  if not Found then
+  begin
+    AddError(Errors, Path, 'not one of the allowed values');
+    Result := False;
+  end;
+end;
+
+class function TMCPSchemaValidator.ValidateString(const Schema: TJSONObject; const Text: string;
+  const Path: string; Errors: TStrings): Boolean;
+begin
+  Result := True;
+  const MinLengthValue = Schema.GetValue('minLength');
+  const IsTooShort = ((MinLengthValue is TJSONNumber) and (Length(Text) < TJSONNumber(MinLengthValue).AsInt));
+  if IsTooShort then
+  begin
+    AddError(Errors, Path, 'shorter than minLength');
+    Result := False;
+  end;
+
+  const MaxLengthValue = Schema.GetValue('maxLength');
+  const IsTooLong = ((MaxLengthValue is TJSONNumber) and (Length(Text) > TJSONNumber(MaxLengthValue).AsInt));
+  if IsTooLong then
+  begin
+    AddError(Errors, Path, 'longer than maxLength');
+    Result := False;
+  end;
+
+  const PatternValue = Schema.GetValue('pattern');
+  if not IsJsonString(PatternValue) then
+    Exit;
+
+  var Matches: Boolean;
+  try
+    Matches := TRegEx.IsMatch(Text, TJSONString(PatternValue).Value);
+  except
+    on E: ERegularExpressionError do
+    begin
+      AddError(Errors, Path, 'has an unusable pattern');
+      Exit(False);
+    end;
+  end;
+  if not Matches then
+  begin
+    AddError(Errors, Path, 'does not match pattern');
+    Result := False;
+  end;
+end;
+
+class function TMCPSchemaValidator.ValidateNumber(const Schema: TJSONObject; const Value: Double;
+  const Path: string; Errors: TStrings): Boolean;
+begin
+  Result := True;
+  const MinimumValue = Schema.GetValue('minimum');
+  const IsBelowMinimum = ((MinimumValue is TJSONNumber) and (Value < TJSONNumber(MinimumValue).AsDouble));
+  if IsBelowMinimum then
+  begin
+    AddError(Errors, Path, 'less than minimum');
+    Result := False;
+  end;
+
+  const MaximumValue = Schema.GetValue('maximum');
+  const IsAboveMaximum = ((MaximumValue is TJSONNumber) and (Value > TJSONNumber(MaximumValue).AsDouble));
+  if IsAboveMaximum then
+  begin
+    AddError(Errors, Path, 'greater than maximum');
+    Result := False;
+  end;
+end;
+
+class function TMCPSchemaValidator.ValidateObject(const Schema: TJSONObject; const Instance: TJSONObject;
   const Path: string; Depth: Integer; const RootSchema: TJSONObject; Errors: TStrings): Boolean;
 begin
   Result := True;
+  const RequiredValue = Schema.GetValue(SCHEMA_KEY_REQUIRED);
+  if RequiredValue is TJSONArray then
+  begin
+    for var Item in TJSONArray(RequiredValue) do
+    begin
+      const IsMissing = (IsJsonString(Item) and not Assigned(Instance.GetValue(TJSONString(Item).Value)));
+      if IsMissing then
+      begin
+        AddError(Errors, Path, Format('missing required property "%s"', [TJSONString(Item).Value]));
+        Result := False;
+      end;
+    end;
+  end;
+
+  var PropertySchemas: TJSONObject := nil;
+  const PropertiesValue = Schema.GetValue(SCHEMA_KEY_PROPERTIES);
+  if PropertiesValue is TJSONObject then
+    PropertySchemas := TJSONObject(PropertiesValue);
+
+  if Assigned(PropertySchemas) then
+  begin
+    for var Pair in Instance do
+    begin
+      const PropertySchema = PropertySchemas.GetValue(Pair.JsonString.Value);
+      if not (PropertySchema is TJSONObject) then
+        Continue;
+      const MemberPath = Format('%s.%s', [Path, Pair.JsonString.Value]);
+      if not ValidateNode(TJSONObject(PropertySchema), Pair.JsonValue, MemberPath, Depth + 1, RootSchema, Errors) then
+        Result := False;
+    end;
+  end;
+
+  const AdditionalValue = Schema.GetValue(SCHEMA_KEY_ADDITIONAL_PROPERTIES);
+  const ForbidsExtras = ((AdditionalValue is TJSONBool) and not TJSONBool(AdditionalValue).AsBoolean);
+  if not ForbidsExtras then
+    Exit;
+
+  for var Pair in Instance do
+  begin
+    const IsKnown = (Assigned(PropertySchemas) and Assigned(PropertySchemas.GetValue(Pair.JsonString.Value)));
+    if not IsKnown then
+    begin
+      AddError(Errors, Path, Format('unexpected property "%s"', [Pair.JsonString.Value]));
+      Result := False;
+    end;
+  end;
+end;
+
+class function TMCPSchemaValidator.ValidateArray(const Schema: TJSONObject; const Instance: TJSONArray;
+  const Path: string; Depth: Integer; const RootSchema: TJSONObject; Errors: TStrings): Boolean;
+begin
+  Result := True;
+  const ItemsValue = Schema.GetValue(SCHEMA_KEY_ITEMS);
+  if not (ItemsValue is TJSONObject) then
+    Exit;
+
+  for var Index := 0 to Instance.Count - 1 do
+  begin
+    const ItemPath = Format('%s[%d]', [Path, Index]);
+    if not ValidateNode(TJSONObject(ItemsValue), Instance.Items[Index], ItemPath, Depth + 1, RootSchema, Errors) then
+      Result := False;
+  end;
+end;
+
+class function TMCPSchemaValidator.ValidateNode(const Schema: TJSONObject; const Instance: TJSONValue;
+  const Path: string; Depth: Integer; const RootSchema: TJSONObject; Errors: TStrings): Boolean;
+begin
   if Depth > MAX_DEPTH then
   begin
     AddError(Errors, Path, 'schema nested too deeply');
@@ -159,39 +352,17 @@ begin
   end;
 
   var ResolvedSchema := Schema;
-  var RefValue := Schema.GetValue('$ref');
-  if (RefValue is TJSONString) and not (RefValue is TJSONNumber) then
+  const RefValue = Schema.GetValue('$ref');
+  if IsJsonString(RefValue) then
   begin
     if not TryResolveRef(RootSchema, TJSONString(RefValue).Value, ResolvedSchema) then
     begin
-      AddError(Errors, Path, 'unsupported $ref "' + TJSONString(RefValue).Value + '"');
+      AddError(Errors, Path, Format('unsupported $ref "%s"', [TJSONString(RefValue).Value]));
       Exit(False);
     end;
   end;
 
-  var ConstValue := ResolvedSchema.GetValue('const');
-  if Assigned(ConstValue) and not JsonEquals(ConstValue, Instance) then
-  begin
-    AddError(Errors, Path, 'does not match const');
-    Result := False;
-  end;
-
-  var EnumValue := ResolvedSchema.GetValue('enum');
-  if EnumValue is TJSONArray then
-  begin
-    var Found := False;
-    for var Item in TJSONArray(EnumValue) do
-      if JsonEquals(Item, Instance) then
-      begin
-        Found := True;
-        Break;
-      end;
-    if not Found then
-    begin
-      AddError(Errors, Path, 'not one of the allowed values');
-      Result := False;
-    end;
-  end;
+  Result := ValidateConstAndEnum(ResolvedSchema, Instance, Path, Errors);
 
   var TypeError: string;
   if not TryCheckType(ResolvedSchema, Instance, TypeError) then
@@ -200,107 +371,25 @@ begin
     Exit(False);
   end;
 
-  if (Instance is TJSONString) and not (Instance is TJSONNumber) then
+  if IsJsonString(Instance) then
   begin
-    var Text := TJSONString(Instance).Value;
-    var MinLengthValue := ResolvedSchema.GetValue('minLength');
-    if (MinLengthValue is TJSONNumber) and (Length(Text) < TJSONNumber(MinLengthValue).AsInt) then
-    begin
-      AddError(Errors, Path, 'shorter than minLength');
+    if not ValidateString(ResolvedSchema, TJSONString(Instance).Value, Path, Errors) then
       Result := False;
-    end;
-    var MaxLengthValue := ResolvedSchema.GetValue('maxLength');
-    if (MaxLengthValue is TJSONNumber) and (Length(Text) > TJSONNumber(MaxLengthValue).AsInt) then
-    begin
-      AddError(Errors, Path, 'longer than maxLength');
-      Result := False;
-    end;
-    const PatternValue = ResolvedSchema.GetValue('pattern');
-    if IsJsonString(PatternValue) then
-    begin
-      var Matches := False;
-      try
-        Matches := TRegEx.IsMatch(Text, TJSONString(PatternValue).Value);
-      except
-        on E: ERegularExpressionError do
-        begin
-          AddError(Errors, Path, 'has an unusable pattern');
-          Exit(False);
-        end;
-      end;
-      const PatternMatched = Matches;
-      if not PatternMatched then
-      begin
-        AddError(Errors, Path, 'does not match pattern');
-        Result := False;
-      end;
-    end;
-  end;
-
-  if Instance is TJSONNumber then
+  end
+  else if Instance is TJSONNumber then
   begin
-    var NumberValue := TJSONNumber(Instance).AsDouble;
-    var MinimumValue := ResolvedSchema.GetValue('minimum');
-    if (MinimumValue is TJSONNumber) and (NumberValue < TJSONNumber(MinimumValue).AsDouble) then
-    begin
-      AddError(Errors, Path, 'less than minimum');
+    if not ValidateNumber(ResolvedSchema, TJSONNumber(Instance).AsDouble, Path, Errors) then
       Result := False;
-    end;
-    var MaximumValue := ResolvedSchema.GetValue('maximum');
-    if (MaximumValue is TJSONNumber) and (NumberValue > TJSONNumber(MaximumValue).AsDouble) then
-    begin
-      AddError(Errors, Path, 'greater than maximum');
+  end
+  else if Instance is TJSONObject then
+  begin
+    if not ValidateObject(ResolvedSchema, TJSONObject(Instance), Path, Depth, RootSchema, Errors) then
       Result := False;
-    end;
-  end;
-
-  if Instance is TJSONObject then
+  end
+  else if Instance is TJSONArray then
   begin
-    var Obj := TJSONObject(Instance);
-
-    var RequiredValue := ResolvedSchema.GetValue('required');
-    if RequiredValue is TJSONArray then
-      for var Item in TJSONArray(RequiredValue) do
-        if (Item is TJSONString) and not (Item is TJSONNumber)
-          and not Assigned(Obj.GetValue(TJSONString(Item).Value)) then
-        begin
-          AddError(Errors, Path, 'missing required property "' + TJSONString(Item).Value + '"');
-          Result := False;
-        end;
-
-    var PropSchemas: TJSONObject := nil;
-    var PropertiesValue := ResolvedSchema.GetValue('properties');
-    if PropertiesValue is TJSONObject then
-      PropSchemas := TJSONObject(PropertiesValue);
-
-    if Assigned(PropSchemas) then
-      for var Pair in Obj do
-      begin
-        var PropSchemaValue := PropSchemas.GetValue(Pair.JsonString.Value);
-        if PropSchemaValue is TJSONObject then
-          if not ValidateNode(TJSONObject(PropSchemaValue), Pair.JsonValue, Path + '.' + Pair.JsonString.Value,
-            Depth + 1, RootSchema, Errors) then
-            Result := False;
-      end;
-
-    var AdditionalValue := ResolvedSchema.GetValue('additionalProperties');
-    if (AdditionalValue is TJSONBool) and not TJSONBool(AdditionalValue).AsBoolean then
-      for var Pair in Obj do
-        if not (Assigned(PropSchemas) and Assigned(PropSchemas.GetValue(Pair.JsonString.Value))) then
-        begin
-          AddError(Errors, Path, 'unexpected property "' + Pair.JsonString.Value + '"');
-          Result := False;
-        end;
-  end;
-
-  if Instance is TJSONArray then
-  begin
-    var ItemsValue := ResolvedSchema.GetValue('items');
-    if ItemsValue is TJSONObject then
-      for var I := 0 to TJSONArray(Instance).Count - 1 do
-        if not ValidateNode(TJSONObject(ItemsValue), TJSONArray(Instance).Items[I], Format('%s[%d]', [Path, I]),
-          Depth + 1, RootSchema, Errors) then
-          Result := False;
+    if not ValidateArray(ResolvedSchema, TJSONArray(Instance), Path, Depth, RootSchema, Errors) then
+      Result := False;
   end;
 end;
 

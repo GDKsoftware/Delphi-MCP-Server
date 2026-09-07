@@ -284,7 +284,10 @@ begin
     for var Template in Templates do
     begin
       if Template.Matches(URI, Vars) then
-        Exit(Template.CreateResource(URI, Vars));
+        begin
+          Result := Template.CreateResource(URI, Vars);
+          Exit;
+        end;
     end;
   finally
     Vars.Free;

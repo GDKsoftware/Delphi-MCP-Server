@@ -19,6 +19,9 @@ type
     class function DeserializeArray(RttiType: TRttiType; const JsonArray: TJSONArray): TValue;
 
     class function ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToInteger(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToFloat(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToClass(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function ConvertJsonToEnum(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function GetEnumValueNames(const EnumType: TRttiEnumerationType): string;
     class function ConvertValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
@@ -171,7 +174,10 @@ class function TMCPSerializer.GetWireName(const Prop: TRttiProperty): string;
 begin
   for var Attr in Prop.GetAttributes do
     if Attr is SchemaNameAttribute then
-      Exit(SchemaNameAttribute(Attr).Name);
+      begin
+        Result := SchemaNameAttribute(Attr).Name;
+        Exit;
+      end;
   Result := LowerCase(Prop.Name);
 end;
 
@@ -215,56 +221,89 @@ begin
   end;
 end;
 
-class function TMCPSerializer.ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
-var
-  NestedInstance: TObject;
+class function TMCPSerializer.ConvertJsonToInteger(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+begin
+  if not (JsonValue is TJSONNumber) then
+    raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
+
+  const Number = TJSONNumber(JsonValue);
+  const IsWhole = (Frac(Number.AsDouble) = 0);
+  if not IsWhole then
+    raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
+
+  if RttiType.TypeKind = tkInt64 then
+    Exit(Number.AsInt64);
+
+  const Ordinal = TRttiOrdinalType(RttiType);
+  const InRange = ((Number.AsInt64 >= Ordinal.MinValue) and (Number.AsInt64 <= Ordinal.MaxValue));
+  if not InRange then
+    raise EArgumentException.CreateFmt('%d is outside the range of %s', [Number.AsInt64, RttiType.Name]);
+  Result := TValue.FromOrdinal(RttiType.Handle, Number.AsInt64);
+end;
+
+class function TMCPSerializer.ConvertJsonToFloat(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+begin
+  const IsDateTime = (RttiType.Handle = TypeInfo(TDateTime));
+  if not IsDateTime then
+  begin
+    if not (JsonValue is TJSONNumber) then
+      raise EArgumentException.Create('expected a number');
+    begin
+      Result := TJSONNumber(JsonValue).AsDouble;
+      Exit;
+    end;
+  end;
+
+  if not IsJsonString(JsonValue) then
+    raise EArgumentException.Create('expected a date-time string');
+  try
+    Result := TValue.From<TDateTime>(ISO8601ToDate(JsonValue.Value, False));
+  except
+    on E: EConvertError do
+      raise EArgumentException.Create('expected an ISO 8601 date-time');
+  end;
+end;
+
+class function TMCPSerializer.ConvertJsonToClass(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
 begin
   Result := TValue.Empty;
+  if JsonValue is TJSONArray then
+    begin
+      Result := DeserializeArray(RttiType, TJSONArray(JsonValue));
+      Exit;
+    end;
+  if not (JsonValue is TJSONObject) then
+    raise EArgumentException.Create('expected an object');
 
+  const NestedInstance = CreateInstanceFromType(RttiType);
+  if not Assigned(NestedInstance) then
+    Exit;
+
+  try
+    DeserializeObject(NestedInstance, TJSONObject(JsonValue));
+  except
+    NestedInstance.Free;
+    raise;
+  end;
+  Result := NestedInstance;
+end;
+
+class function TMCPSerializer.ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+begin
+  Result := TValue.Empty;
   if not Assigned(JsonValue) then
     Exit;
 
   case RttiType.TypeKind of
     tkInteger, tkInt64:
-      begin
-        if not (JsonValue is TJSONNumber) then
-          raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
-        var Number := TJSONNumber(JsonValue);
-        if Frac(Number.AsDouble) <> 0 then
-          raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
-        if RttiType.TypeKind = tkInt64 then
-          Result := Number.AsInt64
-        else
-        begin
-          const Ordinal = TRttiOrdinalType(RttiType);
-          const InRange = ((Number.AsInt64 >= Ordinal.MinValue) and (Number.AsInt64 <= Ordinal.MaxValue));
-          if not InRange then
-            raise EArgumentException.CreateFmt('%d is outside the range of %s', [Number.AsInt64, RttiType.Name]);
-          Result := TValue.FromOrdinal(RttiType.Handle, Number.AsInt64);
-        end;
-      end;
+      Result := ConvertJsonToInteger(JsonValue, RttiType);
 
     tkFloat:
-      if RttiType.Handle = TypeInfo(TDateTime) then
-      begin
-        if not (JsonValue is TJSONString) then
-          raise EArgumentException.Create('expected a date-time string');
-        try
-          Result := TValue.From<TDateTime>(ISO8601ToDate(JsonValue.Value, False));
-        except
-          raise EArgumentException.Create('expected an ISO 8601 date-time');
-        end;
-      end
-      else
-      begin
-        if not (JsonValue is TJSONNumber) then
-          raise EArgumentException.Create('expected a number');
-        Result := TJSONNumber(JsonValue).AsDouble;
-      end;
+      Result := ConvertJsonToFloat(JsonValue, RttiType);
 
     tkString, tkLString, tkWString, tkUString:
       begin
-        if not (JsonValue is TJSONString) or (JsonValue is TJSONNumber) then
+        if not IsJsonString(JsonValue) then
           raise EArgumentException.Create('expected a string');
         Result := JsonValue.Value;
       end;
@@ -280,31 +319,16 @@ begin
         Result := ConvertJsonToEnum(JsonValue, RttiType);
 
     tkClass:
-      if JsonValue is TJSONObject then
-      begin
-        NestedInstance := CreateInstanceFromType(RttiType);
-        if Assigned(NestedInstance) then
-        begin
-          try
-            DeserializeObject(NestedInstance, JsonValue as TJSONObject);
-          except
-            NestedInstance.Free;
-            raise;
-          end;
-          Result := NestedInstance;
-        end;
-      end
-      else if JsonValue is TJSONArray then
-        Result := DeserializeArray(RttiType, JsonValue as TJSONArray)
-      else
-        raise EArgumentException.Create('expected an object');
+      Result := ConvertJsonToClass(JsonValue, RttiType);
 
     tkDynArray:
       begin
         if not (JsonValue is TJSONArray) then
           raise EArgumentException.Create('expected an array');
-        Result := DeserializeArray(RttiType, JsonValue as TJSONArray);
+        Result := DeserializeArray(RttiType, TJSONArray(JsonValue));
       end;
+  else
+    Result := TValue.Empty;
   end;
 end;
 

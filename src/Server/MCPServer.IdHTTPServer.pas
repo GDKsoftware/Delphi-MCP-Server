@@ -87,6 +87,12 @@ type
     function IsListedHeader(const List, Name: string): Boolean;
     procedure HandleCreatePostStream(Context: TIdContext; Headers: TIdHeaderList; var VPostStream: TStream);
     function MaxBodyBytes: Integer;
+    function MaxJsonDepth: Integer;
+    function IsBodyWithinLimits(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+      const Body: string): Boolean;
+    function ReadBody(RequestInfo: TIdHTTPRequestInfo): string;
+    procedure SendOutcome(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+      const Outcome: TMCPProcessResult; const AcceptsEventStream: Boolean);
   public
     constructor Create(Owner: TComponent); override;
     destructor Destroy; override;
@@ -653,40 +659,16 @@ end;
 procedure TMCPIdHTTPServer.HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo;
   ResponseInfo: TIdHTTPResponseInfo; const Principal: TMCPPrincipal);
 begin
-  var MaxDepth: Integer := TMCPSettings.DEFAULT_MAX_JSON_DEPTH;
-  if Assigned(FSettings) then
-    MaxDepth := FSettings.MaxJsonDepth;
-
-  const Limit = MaxBodyBytes;
-  const BodyTooLarge = Assigned(RequestInfo.PostStream)
-    and ((RequestInfo.PostStream is TMCPDiscardedBody) or (RequestInfo.PostStream.Size > Limit));
-  if BodyTooLarge then
-  begin
-    SendJsonRpcError(ResponseInfo, HTTP_PAYLOAD_TOO_LARGE, JSONRPC_INVALID_REQUEST,
-      Format('Request body exceeds %d bytes', [Limit]));
-    Exit;
-  end;
-
-  var RequestBody := '';
-  if Assigned(RequestInfo.PostStream) and (RequestInfo.PostStream.Size > 0) then
-  begin
-    RequestInfo.PostStream.Position := 0;
-    RequestBody := ReadStringFromStream(RequestInfo.PostStream, -1, IndyTextEncoding_UTF8);
-  end;
-
+  const RequestBody = ReadBody(RequestInfo);
   TLogger.Debug('Request: ' + TLogger.RedactJson(RequestBody));
-
-  if TMCPJsonLimits.NestingDepth(RequestBody) > MaxDepth then
-  begin
-    SendJsonRpcError(ResponseInfo, HTTP_STATUS_BAD_REQUEST, JSONRPC_PARSE_ERROR,
-      Format('JSON nesting exceeds %d levels', [MaxDepth]));
+  if not IsBodyWithinLimits(RequestInfo, ResponseInfo, RequestBody) then
     Exit;
-  end;
 
-  var AcceptsEventStream := TMCPAcceptHeader.Accepts(HeaderValue(RequestInfo, HEADER_ACCEPT), MEDIA_TYPE_EVENT_STREAM);
+  const AcceptsEventStream = TMCPAcceptHeader.Accepts(HeaderValue(RequestInfo, HEADER_ACCEPT), MEDIA_TYPE_EVENT_STREAM);
   var Hints := BuildTransportHints(RequestInfo);
   Hints.Principal := Principal.Subject;
   Hints.Scopes := Principal.Scopes;
+
   var Stream: TMCPHttpResponseStream := nil;
   var StreamRef: IMCPMessageSink := nil;
   if AcceptsEventStream then
@@ -698,27 +680,77 @@ begin
   end;
 
   var Outcome: TMCPProcessResult;
-  var Message := TJSONObject.ParseJSONValue(RequestBody);
+  const Message = TJSONObject.ParseJSONValue(RequestBody);
   try
     Outcome := FJsonRpcProcessor.ProcessRequestEx(Message, Hints);
   finally
     Message.Free;
   end;
 
-  if Assigned(Stream) and Stream.Opened then
+  const IsStreamed = (Assigned(Stream) and Stream.Opened);
+  if IsStreamed then
   begin
     TLogger.Debug('Response (streamed): ' + TLogger.RedactJson(Outcome.Body));
     Stream.Finish(Outcome.Body);
     Exit;
   end;
 
+  SendOutcome(RequestInfo, ResponseInfo, Outcome, AcceptsEventStream);
+end;
+
+function TMCPIdHTTPServer.MaxJsonDepth: Integer;
+begin
+  Result := TMCPSettings.DEFAULT_MAX_JSON_DEPTH;
+  if Assigned(FSettings) then
+    Result := FSettings.MaxJsonDepth;
+end;
+
+function TMCPIdHTTPServer.ReadBody(RequestInfo: TIdHTTPRequestInfo): string;
+begin
+  Result := '';
+  const HasBody = (Assigned(RequestInfo.PostStream) and (RequestInfo.PostStream.Size > 0));
+  if not HasBody then
+    Exit;
+
+  RequestInfo.PostStream.Position := 0;
+  Result := ReadStringFromStream(RequestInfo.PostStream, -1, IndyTextEncoding_UTF8);
+end;
+
+function TMCPIdHTTPServer.IsBodyWithinLimits(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+  const Body: string): Boolean;
+begin
+  const Limit = MaxBodyBytes;
+  const IsTooLarge = Assigned(RequestInfo.PostStream)
+    and ((RequestInfo.PostStream is TMCPDiscardedBody) or (RequestInfo.PostStream.Size > Limit));
+  if IsTooLarge then
+  begin
+    SendJsonRpcError(ResponseInfo, HTTP_PAYLOAD_TOO_LARGE, JSONRPC_INVALID_REQUEST,
+      Format('Request body exceeds %d bytes', [Limit]));
+    Exit(False);
+  end;
+
+  const Depth = MaxJsonDepth;
+  const IsTooDeep = (TMCPJsonLimits.NestingDepth(Body) > Depth);
+  if IsTooDeep then
+  begin
+    SendJsonRpcError(ResponseInfo, HTTP_STATUS_BAD_REQUEST, JSONRPC_PARSE_ERROR,
+      Format('JSON nesting exceeds %d levels', [Depth]));
+    Exit(False);
+  end;
+  Result := True;
+end;
+
+procedure TMCPIdHTTPServer.SendOutcome(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo;
+  const Outcome: TMCPProcessResult; const AcceptsEventStream: Boolean);
+begin
   if Outcome.Era = TMCPProtocolEra.Legacy then
     EchoLegacySessionId(RequestInfo, ResponseInfo);
   if Outcome.RequiredScope <> '' then
     ResponseInfo.CustomHeaders.Values[HEADER_WWW_AUTHENTICATE] :=
       TMCPBearerChallenge.Build(ResourceMetadataUrl, TMCPAuthChallenge.InsufficientScope(Outcome.RequiredScope));
 
-  if Outcome.Body = '' then
+  const IsEmpty = (Outcome.Body = '');
+  if IsEmpty then
   begin
     SendEmpty(ResponseInfo, Outcome.HttpStatus);
     Exit;
@@ -726,7 +758,8 @@ begin
 
   TLogger.Debug('Response: ' + TLogger.RedactJson(Outcome.Body));
 
-  if (Outcome.HttpStatus = HTTP_STATUS_OK) and AcceptsEventStream then
+  const AsEventStream = ((Outcome.HttpStatus = HTTP_STATUS_OK) and AcceptsEventStream);
+  if AsEventStream then
     SendSse(ResponseInfo, Outcome.Body)
   else
     SendJson(ResponseInfo, Outcome.HttpStatus, Outcome.Body);

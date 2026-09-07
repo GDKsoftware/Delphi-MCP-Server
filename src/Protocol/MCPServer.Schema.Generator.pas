@@ -18,6 +18,9 @@ type
     class function CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
     class function ListItemType(RttiType: TRttiType): TRttiType;
     class function TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+    class procedure DescribeFloat(RttiType: TRttiType; const Schema: TJSONObject);
+    class procedure DescribeSet(RttiType: TRttiType; const Schema: TJSONObject);
+    class function ClassSchema(RttiType: TRttiType; Depth: Integer; const Schema: TJSONObject): TJSONObject;
     class function ObjectSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
     class function NumberValue(const Value: Double): TJSONNumber;
     class procedure ApplyAttributes(Prop: TRttiProperty; const PropSchema: TJSONObject);
@@ -75,7 +78,10 @@ class function TMCPSchemaGenerator.GetPropertyJsonName(Prop: TRttiProperty): str
 begin
   for var Attr in Prop.GetAttributes do
     if Attr is SchemaNameAttribute then
-      Exit(SchemaNameAttribute(Attr).Name);
+      begin
+        Result := SchemaNameAttribute(Attr).Name;
+        Exit;
+      end;
   Result := LowerCase(Prop.Name);
 end;
 
@@ -110,6 +116,78 @@ begin
     Result := ItemsProp.PropertyType;
 end;
 
+class procedure TMCPSchemaGenerator.DescribeFloat(RttiType: TRttiType; const Schema: TJSONObject);
+begin
+  if RttiType.Handle = TypeInfo(TDateTime) then
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+    Schema.AddPair(SCHEMA_KEY_FORMAT, 'date-time');
+  end
+  else if RttiType.Handle = TypeInfo(TDate) then
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+    Schema.AddPair(SCHEMA_KEY_FORMAT, 'date');
+  end
+  else if RttiType.Handle = TypeInfo(TTime) then
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+    Schema.AddPair(SCHEMA_KEY_FORMAT, 'time');
+  end
+  else
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_NUMBER);
+  end;
+end;
+
+class procedure TMCPSchemaGenerator.DescribeSet(RttiType: TRttiType; const Schema: TJSONObject);
+begin
+  Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
+
+  const Items = TJSONObject.Create;
+  Schema.AddPair(SCHEMA_KEY_ITEMS, Items);
+  Items.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+
+  const ElementType = TRttiSetType(RttiType).ElementType;
+  const Names = CreateEnumValuesArray(ElementType);
+  if Assigned(Names) then
+    Items.AddPair(SCHEMA_KEY_ENUM, Names);
+end;
+
+class function TMCPSchemaGenerator.ClassSchema(RttiType: TRttiType; Depth: Integer;
+  const Schema: TJSONObject): TJSONObject;
+begin
+  Result := Schema;
+  const Metaclass = TRttiInstanceType(RttiType).MetaclassType;
+  if Metaclass.InheritsFrom(TJSONArray) then
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
+    Exit;
+  end;
+  if Metaclass.InheritsFrom(TJSONValue) then
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
+    Exit;
+  end;
+
+  const ItemType = ListItemType(RttiType);
+  if Assigned(ItemType) then
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
+    Schema.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ItemType, Depth + 1));
+    Exit;
+  end;
+
+  const FitsAnotherLevel = (Depth < MAX_NESTING_DEPTH);
+  if not FitsAnotherLevel then
+  begin
+    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
+    Exit;
+  end;
+
+  Schema.Free;
+  Result := ObjectSchema(RttiType, Depth + 1);
+end;
+
 class function TMCPSchemaGenerator.TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
 begin
   Result := TJSONObject.Create;
@@ -119,23 +197,7 @@ begin
         Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_INTEGER);
 
       tkFloat:
-        if RttiType.Handle = TypeInfo(TDateTime) then
-        begin
-          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
-          Result.AddPair(SCHEMA_KEY_FORMAT, 'date-time');
-        end
-        else if RttiType.Handle = TypeInfo(TDate) then
-        begin
-          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
-          Result.AddPair(SCHEMA_KEY_FORMAT, 'date');
-        end
-        else if RttiType.Handle = TypeInfo(TTime) then
-        begin
-          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
-          Result.AddPair(SCHEMA_KEY_FORMAT, 'time');
-        end
-        else
-          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_NUMBER);
+        DescribeFloat(RttiType, Result);
 
       tkString, tkLString, tkWString, tkUString, tkChar, tkWChar:
         Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
@@ -150,53 +212,24 @@ begin
         end;
 
       tkSet:
-        begin
-          Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
-          var Items := TJSONObject.Create;
-          Result.AddPair(SCHEMA_KEY_ITEMS, Items);
-          Items.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
-          var ElementType := TRttiSetType(RttiType).ElementType;
-          var Names := CreateEnumValuesArray(ElementType);
-          if Assigned(Names) then
-            Items.AddPair(SCHEMA_KEY_ENUM, Names);
-        end;
+        DescribeSet(RttiType, Result);
 
       tkDynArray:
         begin
           Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
-          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(TRttiDynamicArrayType(RttiType).ElementType, Depth + 1));
+          const ElementType = TRttiDynamicArrayType(RttiType).ElementType;
+          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ElementType, Depth + 1));
         end;
 
       tkArray:
         begin
           Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
-          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(TRttiArrayType(RttiType).ElementType, Depth + 1));
+          const ElementType = TRttiArrayType(RttiType).ElementType;
+          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ElementType, Depth + 1));
         end;
 
       tkClass:
-        begin
-          var Metaclass := TRttiInstanceType(RttiType).MetaclassType;
-          if Metaclass.InheritsFrom(TJSONArray) then
-            Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY)
-          else if Metaclass.InheritsFrom(TJSONValue) then
-            Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT)
-          else
-          begin
-            var ItemType := ListItemType(RttiType);
-            if Assigned(ItemType) then
-            begin
-              Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
-              Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ItemType, Depth + 1));
-            end
-            else if Depth < MAX_NESTING_DEPTH then
-            begin
-              Result.Free;
-              Result := ObjectSchema(RttiType, Depth + 1);
-            end
-            else
-              Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
-          end;
-        end;
+        Result := ClassSchema(RttiType, Depth, Result);
     else
       Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
     end;
