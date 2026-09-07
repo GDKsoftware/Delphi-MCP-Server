@@ -184,11 +184,12 @@ type
 implementation
 
 uses
-  System.Threading;
+  System.Threading,
+  MCPServer.Tests.Support;
 
 const
   MODERN_VERSION_HEADER = 'MCP-Protocol-Version: 2026-07-28';
-  MODERN_META = '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}';
+  MODERN_META = TMCPTestMeta.MODERN_MEMBER;
   LEGACY_PING = '{"jsonrpc":"2.0","id":1,"method":"ping"}';
 
 { THttpReply }
@@ -207,8 +208,7 @@ end;
 
 function THttpReply.Json: TJSONObject;
 begin
-  Result := TJSONObject.ParseJSONValue(Body) as TJSONObject;
-  Assert.IsNotNull(Result, 'body is not a JSON object: ' + Body);
+  Result := TMCPTestJson.ParseObject(Body);
 end;
 
 { TScopedTool }
@@ -680,11 +680,11 @@ begin
       Result := Post(LISTEN, ['Accept: application/json, text/event-stream', MODERN_VERSION_HEADER, 'Mcp-Method: subscriptions/listen']);
     end);
 
-  var Deadline := TThread.GetTickCount64 + 2000;
-  while (FHarness.SubscriptionsManager.ActiveCount = 0) and (TThread.GetTickCount64 < Deadline) do
-  begin
-    Sleep(10);
-  end;
+  TMCPTestWait.UntilTrue(
+    function: Boolean
+    begin
+      Result := FHarness.SubscriptionsManager.ActiveCount > 0;
+    end);
   Assert.AreEqual(1, FHarness.SubscriptionsManager.ActiveCount, 'the subscription is open');
 
   Post(Format(TRIGGER, ['test_trigger_tool_change']), [MODERN_VERSION_HEADER, 'Mcp-Method: tools/call', 'Mcp-Name: test_trigger_tool_change']);

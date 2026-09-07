@@ -6,7 +6,6 @@ uses
   DUnitX.TestFramework,
   System.SysUtils,
   System.JSON,
-  System.Generics.Collections,
   MCPServer.Types,
   MCPServer.Prompt.Base;
 
@@ -66,6 +65,9 @@ type
   end;
 
 implementation
+
+uses
+  System.Generics.Collections;
 
 { TGreetingPrompt }
 

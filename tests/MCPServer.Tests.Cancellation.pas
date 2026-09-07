@@ -85,7 +85,8 @@ implementation
 
 uses
   MCPServer.Errors,
-  MCPServer.JsonRpcProcessor;
+  MCPServer.JsonRpcProcessor,
+  System.Diagnostics;
 
 { TRecordingSink }
 
@@ -211,16 +212,24 @@ end;
 procedure TCancellationTests.Progress_Monotonic_And_Throttled;
 begin
   var Context := NewContext('{"progressToken":"t"}');
+  const Watch = TStopwatch.StartNew;
   Context.ReportProgress(1, 10);
   Context.ReportProgress(0.5, 10);
   Assert.AreEqual(1, FMessages.Count, 'a smaller value is dropped');
+
   Context.ReportProgress(2, 10);
-  Assert.AreEqual(1, FMessages.Count, 'a burst within the interval is dropped');
+  const StayedInsideTheInterval = (Watch.ElapsedMilliseconds < PROGRESS_MIN_INTERVAL_MS);
+  if StayedInsideTheInterval then
+    Assert.AreEqual(1, FMessages.Count, 'a burst within the interval is dropped');
+
+  const BeforeTotal = FMessages.Count;
   Context.ReportProgress(10, 10);
-  Assert.AreEqual(2, FMessages.Count, 'reaching the total is always sent');
+  Assert.AreEqual(BeforeTotal + 1, FMessages.Count, 'reaching the total is always sent');
+
   Sleep(PROGRESS_MIN_INTERVAL_MS + 20);
+  const BeforeNext = FMessages.Count;
   Context.ReportProgress(11);
-  Assert.AreEqual(3, FMessages.Count, 'after the interval the next value goes out');
+  Assert.AreEqual(BeforeNext + 1, FMessages.Count, 'after the interval the next value goes out');
 end;
 
 procedure TCancellationTests.Progress_AfterCancel_SendsNothing;

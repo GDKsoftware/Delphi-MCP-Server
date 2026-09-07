@@ -29,8 +29,9 @@ type
   end;
 
   TRecordingHub = class(TInterfacedObject, IMCPSubscriptionHub)
+  private
+    FEvents: TStringList;
   public
-    Events: TStringList;
     constructor Create;
     destructor Destroy; override;
     procedure ToolsListChanged;
@@ -39,6 +40,7 @@ type
     procedure ResourceUpdated(const Uri: string);
     procedure CloseAll(const Reason: string);
     function ActiveCount: Integer;
+    property Events: TStringList read FEvents;
   end;
 
   [TestFixture]
@@ -96,10 +98,11 @@ uses
   MCPServer.PromptsManager,
   MCPServer.ResourcesManager,
   MCPServer.Tool.ContentSamples,
-  MCPServer.Prompt.ContentSamples;
+  MCPServer.Prompt.ContentSamples,
+  MCPServer.Tests.Support;
 
 const
-  MODERN_META = '{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}';
+  MODERN_META = TMCPTestMeta.MODERN_FIELDS;
   WAIT_MS = 3000;
 
 { TLockedSink }
@@ -153,38 +156,38 @@ end;
 constructor TRecordingHub.Create;
 begin
   inherited Create;
-  Events := TStringList.Create;
+  FEvents := TStringList.Create;
 end;
 
 destructor TRecordingHub.Destroy;
 begin
-  Events.Free;
+  FEvents.Free;
   inherited;
 end;
 
 procedure TRecordingHub.ToolsListChanged;
 begin
-  Events.Add('tools');
+  FEvents.Add('tools');
 end;
 
 procedure TRecordingHub.PromptsListChanged;
 begin
-  Events.Add('prompts');
+  FEvents.Add('prompts');
 end;
 
 procedure TRecordingHub.ResourcesListChanged;
 begin
-  Events.Add('resources');
+  FEvents.Add('resources');
 end;
 
 procedure TRecordingHub.ResourceUpdated(const Uri: string);
 begin
-  Events.Add('updated:' + Uri);
+  FEvents.Add('updated:' + Uri);
 end;
 
 procedure TRecordingHub.CloseAll(const Reason: string);
 begin
-  Events.Add('close');
+  FEvents.Add('close');
 end;
 
 function TRecordingHub.ActiveCount: Integer;
@@ -262,11 +265,11 @@ end;
 
 procedure TSubscriptionsTests.WaitUntilOpen;
 begin
-  var Deadline := TThread.GetTickCount64 + WAIT_MS;
-  while (FManager.ActiveCount = 0) and (FError = '') and (TThread.GetTickCount64 < Deadline) do
-  begin
-    Sleep(5);
-  end;
+  TMCPTestWait.UntilTrue(
+    function: Boolean
+    begin
+      Result := (FManager.ActiveCount > 0) or (FError <> '');
+    end, WAIT_MS);
   Assert.AreEqual('', FError);
   Assert.AreEqual(1, FManager.ActiveCount, 'the subscription is registered');
 end;
@@ -372,11 +375,11 @@ begin
   StartListen('{"notifications":{"toolsListChanged":true}}');
   WaitUntilOpen;
   FContext.Cancel;
-  var Deadline := TThread.GetTickCount64 + WAIT_MS;
-  while (FManager.ActiveCount > 0) and (TThread.GetTickCount64 < Deadline) do
-  begin
-    Sleep(5);
-  end;
+  TMCPTestWait.UntilTrue(
+    function: Boolean
+    begin
+      Result := FManager.ActiveCount = 0;
+    end, WAIT_MS);
   Assert.AreEqual(0, FManager.ActiveCount, 'cancellation ends the subscription');
   FThread.WaitFor;
   Assert.AreEqual(1, FSink.Count, 'nothing after the acknowledgement');
@@ -387,11 +390,11 @@ begin
   FManager.KeepAliveIntervalMs := TMCPSubscriptionsManager.POLL_INTERVAL_MS;
   StartListen('{}');
   WaitUntilOpen;
-  var Deadline := TThread.GetTickCount64 + WAIT_MS;
-  while (FSink.KeepAlives < 2) and (TThread.GetTickCount64 < Deadline) do
-  begin
-    Sleep(5);
-  end;
+  TMCPTestWait.UntilTrue(
+    function: Boolean
+    begin
+      Result := FSink.KeepAlives >= 2;
+    end, WAIT_MS);
   Assert.IsTrue(FSink.KeepAlives >= 2, 'keep-alives are sent while the subscription is quiet');
   Assert.AreEqual(1, FSink.Count, 'keep-alives are not messages');
 end;

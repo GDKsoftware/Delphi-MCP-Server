@@ -4,7 +4,6 @@ interface
 
 uses
   DUnitX.TestFramework,
-  System.Generics.Collections,
   System.JSON,
   System.Rtti,
   MCPServer.Types,
@@ -15,14 +14,17 @@ uses
 
 type
   TProbeManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx)
+  private
+    FSeenContext: IMCPRequestContext;
+    FSeenCurrent: IMCPRequestContext;
   public
-    SeenContext: IMCPRequestContext;
-    SeenCurrent: IMCPRequestContext;
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
     function ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
     function ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
       const Context: IMCPRequestContext): TValue;
+    property SeenContext: IMCPRequestContext read FSeenContext write FSeenContext;
+    property SeenCurrent: IMCPRequestContext read FSeenCurrent write FSeenCurrent;
   end;
 
   [TestFixture]
@@ -98,7 +100,8 @@ uses
   System.Classes,
   System.Threading,
   MCPServer.ManagerRegistry,
-  MCPServer.Errors;
+  MCPServer.Errors,
+  System.Generics.Collections;
 
 const
   META = '"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}';
@@ -123,8 +126,8 @@ end;
 function TProbeManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
   const Context: IMCPRequestContext): TValue;
 begin
-  SeenContext := Context;
-  SeenCurrent := TMCPRequestContext.Current;
+  FSeenContext := Context;
+  FSeenCurrent := TMCPRequestContext.Current;
   Result := TValue.From<TJSONObject>(TJSONObject.Create);
 end;
 

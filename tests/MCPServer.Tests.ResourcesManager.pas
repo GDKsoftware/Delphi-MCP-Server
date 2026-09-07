@@ -110,8 +110,8 @@ implementation
 
 uses
   System.Threading,
-  System.Generics.Collections,
-  MCPServer.Errors;
+  MCPServer.Errors,
+  System.Generics.Collections;
 
 { TFailingResource }
 
@@ -377,17 +377,25 @@ end;
 procedure TResourcesManagerTests.Read_ViaTemplate_ConcurrentReads_Succeed;
 const
   READS = 400;
+var
+  Mismatches: Integer;
 begin
+  Mismatches := 0;
   TParallel.For(1, READS,
     procedure(Index: Integer)
     begin
-      var Json := Read(Format('echo://item%d', [Index]), TMCPProtocolEra.Modern);
+      const Json = Read(Format('echo://item%d', [Index]), TMCPProtocolEra.Modern);
       try
-        Assert.AreEqual(Format('{"value":"item%d"}', [Index]), Json.GetValue<string>('contents[0].text'));
+        const Expected = Format('{"value":"item%d"}', [Index]);
+        const IsExpected = (Json.GetValue<string>('contents[0].text') = Expected);
+        if not IsExpected then
+          AtomicIncrement(Mismatches);
       finally
         Json.Free;
       end;
     end);
+
+  Assert.AreEqual(0, Mismatches, 'every concurrent read resolved its own template variables');
 end;
 
 procedure TResourcesManagerTests.RemoveResourceTemplate_StopsMatching;

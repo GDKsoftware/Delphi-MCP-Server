@@ -65,8 +65,8 @@ implementation
 uses
   System.Rtti,
   System.SysUtils,
-  System.Generics.Collections,
-  MCPServer.Errors;
+  MCPServer.Errors,
+  System.Generics.Collections;
 
 { TNotePrompt }
 

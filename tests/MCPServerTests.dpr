@@ -53,6 +53,7 @@ uses
   MCPServer.Prompt.SummarizeLogs in '..\src\Prompts\MCPServer.Prompt.SummarizeLogs.pas',
   MCPServer.Prompt.ContentSamples in '..\src\Prompts\MCPServer.Prompt.ContentSamples.pas',
   MCPServer.Tool.Result in '..\src\Tools\MCPServer.Tool.Result.pas',
+  MCPServer.Tests.Support in 'MCPServer.Tests.Support.pas',
   MCPServer.Tests.Harness in 'MCPServer.Tests.Harness.pas',
   MCPServer.Tests.Golden in 'MCPServer.Tests.Golden.pas',
   MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas',
@@ -88,7 +89,7 @@ begin
 
   var Runner := TDUnitX.CreateRunner;
   Runner.UseRTTI := True;
-  Runner.FailsOnNoAsserts := False;
+  Runner.FailsOnNoAsserts := True;
 
   if TDUnitX.Options.ConsoleMode <> TDunitXConsoleMode.Off then
     Runner.AddLogger(TDUnitXConsoleLogger.Create(TDUnitX.Options.ConsoleMode = TDunitXConsoleMode.Quiet));

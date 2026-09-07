@@ -102,8 +102,8 @@ implementation
 
 uses
   System.SysUtils,
-  System.Generics.Collections,
-  MCPServer.Errors;
+  MCPServer.Errors,
+  System.Generics.Collections;
 
 { TDoublingTool }
 
