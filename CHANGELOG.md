@@ -136,7 +136,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ready-made `TJSONArray` of content blocks) next to `ExecuteWithParams`;
   `EMCPToolError` for a failure the tool wants reported as an `isError` result.
 - Tool metadata through `IMCPToolMetadata` (`annotations`, `icons`) on every
-  tool base; resource metadata through `IMCPResourceMetadata` (`title`, `size`,
+  tool base, with `MarkReadOnly(OpenWorld)` on the tool bases for the two
+  hints a client uses to decide about parallel or auto-approved calls
+  (`test_simple_text` publishes `readOnlyHint: true, openWorldHint: false`); resource metadata through `IMCPResourceMetadata` (`title`, `size`,
   `annotations`), `IMCPBinaryResource` (`blob` contents) and
   `IMCPCacheableResource` (`ttlMs`, `cacheScope`) on `TMCPResourceBase<T>`.
 - `TMCPToolsManager` and `TMCPResourcesManager`: `AddTool` / `AddResource`

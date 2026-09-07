@@ -130,8 +130,7 @@ begin
   inherited;
   FName := TOOL_SIMPLE_TEXT;
   FDescription := 'Returns a plain text result';
-  FAnnotations := TJSONObject.Create;
-  FAnnotations.AddPair('readOnlyHint', TJSONBool.Create(True));
+  MarkReadOnly;
 end;
 
 function TSimpleTextTool.ExecuteWithParams(const Params: TNoParams): string;
