@@ -22,6 +22,7 @@ uses
   MCPServer.Schema.Validator in 'Protocol\MCPServer.Schema.Validator.pas',
   MCPServer.ContentBlocks in 'Protocol\MCPServer.ContentBlocks.pas',
   MCPServer.Logger in 'Core\MCPServer.Logger.pas',
+  MCPServer.PathBoundary in 'Core\MCPServer.PathBoundary.pas',
   MCPServer.Settings in 'Core\MCPServer.Settings.pas',
   MCPServer.Application in 'Core\MCPServer.Application.pas',
   MCPServer.Authorization in 'Core\MCPServer.Authorization.pas',
