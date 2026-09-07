@@ -9,6 +9,11 @@ uses
   MCPServer.Types;
 
 type
+  TMCPToolAnnotationWriter = record
+  public
+    class procedure ReadOnly(var Annotations: TJSONObject; const OpenWorld: Boolean); static;
+  end;
+
   IMCPTool = interface
     ['{F1E2D3C4-B5A6-4798-8901-234567890ABC}']
     function GetName: string;
@@ -32,6 +37,7 @@ type
     FDescription: string;
     FAnnotations: TJSONObject;
     FIcons: TJSONArray;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
     function BuildSchema: TJSONObject; virtual; abstract;
     function DoExecute(const Arguments: TJSONObject): TValue; virtual; abstract;
   public
@@ -55,6 +61,7 @@ type
     FDescription: string;
     FAnnotations: TJSONObject;
     FIcons: TJSONArray;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
     function ExecuteWithParams(const Params: T): string; virtual;
     function ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue; virtual;
     function GetParamsClass: TClass; virtual;
@@ -79,6 +86,7 @@ type
     FDescription: string;
     FAnnotations: TJSONObject;
     FIcons: TJSONArray;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
     function ExecuteWithParams(const Params: T): R; virtual;
     function ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue; virtual;
   public
@@ -103,6 +111,19 @@ uses
   MCPServer.Serializer,
   MCPServer.RequestContext,
   MCPServer.Tool.Result;
+
+{ TMCPToolAnnotationWriter }
+
+class procedure TMCPToolAnnotationWriter.ReadOnly(var Annotations: TJSONObject; const OpenWorld: Boolean);
+begin
+  const HasAnnotations = Assigned(Annotations);
+  if not HasAnnotations then
+    Annotations := TJSONObject.Create;
+  Annotations.RemovePair(MCP_ANNOTATION_READ_ONLY_HINT).Free;
+  Annotations.RemovePair(MCP_ANNOTATION_OPEN_WORLD_HINT).Free;
+  Annotations.AddPair(MCP_ANNOTATION_READ_ONLY_HINT, TJSONBool.Create(True));
+  Annotations.AddPair(MCP_ANNOTATION_OPEN_WORLD_HINT, TJSONBool.Create(OpenWorld));
+end;
 
 { TMCPToolBase }
 
@@ -144,6 +165,11 @@ end;
 function TMCPToolBase.GetInputSchema: TJSONObject;
 begin
   Result := BuildSchema;
+end;
+
+procedure TMCPToolBase.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  TMCPToolAnnotationWriter.ReadOnly(FAnnotations, OpenWorld);
 end;
 
 function TMCPToolBase.GetAnnotations: TJSONObject;
@@ -209,6 +235,11 @@ end;
 function TMCPToolBase<T>.GetInputSchema: TJSONObject;
 begin
   Result := TMCPSchemaGenerator.GenerateSchema(T);
+end;
+
+procedure TMCPToolBase<T>.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  TMCPToolAnnotationWriter.ReadOnly(FAnnotations, OpenWorld);
 end;
 
 function TMCPToolBase<T>.GetAnnotations: TJSONObject;
@@ -324,6 +355,11 @@ end;
 function TMCPToolBase<T, R>.GetOutputSchema: TJSONObject;
 begin
   Result := TMCPSchemaGenerator.GenerateSchema(R);
+end;
+
+procedure TMCPToolBase<T, R>.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  TMCPToolAnnotationWriter.ReadOnly(FAnnotations, OpenWorld);
 end;
 
 function TMCPToolBase<T, R>.GetAnnotations: TJSONObject;

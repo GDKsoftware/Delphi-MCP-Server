@@ -40,6 +40,11 @@ type
     constructor Create; override;
   end;
 
+  TReadOnlyTool = class(THandWrittenTool)
+  public
+    constructor Create; override;
+  end;
+
   [TestFixture]
   TToolsManagerTests = class
   private
@@ -81,6 +86,9 @@ type
 
     [Test]
     procedure List_IsInRegistrationOrder_WithAnnotations;
+
+    [Test]
+    procedure MarkReadOnly_SetsBothHints_Once;
 
     [Test]
     procedure List_CacheHints_ModernOnly;
@@ -127,6 +135,16 @@ begin
   inherited;
   FName := 'hand_written';
   FDescription := 'A tool with a hand-written schema';
+end;
+
+{ TReadOnlyTool }
+
+constructor TReadOnlyTool.Create;
+begin
+  inherited;
+  FName := 'read_only';
+  MarkReadOnly(True);
+  MarkReadOnly(True);
 end;
 
 function THandWrittenTool.BuildSchema: TJSONObject;
@@ -287,6 +305,29 @@ begin
     Assert.IsTrue(ReadOnly);
     Assert.AreEqual('integer',
       Json.GetValue<string>('tools[' + (Tools.Count - 2).ToString + '].inputSchema.properties.value.type'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TToolsManagerTests.MarkReadOnly_SetsBothHints_Once;
+begin
+  FManager.AddTool(TReadOnlyTool.Create);
+  var Json := FManager.ListTools(nil, TMCPProtocolEra.Legacy).AsType<TJSONObject>;
+  try
+    const Tools = Json.GetValue('tools') as TJSONArray;
+    var Annotations: TJSONObject := nil;
+    for var Tool in Tools do
+    begin
+      const IsReadOnlyTool = (Tool.GetValue<string>('name') = 'read_only');
+      if IsReadOnlyTool then
+        Annotations := (Tool as TJSONObject).GetValue('annotations') as TJSONObject;
+    end;
+
+    Assert.IsNotNull(Annotations, 'the tool is listed with its annotations');
+    Assert.IsTrue(Annotations.GetValue<Boolean>('readOnlyHint'), 'the tool reads only');
+    Assert.IsTrue(Annotations.GetValue<Boolean>('openWorldHint'), 'the tool reaches outside the server');
+    Assert.AreEqual(2, Annotations.Count, 'marking twice leaves one pair per hint');
   finally
     Json.Free;
   end;

@@ -402,8 +402,10 @@ The builder also has `AddAudio`, `AddEmbeddedText`, `AddEmbeddedBlob`,
 `isError` result; the request context gives the protocol era and the
 client's `_meta`. Tools that inherit from `TMCPToolBase<T, R>` return an
 object that becomes `structuredContent` plus a text block with the same
-JSON. Set `FAnnotations` (for example `readOnlyHint`) or `FIcons` in the
-constructor to publish them in `tools/list`. `MCPServer.Tool.ContentSamples`
+JSON. Set `FAnnotations` or `FIcons` in the constructor to publish them in
+`tools/list`; `MarkReadOnly` writes the `readOnlyHint` and `openWorldHint`
+pair for a tool that only reads (pass `True` when it reaches outside the
+server). `MCPServer.Tool.ContentSamples`
 has one small example per content type.
 
 ### Asking the client for input (multi round-trip requests)

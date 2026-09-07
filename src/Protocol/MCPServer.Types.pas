@@ -104,6 +104,8 @@ const
   MCP_KEY_CURSOR = 'cursor';
   MCP_KEY_ARGUMENTS = 'arguments';
   MCP_KEY_ANNOTATIONS = 'annotations';
+  MCP_ANNOTATION_READ_ONLY_HINT = 'readOnlyHint';
+  MCP_ANNOTATION_OPEN_WORLD_HINT = 'openWorldHint';
   MCP_KEY_ICONS = 'icons';
   MCP_KEY_CAPABILITIES = 'capabilities';
   MCP_KEY_PROTOCOL_VERSION = 'protocolVersion';

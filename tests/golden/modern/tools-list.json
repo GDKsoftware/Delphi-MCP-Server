@@ -108,7 +108,8 @@
             "additionalProperties": false
           },
           "annotations": {
-            "readOnlyHint": true
+            "readOnlyHint": true,
+            "openWorldHint": false
           }
         },
         {
