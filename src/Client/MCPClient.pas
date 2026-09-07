@@ -9,9 +9,15 @@ unit MCPClient;
 // unknown protocol version is not an error in this era, so the client stores whatever
 // result.protocolVersion says and never retries the handshake.
 //
-// Auto resolves to the legacy era in this build. The modern era and its server/discover probe are a
-// separate change, and until it lands a caller that asks for TMCPClientEra.Modern is told so rather
-// than being given a legacy connection under a modern name.
+// The modern era has no handshake. One server/discover request reports what the server speaks, and
+// every later request repeats the protocol version, the client capabilities and the client
+// identity in params._meta, mirrored by the MCP-Protocol-Version, Mcp-Method and Mcp-Name headers.
+//
+// Auto sends the modern probe first and falls back to the legacy handshake on the three answers a
+// legacy server gives it, and only on those: an unknown method, the -32602 that names the missing
+// params._meta protocol version, and the -32600 that refuses the modern version header. Any other
+// error, a -32602 that means the parameters really were wrong included, is the server saying
+// something the caller must hear, so it raises instead of quietly dropping an era.
 //
 // Nothing a tool can cause unwinds the caller: a JSON-RPC error from tools/call, an isError result
 // and a call for a tool that does not exist all become a TMCPToolCallOutcome. A broken transport, a
@@ -23,12 +29,34 @@ interface
 uses
   System.SysUtils,
   System.JSON,
+  MCPServer.Types,
   MCPClient.Types,
   MCPClient.Interfaces,
   MCPClient.Http;
 
+const
+  { The path prefix the server prints in front of a _meta member it missed. The server builds its
+    own copy in MCPServer.JsonRpcProcessor, which keeps it private, so the two are pinned to each
+    other by a test rather than by a shared constant. }
+  MCP_CLIENT_META_PATH_PREFIX = 'params._meta.';
+  { The two messages the era probe matches on. Matching the message and not the bare code matters:
+    -32602 is also the ordinary invalid-params code of the modern era. }
+  MCP_CLIENT_DISCOVER_REQUIRES_META =
+    MCP_METHOD_SERVER_DISCOVER + ' requires ' + MCP_CLIENT_META_PATH_PREFIX + MCP_META_PROTOCOL_VERSION;
+  MCP_CLIENT_UNSUPPORTED_VERSION_HEADER = 'Unsupported ' + MCP_HEADER_PROTOCOL_VERSION + ' header';
+
 type
   TMCPClient = class(TInterfacedObject, IMCPClient)
+  strict private
+  type
+    { What the server answered the server/discover probe with, and whether that answer means the
+      server speaks the legacy era rather than that the probe itself was wrong. }
+    TProbeFailure = record
+      Code: Integer;
+      Text: string;
+      Retry: string;
+      function IsLegacyServer: Boolean;
+    end;
   strict private
     FTransport: TMCPHttpTransport;
     FOptions: TMCPClientOptions;
@@ -36,6 +64,10 @@ type
     FEra: TMCPClientEra;
     FProtocolVersion: string;
     FServerInfoJson: string;
+    FSupportedVersions: TArray<string>;
+    FCapabilitiesJson: string;
+    FDiscoverTtlMs: Integer;
+    FCacheScope: string;
     FConnected: Boolean;
     FNextId: Int64;
     FTools: TArray<TMCPRemoteTool>;
@@ -59,6 +91,15 @@ type
     function ClientCapabilities: TJSONObject;
     function ClientInfo: TJSONObject;
 
+    function TryConnectModern(const AllowFallback: Boolean): Boolean;
+    procedure BeginModern(const Version: string);
+    function TryDiscover(out Failure: TProbeFailure): Boolean;
+    procedure ReadDiscovery(const Outcome: TJSONObject);
+    function IsModernEra: Boolean;
+    function RequestParams(const Params: TJSONObject; const Id: Int64): TJSONObject;
+    function ModernMeta(const Id: Int64): TJSONObject;
+    class function HighestOfferedVersion(const Data: TJSONObject): string; static;
+
     procedure LoadTools;
     function ReadTool(const Value: TJSONValue): TMCPRemoteTool;
     function ReadOutcome(const Response: TJSONObject; const Http: TMCPHttpResponse): TMCPToolCallOutcome;
@@ -70,6 +111,7 @@ type
     class function Base64ByteCount(const Data: string): Integer; static;
     class function TextOf(const Owner: TJSONObject; const Name: string): string; static;
     class function JsonOf(const Owner: TJSONObject; const Name: string): string; static;
+    class function IntOf(const Owner: TJSONObject; const Name: string): Integer; static;
     class function BoolOf(const Owner: TJSONObject; const Name: string): Boolean; static;
     class function ObjectOf(const Owner: TJSONObject; const Name: string): TJSONObject; static;
   public
@@ -94,6 +136,11 @@ type
 
     { Read by a host that presents remote tools beside its own, never by the protocol. }
     property NamePrefix: string read FNamePrefix write FNamePrefix;
+    { What server/discover reported, empty until a modern connection is made. }
+    property SupportedVersions: TArray<string> read FSupportedVersions;
+    property CapabilitiesJson: string read FCapabilitiesJson;
+    property DiscoverTtlMs: Integer read FDiscoverTtlMs;
+    property CacheScope: string read FCacheScope;
     { Every request body just before it goes on the wire, which is what a host traces. }
     property OnRequestBody: TProc<string> read FOnRequestBody write FOnRequestBody;
   end;
@@ -101,7 +148,6 @@ type
 implementation
 
 uses
-  MCPServer.Types,
   MCPServer.Mrtr,
   MCPClient.Errors;
 
@@ -120,6 +166,8 @@ const
   KEY_DATA = 'data';
   KEY_REQUIRED_SCOPE = 'requiredScope';
   KEY_BLOB = 'blob';
+  KEY_SUPPORTED = 'supported';
+  KEY_SUPPORTED_VERSIONS = 'supportedVersions';
 
   BLOCK_TYPE_TEXT = 'text';
   BLOCK_TYPE_RESOURCE = 'resource';
@@ -138,8 +186,6 @@ const
   SUMMARY_SIZED = '%s %s %d bytes';
   SUMMARY_LINK = '%s %s';
 
-  MESSAGE_MODERN_UNAVAILABLE =
-    'This client speaks the legacy MCP era only. Construct it with TMCPClientEra.Legacy or Auto.';
   MESSAGE_NO_RESULT = 'The MCP server answered %s with neither a result nor an error.';
   MESSAGE_SERVER_ERROR = 'The MCP server refused %s: %s';
   MESSAGE_ID_MISMATCH = 'The MCP server answered request %d with a response for a different request.';
@@ -193,7 +239,7 @@ function TMCPClient.Post(const Method, MirroredName: string; const Params: TJSON
   out Http: TMCPHttpResponse): TJSONObject;
 begin
   const Id = TakeId;
-  const Body = BuildBody(Method, Params, Id);
+  const Body = BuildBody(Method, RequestParams(Params, Id), Id);
 
   Http := FTransport.Send(TMCPHttpRequest.Call(Method, Body, Id, MirroredName));
   if not Http.HasBody then
@@ -257,13 +303,8 @@ begin
   if not Assigned(Error) then
     Exit;
 
-  const Message = TextOf(Error, KEY_MESSAGE);
-  var Code := 0;
-  const CodeValue = Error.GetValue(KEY_CODE);
-  if CodeValue is TJSONNumber then
-    Code := TJSONNumber(CodeValue).AsInt;
-
-  raise EMCPClientError.Create(Format(MESSAGE_SERVER_ERROR, [Method, Message]), 0, Code);
+  raise EMCPClientError.Create(
+    Format(MESSAGE_SERVER_ERROR, [Method, TextOf(Error, KEY_MESSAGE)]), 0, IntOf(Error, KEY_CODE));
 end;
 
 procedure TMCPClient.Connect;
@@ -271,11 +312,15 @@ begin
   if FConnected then
     Exit;
 
-  const WantsModern = (FOptions.Era = TMCPClientEra.Modern);
-  if WantsModern then
-    raise EMCPClientError.Create(MESSAGE_MODERN_UNAVAILABLE);
-
-  ConnectLegacy;
+  case FOptions.Era of
+    TMCPClientEra.Legacy:
+      ConnectLegacy;
+    TMCPClientEra.Modern:
+      TryConnectModern(False);
+  else
+    if not TryConnectModern(True) then
+      ConnectLegacy;
+  end;
 end;
 
 procedure TMCPClient.ConnectLegacy;
@@ -331,6 +376,164 @@ begin
   Result.AddPair(MCP_KEY_VERSION, FOptions.ClientVersion);
 end;
 
+{ TMCPClient.TProbeFailure }
+
+function TMCPClient.TProbeFailure.IsLegacyServer: Boolean;
+begin
+  case Code of
+    JSONRPC_METHOD_NOT_FOUND:
+      Result := True;
+    JSONRPC_INVALID_PARAMS:
+      Result := (Text = MCP_CLIENT_DISCOVER_REQUIRES_META);
+    JSONRPC_INVALID_REQUEST:
+      Result := Text.StartsWith(MCP_CLIENT_UNSUPPORTED_VERSION_HEADER);
+  else
+    Result := False;
+  end;
+end;
+
+function TMCPClient.TryConnectModern(const AllowFallback: Boolean): Boolean;
+begin
+  BeginModern(MCP_LATEST_PROTOCOL_VERSION);
+
+  var Failure: TProbeFailure;
+  if TryDiscover(Failure) then
+    Exit(True);
+
+  // -32022 names the versions the server does speak. One retry with the highest of them, and only
+  // when it is a version this attempt did not already use, so a stubborn server cannot loop us.
+  const CanRetry = ((Failure.Code = MCP_ERROR_UNSUPPORTED_PROTOCOL_VERSION) and
+    (Failure.Retry <> '') and (Failure.Retry <> FProtocolVersion));
+  if CanRetry then
+  begin
+    BeginModern(Failure.Retry);
+    if TryDiscover(Failure) then
+      Exit(True);
+  end;
+
+  const FallsBack = (AllowFallback and Failure.IsLegacyServer);
+  if not FallsBack then
+    raise EMCPClientError.Create(
+      Format(MESSAGE_SERVER_ERROR, [MCP_METHOD_SERVER_DISCOVER, Failure.Text]), 0, Failure.Code);
+
+  Result := False;
+end;
+
+procedure TMCPClient.BeginModern(const Version: string);
+begin
+  FEra := TMCPClientEra.Modern;
+  FProtocolVersion := Version;
+  FTransport.Era := FEra;
+  FTransport.ProtocolVersion := Version;
+  FTransport.SessionId := '';
+end;
+
+function TMCPClient.TryDiscover(out Failure: TProbeFailure): Boolean;
+begin
+  Failure := Default(TProbeFailure);
+
+  var Http: TMCPHttpResponse;
+  const Response = Post(MCP_METHOD_SERVER_DISCOVER, '', nil, Http);
+  if not Assigned(Response) then
+    raise EMCPClientProtocolError.Create(Format(MESSAGE_NO_RESULT, [MCP_METHOD_SERVER_DISCOVER]));
+
+  try
+    const Error = ObjectOf(Response, MCP_KEY_ERROR);
+    if Assigned(Error) then
+    begin
+      Failure.Code := IntOf(Error, KEY_CODE);
+      Failure.Text := TextOf(Error, KEY_MESSAGE);
+      Failure.Retry := HighestOfferedVersion(ObjectOf(Error, KEY_DATA));
+      Exit(False);
+    end;
+
+    const Outcome = ObjectOf(Response, MCP_KEY_RESULT);
+    if not Assigned(Outcome) then
+      raise EMCPClientProtocolError.Create(Format(MESSAGE_NO_RESULT, [MCP_METHOD_SERVER_DISCOVER]));
+
+    ReadDiscovery(Outcome);
+  finally
+    Response.Free;
+  end;
+
+  FConnected := True;
+  Result := True;
+end;
+
+procedure TMCPClient.ReadDiscovery(const Outcome: TJSONObject);
+begin
+  FSupportedVersions := nil;
+  const Supported = Outcome.GetValue(KEY_SUPPORTED_VERSIONS);
+  if Supported is TJSONArray then
+    for var Value in TJSONArray(Supported) do
+      if Value is TJSONString then
+        FSupportedVersions := FSupportedVersions + [TJSONString(Value).Value];
+
+  FCapabilitiesJson := JsonOf(Outcome, MCP_KEY_CAPABILITIES);
+  FServerInfoJson := JsonOf(ObjectOf(Outcome, MCP_KEY_META), MCP_META_SERVER_INFO);
+  FDiscoverTtlMs := IntOf(Outcome, MCP_KEY_TTL_MS);
+  FCacheScope := TextOf(Outcome, MCP_KEY_CACHE_SCOPE);
+end;
+
+class function TMCPClient.HighestOfferedVersion(const Data: TJSONObject): string;
+begin
+  Result := '';
+  if not Assigned(Data) then
+    Exit;
+
+  const Supported = Data.GetValue(KEY_SUPPORTED);
+  if not (Supported is TJSONArray) then
+    Exit;
+
+  // A legacy version in the list is an invitation to handshake, not to retry the probe, so it is
+  // skipped here and left to the fallback rule. Versions sort by date, so text order is age order.
+  for var Value in TJSONArray(Supported) do
+  begin
+    if not (Value is TJSONString) then
+      Continue;
+
+    const Version = TJSONString(Value).Value;
+    const IsOlderEra = ((Version = '') or TMCPProtocolVersion.IsLegacy(Version));
+    if IsOlderEra then
+      Continue;
+
+    if Version > Result then
+      Result := Version;
+  end;
+end;
+
+function TMCPClient.IsModernEra: Boolean;
+begin
+  Result := (FEra = TMCPClientEra.Modern);
+end;
+
+function TMCPClient.RequestParams(const Params: TJSONObject; const Id: Int64): TJSONObject;
+begin
+  Result := Params;
+  if not IsModernEra then
+    Exit;
+
+  if not Assigned(Result) then
+    Result := TJSONObject.Create;
+  Result.AddPair(MCP_KEY_META, ModernMeta(Id));
+end;
+
+function TMCPClient.ModernMeta(const Id: Int64): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair(MCP_META_PROTOCOL_VERSION, FProtocolVersion);
+  Result.AddPair(MCP_META_CLIENT_CAPABILITIES, ClientCapabilities);
+  Result.AddPair(MCP_META_CLIENT_INFO, ClientInfo);
+
+  if FOptions.LogLevel <> '' then
+    Result.AddPair(MCP_META_LOG_LEVEL, FOptions.LogLevel);
+
+  // The token is the request id, so a progress notification names the call it belongs to. Without a
+  // sink there is nowhere to report progress, so nothing is asked for.
+  if Assigned(FSink) then
+    Result.AddPair(MCP_META_PROGRESS_TOKEN, TJSONNumber.Create(Id));
+end;
+
 procedure TMCPClient.Close;
 begin
   FConnected := False;
@@ -338,6 +541,12 @@ begin
   FTools := nil;
   FProtocolVersion := '';
   FServerInfoJson := '';
+  FSupportedVersions := nil;
+  FCapabilitiesJson := '';
+  FDiscoverTtlMs := 0;
+  FCacheScope := '';
+  FEra := FOptions.Era;
+  FTransport.Era := FEra;
   FTransport.SessionId := '';
   FTransport.ProtocolVersion := '';
 end;
@@ -504,12 +713,7 @@ end;
 
 function TMCPClient.ErrorOutcome(const Error: TJSONObject; const Http: TMCPHttpResponse): TMCPToolCallOutcome;
 begin
-  var Code := 0;
-  const CodeValue = Error.GetValue(KEY_CODE);
-  if CodeValue is TJSONNumber then
-    Code := TJSONNumber(CodeValue).AsInt;
-
-  Result := TMCPToolCallOutcome.CreateError(TextOf(Error, KEY_MESSAGE), Code);
+  Result := TMCPToolCallOutcome.CreateError(TextOf(Error, KEY_MESSAGE), IntOf(Error, KEY_CODE));
 
   Result.RequiredScope := Http.RequiredScope;
   const Data = ObjectOf(Error, KEY_DATA);
@@ -617,6 +821,17 @@ begin
     Result := Value.ToJSON
   else if Value is TJSONString then
     Result := TJSONString(Value).Value;
+end;
+
+class function TMCPClient.IntOf(const Owner: TJSONObject; const Name: string): Integer;
+begin
+  Result := 0;
+  if not Assigned(Owner) then
+    Exit;
+
+  const Value = Owner.GetValue(Name);
+  if Value is TJSONNumber then
+    Result := TJSONNumber(Value).AsInt;
 end;
 
 class function TMCPClient.BoolOf(const Owner: TJSONObject; const Name: string): Boolean;

@@ -136,8 +136,6 @@ type
     [Test]
     procedure CallTool_WithoutTheEventStream_ReadsThePlainJsonAnswer;
 
-    [Test]
-    procedure Era_Modern_IsRefusedWithAReadableMessage;
   end;
 
   TStubExchange = record
@@ -708,20 +706,6 @@ begin
   const Outcome = CallGolden(CASE_ECHO);
 
   Assert.AreEqual('Echo: hello golden', Outcome.Text);
-end;
-
-procedure TMCPClientLegacyTests.Era_Modern_IsRefusedWithAReadableMessage;
-begin
-  var Modern := Options;
-  Modern.Era := TMCPClientEra.Modern;
-  NewClient(Modern);
-
-  Assert.WillRaise(
-    procedure
-    begin
-      FClient.Connect;
-    end, EMCPClientError);
-  Assert.AreEqual(0, BodyCount, 'the client posted a modern request it cannot follow up');
 end;
 
 { TStubReply }
