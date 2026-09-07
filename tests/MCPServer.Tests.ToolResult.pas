@@ -163,7 +163,7 @@ begin
   SetLength(Bytes, 300);
   for var I := 0 to High(Bytes) do
     Bytes[I] := Byte(I);
-  var Encoded := EncodeBase64Blob(Bytes);
+  var Encoded := TMCPContentBlock.EncodeBlob(Bytes);
   Assert.AreEqual(400, Length(Encoded));
   Assert.IsFalse(Encoded.Contains(#13) or Encoded.Contains(#10));
 end;

@@ -199,7 +199,7 @@ begin
     else if Method = 'OPTIONS' then
       Http.Options(Url(Path), Response)
     else
-      raise Exception.Create('unsupported method ' + Method);
+      raise EArgumentException.CreateFmt('Unsupported HTTP method %s', [Method]);
 
     Result.Status := Http.ResponseCode;
     Result.ContentLength := Http.Response.ContentLength;

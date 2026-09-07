@@ -4,12 +4,16 @@ interface
 
 uses
   DUnitX.TestFramework,
+  System.SysUtils,
   System.JSON,
   MCPServer.Types,
   MCPServer.Resource.Base,
   MCPServer.ResourcesManager;
 
 type
+  EFailingResource = class(Exception)
+  end;
+
   TFailingData = class
   end;
 
@@ -74,7 +78,6 @@ type
 implementation
 
 uses
-  System.SysUtils,
   System.Threading,
   System.Generics.Collections,
   MCPServer.Errors;
@@ -91,7 +94,7 @@ end;
 
 function TFailingResource.GetResourceData: TFailingData;
 begin
-  raise Exception.Create('disk on fire');
+  raise EFailingResource.Create('disk on fire');
 end;
 
 { TEchoResource }

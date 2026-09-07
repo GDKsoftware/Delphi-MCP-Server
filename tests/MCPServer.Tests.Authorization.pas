@@ -18,7 +18,7 @@ type
   strict private
     FClaimsJson: string;
   protected
-    function ValidateToken(const Token: string; out Claims: TJSONObject): Boolean; override;
+    function TryValidateToken(const Token: string; out Claims: TJSONObject): Boolean; override;
   public
     constructor Create(const ExpectedAudience, ClaimsJson: string);
   end;
@@ -30,8 +30,7 @@ type
     FSeenAuthorization: string;
     FSeenBody: string;
     procedure HandleIntrospection(Context: TIdContext; Request: TIdHTTPRequestInfo; Response: TIdHTTPResponseInfo);
-    function Decide(const Authorizer: IMCPAuthorizer; const Token: string; out Principal: TMCPPrincipal;
-      out Challenge: TMCPAuthChallenge): TMCPAuthDecision;
+    function Decide(const Authorizer: IMCPAuthorizer; const Token: string): TMCPAuthResult;
   public
     [TearDown]
     procedure TearDown;
@@ -64,7 +63,7 @@ begin
   FClaimsJson := ClaimsJson;
 end;
 
-function TClaimsAuthorizer.ValidateToken(const Token: string; out Claims: TJSONObject): Boolean;
+function TClaimsAuthorizer.TryValidateToken(const Token: string; out Claims: TJSONObject): Boolean;
 begin
   Claims := nil;
   if Token <> 'valid' then
@@ -81,32 +80,34 @@ begin
   FIntrospection := nil;
 end;
 
-function TAuthorizationTests.Decide(const Authorizer: IMCPAuthorizer; const Token: string;
-  out Principal: TMCPPrincipal; out Challenge: TMCPAuthChallenge): TMCPAuthDecision;
+function TAuthorizationTests.Decide(const Authorizer: IMCPAuthorizer; const Token: string): TMCPAuthResult;
 begin
-  Result := Authorizer.Authorize(Token, 'POST', '/mcp', Principal, Challenge);
+  Result := Authorizer.Authorize(Token, 'POST', '/mcp');
 end;
 
 procedure TAuthorizationTests.StaticBearer_AcceptsListedTokens_RejectsOthers;
-var
-  Principal: TMCPPrincipal;
-  Challenge: TMCPAuthChallenge;
 begin
   var Authorizer: IMCPAuthorizer := TMCPStaticBearerAuthorizer.Create(['alpha', ' beta ']);
-  Assert.AreEqual(TMCPAuthDecision.Allow, Decide(Authorizer, 'alpha', Principal, Challenge));
-  Assert.AreEqual('token-1', Principal.Subject);
-  Assert.IsTrue(Principal.HasScope('anything'), 'pre-shared tokens grant every scope');
-  Assert.AreEqual(TMCPAuthDecision.Allow, Decide(Authorizer, 'beta', Principal, Challenge));
-  Assert.AreEqual('token-2', Principal.Subject);
-  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(Authorizer, 'alph', Principal, Challenge));
-  Assert.AreEqual('invalid_token', Challenge.Error);
-  Assert.AreEqual('', Principal.Subject);
-  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(Authorizer, '', Principal, Challenge));
+  var First := Decide(Authorizer, 'alpha');
+  Assert.AreEqual(TMCPAuthDecision.Allow, First.Decision);
+  Assert.AreEqual('token-1', First.Principal.Subject);
+  Assert.IsTrue(First.Principal.HasScope('anything'), 'pre-shared tokens grant every scope');
+
+  var Second := Decide(Authorizer, 'beta');
+  Assert.AreEqual(TMCPAuthDecision.Allow, Second.Decision);
+  Assert.AreEqual('token-2', Second.Principal.Subject);
+
+  var Unknown := Decide(Authorizer, 'alph');
+  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Unknown.Decision);
+  Assert.AreEqual('invalid_token', Unknown.Challenge.Error);
+  Assert.AreEqual('', Unknown.Principal.Subject);
+  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(Authorizer, '').Decision);
 
   var Scoped: IMCPAuthorizer := TMCPStaticBearerAuthorizer.Create(['alpha'], ['read']);
-  Assert.AreEqual(TMCPAuthDecision.Allow, Decide(Scoped, 'alpha', Principal, Challenge));
-  Assert.IsTrue(Principal.HasScope('read'));
-  Assert.IsFalse(Principal.HasScope('write'));
+  var Limited := Decide(Scoped, 'alpha');
+  Assert.AreEqual(TMCPAuthDecision.Allow, Limited.Decision);
+  Assert.IsTrue(Limited.Principal.HasScope('read'));
+  Assert.IsFalse(Limited.Principal.HasScope('write'));
 end;
 
 procedure TAuthorizationTests.StaticBearer_NeedsAToken;
@@ -139,54 +140,55 @@ begin
 end;
 
 procedure TAuthorizationTests.OAuth_RejectsWrongAudience_Expiry_AndScope;
-var
-  Principal: TMCPPrincipal;
-  Challenge: TMCPAuthChallenge;
 begin
   var Future := System.DateUtils.DateTimeToUnix(Now, False) + 600;
   var Past := System.DateUtils.DateTimeToUnix(Now, False) - 600;
 
   var Invalid: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s","exp":%d}', [AUDIENCE, Future]));
-  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(Invalid, 'nope', Principal, Challenge));
-  Assert.AreEqual('invalid_token', Challenge.Error);
+  var Rejected := Decide(Invalid, 'nope');
+  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Rejected.Decision);
+  Assert.AreEqual('invalid_token', Rejected.Challenge.Error);
 
   var WrongAudience: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"https://other","exp":%d}', [Future]));
-  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(WrongAudience, 'valid', Principal, Challenge));
-  Assert.IsTrue(Challenge.ErrorDescription.Contains('not issued for this server'), Challenge.ErrorDescription);
+  var ForAnother := Decide(WrongAudience, 'valid');
+  Assert.AreEqual(TMCPAuthDecision.Unauthorized, ForAnother.Decision);
+  Assert.IsTrue(ForAnother.Challenge.ErrorDescription.Contains('not issued for this server'),
+    ForAnother.Challenge.ErrorDescription);
 
   var Expired: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s","exp":%d}', [AUDIENCE, Past]));
-  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(Expired, 'valid', Principal, Challenge));
-  Assert.IsTrue(Challenge.ErrorDescription.Contains('expired'), Challenge.ErrorDescription);
+  var Stale := Decide(Expired, 'valid');
+  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Stale.Decision);
+  Assert.IsTrue(Stale.Challenge.ErrorDescription.Contains('expired'), Stale.Challenge.ErrorDescription);
 
   var NoExpiry: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s"}', [AUDIENCE]));
-  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(NoExpiry, 'valid', Principal, Challenge), 'exp is mandatory');
+  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(NoExpiry, 'valid').Decision, 'exp is mandatory');
 
   var Scoped := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s","exp":%d,"scope":"read"}', [AUDIENCE, Future]));
   var ScopedRef: IMCPAuthorizer := Scoped;
   Scoped.RequiredScopes := ['read', 'write'];
-  Assert.AreEqual(TMCPAuthDecision.Forbidden, Decide(ScopedRef, 'valid', Principal, Challenge));
-  Assert.AreEqual('insufficient_scope', Challenge.Error);
-  Assert.AreEqual('read write', Challenge.Scope);
+  var Denied := Decide(ScopedRef, 'valid');
+  Assert.AreEqual(TMCPAuthDecision.Forbidden, Denied.Decision);
+  Assert.AreEqual('insufficient_scope', Denied.Challenge.Error);
+  Assert.AreEqual('read write', Denied.Challenge.Scope);
 
   Scoped.RequiredScopes := ['read'];
-  Assert.AreEqual(TMCPAuthDecision.Allow, Decide(ScopedRef, 'valid', Principal, Challenge));
-  Assert.AreEqual('u', Principal.Subject);
-  Assert.IsTrue(Principal.HasScope('read'));
-  Assert.IsFalse(Principal.HasScope('write'));
+  var Allowed := Decide(ScopedRef, 'valid');
+  Assert.AreEqual(TMCPAuthDecision.Allow, Allowed.Decision);
+  Assert.AreEqual('u', Allowed.Principal.Subject);
+  Assert.IsTrue(Allowed.Principal.HasScope('read'));
+  Assert.IsFalse(Allowed.Principal.HasScope('write'));
 end;
 
 procedure TAuthorizationTests.OAuth_AcceptsAudienceArray_AndScopeArray;
-var
-  Principal: TMCPPrincipal;
-  Challenge: TMCPAuthChallenge;
 begin
   var Future := System.DateUtils.DateTimeToUnix(Now, False) + 600;
   var Authorizer: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE,
     Format('{"sub":"u","aud":["https://other","%s"],"exp":%d,"scp":["a","b"]}', [AUDIENCE.ToUpper, Future]));
-  Assert.AreEqual(TMCPAuthDecision.Allow, Decide(Authorizer, 'valid', Principal, Challenge));
-  Assert.IsTrue(Principal.HasScope('a'));
-  Assert.IsTrue(Principal.HasScope('b'));
-  Assert.IsFalse(Principal.HasScope('c'));
+  var Outcome := Decide(Authorizer, 'valid');
+  Assert.AreEqual(TMCPAuthDecision.Allow, Outcome.Decision);
+  Assert.IsTrue(Outcome.Principal.HasScope('a'));
+  Assert.IsTrue(Outcome.Principal.HasScope('b'));
+  Assert.IsFalse(Outcome.Principal.HasScope('c'));
 end;
 
 procedure TAuthorizationTests.OAuth_NeedsAnAudience;
@@ -248,9 +250,6 @@ begin
 end;
 
 procedure TAuthorizationTests.Introspection_PostsTokenWithClientCredentials;
-var
-  Principal: TMCPPrincipal;
-  Challenge: TMCPAuthChallenge;
 begin
   FIntrospection := TIdHTTPServer.Create(nil);
   FIntrospection.Bindings.Add.IP := '127.0.0.1';
@@ -260,14 +259,16 @@ begin
   var Url := Format('http://127.0.0.1:%d/introspect', [FIntrospection.Bindings[0].Port]);
 
   var Authorizer: IMCPAuthorizer := TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, 'mcp', 's3cret');
-  Assert.AreEqual(TMCPAuthDecision.Allow, Decide(Authorizer, 'good', Principal, Challenge));
-  Assert.AreEqual('alice', Principal.Subject);
-  Assert.IsTrue(Principal.HasScope('read'));
+  var Active := Decide(Authorizer, 'good');
+  Assert.AreEqual(TMCPAuthDecision.Allow, Active.Decision);
+  Assert.AreEqual('alice', Active.Principal.Subject);
+  Assert.IsTrue(Active.Principal.HasScope('read'));
   Assert.AreEqual('token=good', FSeenBody);
   Assert.IsTrue(FSeenAuthorization.StartsWith('Basic '), FSeenAuthorization);
 
-  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(Authorizer, 'stale', Principal, Challenge));
-  Assert.AreEqual('invalid_token', Challenge.Error);
+  var Stale := Decide(Authorizer, 'stale');
+  Assert.AreEqual(TMCPAuthDecision.Unauthorized, Stale.Decision);
+  Assert.AreEqual('invalid_token', Stale.Challenge.Error);
 end;
 
 end.

@@ -214,6 +214,25 @@ lists with a lock now, so run-time changes are safe from any thread.
 stdin close the open subscriptions with a completion response before the
 transport goes down (up to one second, or the stdio drain time).
 
+## Renamed and reshaped API
+
+These types are new in this release, so the change only affects code written
+against a pre-release build:
+
+- The content block helpers are class functions on `TMCPContentBlock`
+  (`TMCPContentBlock.Text`, `.Image`, `.Audio`, `.ResourceLink`,
+  `.EmbeddedText`, `.EmbeddedBlob`, `.EncodeBlob`).
+- The protocol version helpers are class functions on `TMCPProtocolVersion`
+  (`IsLegacy`, `IsModern`, `NegotiateLegacy`).
+- `IMCPAuthorizer.Authorize` returns a `TMCPAuthResult` (decision, principal,
+  challenge) instead of writing two `out` parameters, and the method a custom
+  authorizer overrides is `TryValidateToken`.
+- `TMCPLineReader.TryReadLine` returns a `TMCPLine` (status and text).
+- `TMCPSchemaValidator.TryValidate` is the new name of `Validate`.
+- `TMCPRegistry` raises `EMCPRegistryNotFound` for an unknown name, the
+  managers raise `EMCPError.MethodNotFound`, and `TMCPIdHTTPServer` raises
+  `EMCPConfigurationError` for a missing registry or certificate.
+
 ## Library use
 
 - `TMCPJsonRpcProcessor.ProcessRequest` and the manager interfaces are

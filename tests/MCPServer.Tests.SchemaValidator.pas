@@ -41,7 +41,7 @@ begin
   var Instance := TJSONNumber.Create(1);
   try
     var Errors: TArray<string>;
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.AreEqual(1, Integer(Length(Errors)));
     Assert.IsTrue(Errors[0].Contains('expected string'));
   finally
@@ -58,9 +58,9 @@ begin
   var NumberInstance := TJSONNumber.Create(1);
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, TextInstance, Errors));
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, NullInstance, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, NumberInstance, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, TextInstance, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, NullInstance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, NumberInstance, Errors));
   finally
     Schema.Free;
     TextInstance.Free;
@@ -76,8 +76,8 @@ begin
   var FractionInstance := TJSONNumber.Create(3.5);
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, WholeInstance, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, FractionInstance, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, WholeInstance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, FractionInstance, Errors));
   finally
     Schema.Free;
     WholeInstance.Free;
@@ -91,7 +91,7 @@ begin
   var Instance := TJSONObject.ParseJSONValue('{}') as TJSONObject;
   try
     var Errors: TArray<string>;
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.IsTrue(Errors[0].Contains('missing required property "a"'));
   finally
     Schema.Free;
@@ -106,7 +106,7 @@ begin
   var Instance := TJSONObject.ParseJSONValue('{"child":{}}') as TJSONObject;
   try
     var Errors: TArray<string>;
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.IsTrue(Errors[0].Contains('value.child'));
   finally
     Schema.Free;
@@ -121,7 +121,7 @@ begin
   var Instance := TJSONObject.ParseJSONValue('{"a":"x","b":1}') as TJSONObject;
   try
     var Errors: TArray<string>;
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.IsTrue(Errors[0].Contains('unexpected property "b"'));
   finally
     Schema.Free;
@@ -135,7 +135,7 @@ begin
   var Instance := TJSONObject.ParseJSONValue('[1,2,"x"]') as TJSONArray;
   try
     var Errors: TArray<string>;
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.IsTrue(Errors[0].Contains('value[2]'));
   finally
     Schema.Free;
@@ -151,9 +151,9 @@ begin
   var AboveRange := TJSONNumber.Create(11);
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, InRange, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, BelowRange, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, AboveRange, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, InRange, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, BelowRange, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, AboveRange, Errors));
   finally
     Schema.Free;
     InRange.Free;
@@ -172,10 +172,10 @@ begin
   var WrongPattern := TJSONString.Create('AB');
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, Ok, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, TooShort, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, TooLong, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, WrongPattern, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, Ok, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, TooShort, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, TooLong, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, WrongPattern, Errors));
   finally
     Schema.Free;
     Ok.Free;
@@ -192,8 +192,8 @@ begin
   var NotAllowed := TJSONString.Create('c');
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, Allowed, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, NotAllowed, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, Allowed, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, NotAllowed, Errors));
   finally
     Schema.Free;
     Allowed.Free;
@@ -208,8 +208,8 @@ begin
   var DifferentValue := TJSONString.Create('other');
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, SameValue, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, DifferentValue, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, SameValue, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, DifferentValue, Errors));
   finally
     Schema.Free;
     SameValue.Free;
@@ -226,8 +226,8 @@ begin
   var Invalid := TJSONObject.ParseJSONValue('{"a":0}') as TJSONObject;
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, Valid, Errors));
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Invalid, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, Valid, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Invalid, Errors));
   finally
     Schema.Free;
     Valid.Free;
@@ -241,7 +241,7 @@ begin
   var Instance := TJSONString.Create('x');
   try
     var Errors: TArray<string>;
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.IsTrue(Errors[0].Contains('unsupported $ref'));
   finally
     Schema.Free;
@@ -257,7 +257,7 @@ begin
   var Instance := TJSONObject.ParseJSONValue('{"name":"a","age":3}') as TJSONObject;
   try
     var Errors: TArray<string>;
-    Assert.IsTrue(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.AreEqual(0, Integer(Length(Errors)));
   finally
     Schema.Free;
@@ -286,7 +286,7 @@ begin
     end;
 
     var Errors: TArray<string>;
-    Assert.IsFalse(TMCPSchemaValidator.Validate(Schema, Instance, Errors));
+    Assert.IsFalse(TMCPSchemaValidator.TryValidate(Schema, Instance, Errors));
     Assert.IsTrue(Errors[Length(Errors) - 1].Contains('nested too deeply'));
   finally
     Schema.Free;

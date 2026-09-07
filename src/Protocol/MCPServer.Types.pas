@@ -72,14 +72,20 @@ const
   MCP_LOG_LEVELS: array[0..7] of string = (
     'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
 
-function IsLegacyProtocolVersion(const Version: string): Boolean;
-function IsModernProtocolVersion(const Version: string): Boolean;
-function NegotiateLegacyProtocolVersion(const Requested: string): string;
-
 type
+  TMCPProtocolVersion = record
+    class function IsLegacy(const Version: string): Boolean; static;
+    class function IsModern(const Version: string): Boolean; static;
+    class function NegotiateLegacy(const Requested: string): string; static;
+  end;
+
   TMCPLogLevel = record
     class function Rank(const Level: string): Integer; static;
     class function IsKnown(const Level: string): Boolean; static;
+  end;
+
+  TMCPStrings = record
+    class function Contains(const Value: string; const Values: array of string): Boolean; static;
   end;
 
   TMCPConstantTime = record
@@ -469,6 +475,16 @@ begin
   Result := Rank(Level) >= 0;
 end;
 
+class function TMCPStrings.Contains(const Value: string; const Values: array of string): Boolean;
+begin
+  for var Item in Values do
+  begin
+    if Item = Value then
+      Exit(True);
+  end;
+  Result := False;
+end;
+
 class function TMCPConstantTime.SameBytes(const A, B: TBytes): Boolean;
 begin
   var Difference := Length(A) xor Length(B);
@@ -527,7 +543,7 @@ begin
   end;
 end;
 
-function IsLegacyProtocolVersion(const Version: string): Boolean;
+class function TMCPProtocolVersion.IsLegacy(const Version: string): Boolean;
 begin
   for var Known in MCP_LEGACY_PROTOCOL_VERSIONS do
     if Known = Version then
@@ -535,7 +551,7 @@ begin
   Result := False;
 end;
 
-function IsModernProtocolVersion(const Version: string): Boolean;
+class function TMCPProtocolVersion.IsModern(const Version: string): Boolean;
 begin
   for var Known in MCP_MODERN_PROTOCOL_VERSIONS do
     if Known = Version then
@@ -543,9 +559,9 @@ begin
   Result := False;
 end;
 
-function NegotiateLegacyProtocolVersion(const Requested: string): string;
+class function TMCPProtocolVersion.NegotiateLegacy(const Requested: string): string;
 begin
-  if IsLegacyProtocolVersion(Requested) then
+  if TMCPProtocolVersion.IsLegacy(Requested) then
     Result := Requested
   else
     Result := MCP_LATEST_LEGACY_PROTOCOL_VERSION;

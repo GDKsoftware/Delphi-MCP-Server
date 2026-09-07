@@ -91,7 +91,7 @@ begin
   if Method = 'completion/complete' then
     Result := Complete(Params, EraOf(Context))
   else
-    raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+    raise EMCPError.MethodNotFound(Method);
 end;
 
 function TMCPCompletionManager.ResolveTarget(const Ref: TJSONObject; Era: TMCPProtocolEra): IInterface;

@@ -43,7 +43,8 @@ implementation
 
 uses
   MCPServer.Capabilities,
-  MCPServer.RequestContext;
+  MCPServer.RequestContext,
+  MCPServer.Errors;
 
 const
   CACHE_SCOPE_PUBLIC = 'public';
@@ -99,7 +100,7 @@ begin
   else if Method = 'server/discover' then
     Result := Discover(Context)
   else
-    raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+    raise EMCPError.MethodNotFound(Method);
 end;
 
 function TMCPCoreManager.BuildServerInfo: TJSONObject;
@@ -168,7 +169,7 @@ begin
       if RequestedValue is TJSONString then
         Requested := TJSONString(RequestedValue).Value;
     end;
-    Negotiated := NegotiateLegacyProtocolVersion(Requested);
+    Negotiated := TMCPProtocolVersion.NegotiateLegacy(Requested);
   end;
 
   if Assigned(Params) then

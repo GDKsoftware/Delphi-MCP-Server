@@ -161,7 +161,7 @@ begin
   var Schema := BuildSchema;
   try
     var Errors: TArray<string>;
-    if not TMCPSchemaValidator.Validate(Schema, Arguments, Errors) then
+    if not TMCPSchemaValidator.TryValidate(Schema, Arguments, Errors) then
       raise EArgumentException.Create(string.Join('; ', Errors));
   finally
     Schema.Free;

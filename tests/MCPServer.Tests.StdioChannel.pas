@@ -13,7 +13,7 @@ type
   [TestFixture]
   TStdioChannelTests = class
   private
-    function ReadAll(const Bytes: TBytes; MaxLineBytes: Integer; out Statuses: TArray<TMCPLineStatus>): TArray<string>;
+    function ReadAll(const Bytes: TBytes; const MaxLineBytes: Integer): TArray<TMCPLine>;
   public
     [Test] procedure Reader_SplitsOnLf_DropsCr_LastLineWithoutNewline;
     [Test] procedure Reader_SkipsByteOrderMark;
@@ -37,21 +37,17 @@ uses
 
 { TStdioChannelTests }
 
-function TStdioChannelTests.ReadAll(const Bytes: TBytes; MaxLineBytes: Integer;
-  out Statuses: TArray<TMCPLineStatus>): TArray<string>;
+function TStdioChannelTests.ReadAll(const Bytes: TBytes; const MaxLineBytes: Integer): TArray<TMCPLine>;
 var
-  Line: string;
-  Status: TMCPLineStatus;
+  Line: TMCPLine;
 begin
   Result := nil;
-  Statuses := nil;
-  var Stream := TBytesStream.Create(Bytes);
-  var Reader := TMCPLineReader.Create(Stream, MaxLineBytes);
+  const Stream = TBytesStream.Create(Bytes);
+  const Reader = TMCPLineReader.Create(Stream, MaxLineBytes);
   try
-    while Reader.ReadLine(Line, Status) do
+    while Reader.TryReadLine(Line) do
     begin
       Result := Result + [Line];
-      Statuses := Statuses + [Status];
     end;
   finally
     Reader.Free;
@@ -60,108 +56,92 @@ begin
 end;
 
 procedure TStdioChannelTests.Reader_SplitsOnLf_DropsCr_LastLineWithoutNewline;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
-  var Lines := ReadAll(TEncoding.UTF8.GetBytes('one'#13#10'two'#10#10'three'), 1024, Statuses);
+  var Lines := ReadAll(TEncoding.UTF8.GetBytes('one'#13#10'two'#10#10'three'), 1024);
   Assert.AreEqual(4, Integer(Length(Lines)));
-  Assert.AreEqual('one', Lines[0]);
-  Assert.AreEqual('two', Lines[1]);
-  Assert.AreEqual('', Lines[2]);
-  Assert.AreEqual('three', Lines[3]);
-  for var Status in Statuses do
-    Assert.IsTrue(Status = TMCPLineStatus.Ok);
+  Assert.AreEqual('one', Lines[0].Text);
+  Assert.AreEqual('two', Lines[1].Text);
+  Assert.AreEqual('', Lines[2].Text);
+  Assert.AreEqual('three', Lines[3].Text);
+  for var Line in Lines do
+  begin
+    Assert.IsTrue(Line.Status = TMCPLineStatus.Ok);
+  end;
 end;
 
 procedure TStdioChannelTests.Reader_SkipsByteOrderMark;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
   var Bytes := TBytes.Create($EF, $BB, $BF) + TEncoding.UTF8.GetBytes('{"a":1}'#10);
-  var Lines := ReadAll(Bytes, 1024, Statuses);
+  var Lines := ReadAll(Bytes, 1024);
   Assert.AreEqual(1, Integer(Length(Lines)));
-  Assert.AreEqual('{"a":1}', Lines[0]);
+  Assert.AreEqual('{"a":1}', Lines[0].Text);
 end;
 
 procedure TStdioChannelTests.Reader_DecodesUtf8;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
   var Probe := 'h' + Char($00E9) + 'llo w' + Char($00F6) + 'rld ' + Char($D83D) + Char($DE00);
-  var Lines := ReadAll(TEncoding.UTF8.GetBytes(Probe + #10), 1024, Statuses);
-  Assert.AreEqual(Probe, Lines[0]);
+  var Lines := ReadAll(TEncoding.UTF8.GetBytes(Probe + #10), 1024);
+  Assert.AreEqual(Probe, Lines[0].Text);
 end;
 
 procedure TStdioChannelTests.Reader_ReportsOverlongLine_AndContinues;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
   var Long := StringOfChar('x', 100);
-  var Lines := ReadAll(TEncoding.UTF8.GetBytes(Long + #10'short'#10), 50, Statuses);
+  var Lines := ReadAll(TEncoding.UTF8.GetBytes(Long + #10'short'#10), 50);
   Assert.AreEqual(2, Integer(Length(Lines)));
-  Assert.IsTrue(Statuses[0] = TMCPLineStatus.TooLong);
-  Assert.AreEqual('', Lines[0]);
-  Assert.IsTrue(Statuses[1] = TMCPLineStatus.Ok);
-  Assert.AreEqual('short', Lines[1]);
+  Assert.IsTrue(Lines[0].Status = TMCPLineStatus.TooLong);
+  Assert.AreEqual('', Lines[0].Text);
+  Assert.IsTrue(Lines[1].Status = TMCPLineStatus.Ok);
+  Assert.AreEqual('short', Lines[1].Text);
 end;
 
 procedure TStdioChannelTests.Reader_OverlongLineWithoutNewline_EndsStream;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
-  var Lines := ReadAll(TEncoding.UTF8.GetBytes(StringOfChar('x', 100)), 50, Statuses);
+  var Lines := ReadAll(TEncoding.UTF8.GetBytes(StringOfChar('x', 100)), 50);
   Assert.AreEqual(1, Integer(Length(Lines)));
-  Assert.IsTrue(Statuses[0] = TMCPLineStatus.TooLong);
-  Assert.AreEqual('', Lines[0]);
+  Assert.IsTrue(Lines[0].Status = TMCPLineStatus.TooLong);
+  Assert.AreEqual('', Lines[0].Text);
 end;
 
 procedure TStdioChannelTests.Reader_OverlongLineBeyondChunk_IsSkippedUpToNewline;
 const
   BEYOND_ONE_CHUNK = 70 * 1024;
   LIMIT = 1024;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
   var Long := StringOfChar('y', BEYOND_ONE_CHUNK);
-  var Lines := ReadAll(TEncoding.UTF8.GetBytes(Long + #10'after'#10'last'), LIMIT, Statuses);
+  var Lines := ReadAll(TEncoding.UTF8.GetBytes(Long + #10'after'#10'last'), LIMIT);
   Assert.AreEqual(3, Integer(Length(Lines)));
-  Assert.IsTrue(Statuses[0] = TMCPLineStatus.TooLong);
-  Assert.IsTrue(Statuses[1] = TMCPLineStatus.Ok);
-  Assert.AreEqual('after', Lines[1]);
-  Assert.IsTrue(Statuses[2] = TMCPLineStatus.Ok);
-  Assert.AreEqual('last', Lines[2]);
+  Assert.IsTrue(Lines[0].Status = TMCPLineStatus.TooLong);
+  Assert.IsTrue(Lines[1].Status = TMCPLineStatus.Ok);
+  Assert.AreEqual('after', Lines[1].Text);
+  Assert.IsTrue(Lines[2].Status = TMCPLineStatus.Ok);
+  Assert.AreEqual('last', Lines[2].Text);
 end;
 
 procedure TStdioChannelTests.Reader_ReportsInvalidUtf8_AndContinues;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
   var Bytes := TBytes.Create($FF, $FE, $41) + TEncoding.UTF8.GetBytes(#10'ok'#10);
-  var Lines := ReadAll(Bytes, 1024, Statuses);
+  var Lines := ReadAll(Bytes, 1024);
   Assert.AreEqual(2, Integer(Length(Lines)));
-  Assert.IsTrue(Statuses[0] = TMCPLineStatus.InvalidUtf8, 'first line is not UTF-8');
-  Assert.AreEqual('ok', Lines[1]);
+  Assert.IsTrue(Lines[0].Status = TMCPLineStatus.InvalidUtf8, 'first line is not UTF-8');
+  Assert.AreEqual('ok', Lines[1].Text);
 end;
 
 procedure TStdioChannelTests.Reader_ReportsReplacedUtf8_AsInvalid;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
   var Truncated := TBytes.Create($41, $C3) + TEncoding.UTF8.GetBytes(#10);
   var Overlong := TBytes.Create($C0, $AF) + TEncoding.UTF8.GetBytes(#10'ok'#10);
-  var Lines := ReadAll(Truncated + Overlong, 1024, Statuses);
+  var Lines := ReadAll(Truncated + Overlong, 1024);
   Assert.AreEqual(3, Integer(Length(Lines)));
-  Assert.IsTrue(Statuses[0] = TMCPLineStatus.InvalidUtf8, 'a truncated sequence is not UTF-8');
-  Assert.IsTrue(Statuses[1] = TMCPLineStatus.InvalidUtf8, 'an overlong sequence is not UTF-8');
-  Assert.IsTrue(Statuses[2] = TMCPLineStatus.Ok);
-  Assert.AreEqual('ok', Lines[2]);
+  Assert.IsTrue(Lines[0].Status = TMCPLineStatus.InvalidUtf8, 'a truncated sequence is not UTF-8');
+  Assert.IsTrue(Lines[1].Status = TMCPLineStatus.InvalidUtf8, 'an overlong sequence is not UTF-8');
+  Assert.IsTrue(Lines[2].Status = TMCPLineStatus.Ok);
+  Assert.AreEqual('ok', Lines[2].Text);
 end;
 
 procedure TStdioChannelTests.Reader_EmptyStream_HasNoLines;
-var
-  Statuses: TArray<TMCPLineStatus>;
 begin
-  var Lines := ReadAll(nil, 1024, Statuses);
+  var Lines := ReadAll(nil, 1024);
   Assert.AreEqual(0, Integer(Length(Lines)));
 end;
 

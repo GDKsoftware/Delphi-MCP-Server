@@ -15,9 +15,15 @@ type
     InvalidUtf8
   );
 
+  TMCPLine = record
+    Status: TMCPLineStatus;
+    Text: string;
+  end;
+
   TMCPLineReader = class
   strict private
     const READ_CHUNK_BYTES = 64 * 1024;
+    const CARRIAGE_RETURN = 13;
   strict private
     FStream: TStream;
     FMaxLineBytes: Integer;
@@ -26,11 +32,11 @@ type
     FAtStart: Boolean;
     FEndOfStream: Boolean;
     function Fill: Boolean;
-    function DecodeLine(Start, Count: Integer; out Line: string): TMCPLineStatus;
+    function DecodeLine(const Start, Count: Integer): TMCPLine;
     function RoundTrips(const Line: string; const Start, Count: Integer): Boolean;
   public
     constructor Create(Stream: TStream; MaxLineBytes: Integer);
-    function ReadLine(out Line: string; out Status: TMCPLineStatus): Boolean;
+    function TryReadLine(out Line: TMCPLine): Boolean;
   end;
 
   TMCPLineWriter = class(TInterfacedObject, IMCPMessageSink)
@@ -123,37 +129,40 @@ begin
   Result := CompareMem(@Encoded[0], @FPending[Start], Count);
 end;
 
-function TMCPLineReader.DecodeLine(Start, Count: Integer; out Line: string): TMCPLineStatus;
+function TMCPLineReader.DecodeLine(const Start, Count: Integer): TMCPLine;
 begin
-  if (Count > 0) and (FPending[Start + Count - 1] = 13) then
-    Dec(Count);
+  Result := Default(TMCPLine);
+  var Length := Count;
+  const EndsWithCarriageReturn = ((Length > 0) and (FPending[Start + Length - 1] = CARRIAGE_RETURN));
+  if EndsWithCarriageReturn then
+    Dec(Length);
 
-  if Count > FMaxLineBytes then
+  const IsTooLong = (Length > FMaxLineBytes);
+  if IsTooLong then
   begin
-    Line := '';
-    Exit(TMCPLineStatus.TooLong);
+    Result.Status := TMCPLineStatus.TooLong;
+    Exit;
   end;
 
   try
-    Line := TEncoding.UTF8.GetString(FPending, Start, Count);
+    Result.Text := TEncoding.UTF8.GetString(FPending, Start, Length);
   except
-    Line := '';
-    Exit(TMCPLineStatus.InvalidUtf8);
+    Result.Text := '';
+    Result.Status := TMCPLineStatus.InvalidUtf8;
+    Exit;
   end;
 
-  const IsValidUtf8 = RoundTrips(Line, Start, Count);
+  const IsValidUtf8 = RoundTrips(Result.Text, Start, Length);
   if not IsValidUtf8 then
   begin
-    Line := '';
-    Exit(TMCPLineStatus.InvalidUtf8);
+    Result.Text := '';
+    Result.Status := TMCPLineStatus.InvalidUtf8;
   end;
-  Result := TMCPLineStatus.Ok;
 end;
 
-function TMCPLineReader.ReadLine(out Line: string; out Status: TMCPLineStatus): Boolean;
+function TMCPLineReader.TryReadLine(out Line: TMCPLine): Boolean;
 begin
-  Line := '';
-  Status := TMCPLineStatus.Ok;
+  Line := Default(TMCPLine);
   var ScanFrom := 0;
 
   while True do
@@ -161,7 +170,7 @@ begin
     for var I := ScanFrom to FPendingLength - 1 do
       if FPending[I] = 10 then
       begin
-        Status := DecodeLine(0, I, Line);
+        Line := DecodeLine(0, I);
         var Remaining := FPendingLength - (I + 1);
         if Remaining > 0 then
           Move(FPending[I + 1], FPending[0], Remaining);
@@ -181,8 +190,7 @@ begin
         if Count <= 0 then
         begin
           FEndOfStream := True;
-          Line := '';
-          Status := TMCPLineStatus.TooLong;
+          Line.Status := TMCPLineStatus.TooLong;
           Exit(True);
         end;
         for var I := 0 to Count - 1 do
@@ -192,8 +200,7 @@ begin
             if Rest > 0 then
               Move(Skipped[I + 1], FPending[0], Rest);
             FPendingLength := Rest;
-            Line := '';
-            Status := TMCPLineStatus.TooLong;
+            Line.Status := TMCPLineStatus.TooLong;
             Exit(True);
           end;
       end;
@@ -203,7 +210,7 @@ begin
     begin
       if FPendingLength = 0 then
         Exit(False);
-      Status := DecodeLine(0, FPendingLength, Line);
+      Line := DecodeLine(0, FPendingLength);
       FPendingLength := 0;
       Exit(True);
     end;

@@ -32,6 +32,9 @@ type
     procedure CheckCursor(const Params: TJSONObject);
     procedure ValidateToolName(const Name: string);
     procedure CheckRequiredScopes(const Tool: IMCPTool);
+    {$IFDEF DEBUG}
+    procedure WarnIfStructuredContentMismatchesSchema(const Tool: IMCPTool; const Result: TJSONObject);
+    {$ENDIF}
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
   private
     procedure RegisterTool(const Tool: IMCPTool);
@@ -77,7 +80,7 @@ const
   TOOL_NAME_PATTERN = '^[A-Za-z0-9_.\-]{1,128}$';
 
 {$IFDEF DEBUG}
-procedure WarnIfStructuredContentMismatchesSchema(const Tool: IMCPTool; const Result: TJSONObject);
+procedure TMCPToolsManager.WarnIfStructuredContentMismatchesSchema(const Tool: IMCPTool; const Result: TJSONObject);
 begin
   var OutputSchema := Tool.OutputSchema;
   try
@@ -86,7 +89,7 @@ begin
       Exit;
 
     var Errors: TArray<string>;
-    if not TMCPSchemaValidator.Validate(OutputSchema, StructuredContent, Errors) then
+    if not TMCPSchemaValidator.TryValidate(OutputSchema, StructuredContent, Errors) then
       TLogger.Warning(Format('Tool "%s" structuredContent does not match its outputSchema: %s',
         [Tool.Name, string.Join('; ', Errors)]));
   finally
@@ -155,7 +158,7 @@ begin
   else if Method = 'tools/call' then
     Result := CallTool(Params, EraOf(Context))
   else
-    raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+    raise EMCPError.MethodNotFound(Method);
 end;
 
 procedure TMCPToolsManager.CheckRequiredScopes(const Tool: IMCPTool);

@@ -20,6 +20,14 @@ type
     class function Accepts(const AcceptHeader, MediaType: string): Boolean; static;
   end;
 
+  TMCPOriginParts = record
+    Scheme: string;
+    Host: string;
+    Port: string;
+    class function Parse(const Origin: string): TMCPOriginParts; static;
+    function DefaultPort: string;
+  end;
+
   TMCPOriginPolicy = record
     const ALLOW_ALL = '*';
 
@@ -124,7 +132,41 @@ end;
 
 { TMCPOriginPolicy }
 
-function DefaultPortOf(const Scheme: string): string;
+{ TMCPOriginParts }
+
+class function TMCPOriginParts.Parse(const Origin: string): TMCPOriginParts;
+begin
+  Result := Default(TMCPOriginParts);
+  var Rest := Origin.Trim;
+  var SchemeEnd := Rest.IndexOf('://');
+  if SchemeEnd < 0 then
+    Exit;
+  Result.Scheme := Rest.Substring(0, SchemeEnd).ToLower;
+  Rest := Rest.Substring(SchemeEnd + 3);
+
+  var PortStart: Integer;
+  if Rest.StartsWith('[') then
+  begin
+    var BracketEnd := Rest.IndexOf(']');
+    if BracketEnd < 0 then
+      Exit;
+    Result.Host := Rest.Substring(0, BracketEnd + 1).ToLower;
+    PortStart := Rest.IndexOf(':', BracketEnd);
+  end
+  else
+  begin
+    PortStart := Rest.IndexOf(':');
+    if PortStart >= 0 then
+      Result.Host := Rest.Substring(0, PortStart).ToLower
+    else
+      Result.Host := Rest.ToLower;
+  end;
+
+  if PortStart >= 0 then
+    Result.Port := Rest.Substring(PortStart + 1);
+end;
+
+function TMCPOriginParts.DefaultPort: string;
 begin
   if Scheme = 'https' then
     Result := '443'
@@ -134,70 +176,33 @@ begin
     Result := '';
 end;
 
-procedure SplitOrigin(const Origin: string; out Scheme, Host, Port: string);
-begin
-  Scheme := '';
-  Host := '';
-  Port := '';
-
-  var Rest := Origin.Trim;
-  var SchemeEnd := Rest.IndexOf('://');
-  if SchemeEnd < 0 then
-    Exit;
-  Scheme := Rest.Substring(0, SchemeEnd).ToLower;
-  Rest := Rest.Substring(SchemeEnd + 3);
-
-  var PortStart: Integer;
-  if Rest.StartsWith('[') then
-  begin
-    var BracketEnd := Rest.IndexOf(']');
-    if BracketEnd < 0 then
-      Exit;
-    Host := Rest.Substring(0, BracketEnd + 1).ToLower;
-    PortStart := Rest.IndexOf(':', BracketEnd);
-  end
-  else
-  begin
-    PortStart := Rest.IndexOf(':');
-    if PortStart >= 0 then
-      Host := Rest.Substring(0, PortStart).ToLower
-    else
-      Host := Rest.ToLower;
-  end;
-
-  if PortStart >= 0 then
-    Port := Rest.Substring(PortStart + 1);
-end;
-
 class function TMCPOriginPolicy.IsLoopback(const Origin: string): Boolean;
-var
-  Scheme, Host, Port: string;
 begin
-  SplitOrigin(Origin, Scheme, Host, Port);
-  Result := ((Scheme = 'http') or (Scheme = 'https'))
-    and ((Host = 'localhost') or (Host = '127.0.0.1') or (Host = '[::1]'));
+  const Parts = TMCPOriginParts.Parse(Origin);
+  const IsHttp = ((Parts.Scheme = 'http') or (Parts.Scheme = 'https'));
+  const IsLocal = ((Parts.Host = 'localhost') or (Parts.Host = '127.0.0.1') or (Parts.Host = '[::1]'));
+  Result := IsHttp and IsLocal;
 end;
 
 class function TMCPOriginPolicy.Matches(const Origin, Pattern: string): Boolean;
-var
-  OriginScheme, OriginHost, OriginPort: string;
-  PatternScheme, PatternHost, PatternPort: string;
 begin
   if Pattern.Trim = ALLOW_ALL then
     Exit(True);
 
-  SplitOrigin(Origin, OriginScheme, OriginHost, OriginPort);
-  SplitOrigin(Pattern, PatternScheme, PatternHost, PatternPort);
-  if (OriginScheme = '') or (PatternScheme = '') then
+  var Wanted := TMCPOriginParts.Parse(Origin);
+  var Allowed := TMCPOriginParts.Parse(Pattern);
+  const IsParsed = ((Wanted.Scheme <> '') and (Allowed.Scheme <> ''));
+  if not IsParsed then
     Exit(False);
 
-  if (OriginPort = '') then
-    OriginPort := DefaultPortOf(OriginScheme);
-  if (PatternPort = '') then
-    PatternPort := DefaultPortOf(PatternScheme);
+  if Wanted.Port = '' then
+    Wanted.Port := Wanted.DefaultPort;
+  if Allowed.Port = '' then
+    Allowed.Port := Allowed.DefaultPort;
 
-  Result := (OriginScheme = PatternScheme) and (OriginHost = PatternHost)
-    and ((PatternPort = '*') or (OriginPort = PatternPort));
+  const SameHost = ((Wanted.Scheme = Allowed.Scheme) and (Wanted.Host = Allowed.Host));
+  const SamePort = ((Allowed.Port = '*') or (Wanted.Port = Allowed.Port));
+  Result := SameHost and SamePort;
 end;
 
 class function TMCPOriginPolicy.IsAllowed(const Origin: string; const AllowList: TArray<string>): Boolean;
@@ -219,17 +224,16 @@ end;
 { TMCPHostPolicy }
 
 class function TMCPHostPolicy.Matches(const HostHeader, Pattern: string): Boolean;
-var
-  Scheme, HostName, HostPort, PatternName, PatternPort: string;
 begin
   if Pattern.Trim = TMCPOriginPolicy.ALLOW_ALL then
     Exit(True);
 
-  SplitOrigin('http://' + HostHeader.Trim, Scheme, HostName, HostPort);
-  SplitOrigin('http://' + Pattern.Trim, Scheme, PatternName, PatternPort);
-  if (HostName = '') or (PatternName = '') or (HostName <> PatternName) then
+  const Wanted = TMCPOriginParts.Parse(Format('http://%s', [HostHeader.Trim]));
+  const Allowed = TMCPOriginParts.Parse(Format('http://%s', [Pattern.Trim]));
+  const SameHost = ((Wanted.Host <> '') and (Allowed.Host <> '') and (Wanted.Host = Allowed.Host));
+  if not SameHost then
     Exit(False);
-  Result := (PatternPort = '') or (PatternPort = '*') or (PatternPort = HostPort);
+  Result := (Allowed.Port = '') or (Allowed.Port = '*') or (Allowed.Port = Wanted.Port);
 end;
 
 class function TMCPHostPolicy.IsAllowed(const HostHeader: string; const AllowList: TArray<string>): Boolean;

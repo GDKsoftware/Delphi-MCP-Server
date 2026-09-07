@@ -482,25 +482,24 @@ end;
 
 procedure TMCPStdioTransport.ReadLoop(InputStream: TStream);
 var
-  Line: string;
-  Status: TMCPLineStatus;
+  Line: TMCPLine;
 begin
   var Reader := TMCPLineReader.Create(InputStream, Settings.MaxRequestBodyBytes);
   try
-    while Reader.ReadLine(Line, Status) do
+    while Reader.TryReadLine(Line) do
     begin
       try
-        case Status of
+        case Line.Status of
           TMCPLineStatus.TooLong:
             SendError(TMCPRequestId.FromJson(nil), JSONRPC_INVALID_REQUEST,
               Format('Message exceeds %d bytes', [Settings.MaxRequestBodyBytes]));
           TMCPLineStatus.InvalidUtf8:
             SendError(TMCPRequestId.FromJson(nil), JSONRPC_PARSE_ERROR, 'Message is not valid UTF-8');
         else
-          if Line.Trim = '' then
+          if Line.Text.Trim = '' then
             Continue;
-          TLogger.Debug('Received: ' + TLogger.RedactJson(Line));
-          DispatchLine(TJSONObject.ParseJSONValue(Line));
+          TLogger.Debug('Received: ' + TLogger.RedactJson(Line.Text));
+          DispatchLine(TJSONObject.ParseJSONValue(Line.Text));
         end;
       except
         on E: Exception do
