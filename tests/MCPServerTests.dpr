@@ -73,6 +73,7 @@ uses
   MCPServer.Tests.ToolResult in 'MCPServer.Tests.ToolResult.pas',
   MCPServer.Tests.Serializer in 'MCPServer.Tests.Serializer.pas',
   MCPServer.Tests.Schema in 'MCPServer.Tests.Schema.pas',
+  MCPServer.Tests.SchemaFromMethod in 'MCPServer.Tests.SchemaFromMethod.pas',
   MCPServer.Tests.ToolsManager in 'MCPServer.Tests.ToolsManager.pas',
   MCPServer.Tests.ResourcesManager in 'MCPServer.Tests.ResourcesManager.pas',
   MCPServer.Tests.StdioChannel in 'MCPServer.Tests.StdioChannel.pas',

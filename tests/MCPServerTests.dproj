@@ -137,6 +137,7 @@
         <DCCReference Include="MCPServer.Tests.ToolResult.pas"/>
         <DCCReference Include="MCPServer.Tests.Serializer.pas"/>
         <DCCReference Include="MCPServer.Tests.Schema.pas"/>
+        <DCCReference Include="MCPServer.Tests.SchemaFromMethod.pas"/>
         <DCCReference Include="MCPServer.Tests.ToolsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.ResourcesManager.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
