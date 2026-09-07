@@ -23,6 +23,13 @@ unit MCPClient;
 // and a call for a tool that does not exist all become a TMCPToolCallOutcome. A broken transport, a
 // failed handshake, a refused scope on another method and a response carrying a different request id
 // raise, because the caller cannot carry on.
+//
+// Three things happen while a call is in flight. Notifications the server streams beside the answer
+// reach IMCPClientSink, so a host can show progress and log lines as they arrive rather than after
+// the fact. A server that answers input_required is answered again, up to MaxInputRounds times,
+// with the responder's answers and its own requestState echoed back untouched. And a cancellation
+// check that turns True aborts the read, tells the server on a second connection and gives the
+// caller a cancelled outcome instead of half an answer.
 
 interface
 
@@ -74,8 +81,12 @@ type
     FHasTools: Boolean;
     FInputResponder: TMCPInputResponder;
     FSink: IMCPClientSink;
+    FAuth: IMCPClientAuth;
+    FInFlightId: Int64;
+    FCancellationSent: Boolean;
     FNamePrefix: string;
     FOnRequestBody: TProc<string>;
+    FOnResponseBody: TProc<string>;
 
     function TakeId: Int64;
     function BuildBody(const Method: string; const Params: TJSONObject; const Id: Int64): string;
@@ -102,14 +113,30 @@ type
 
     procedure LoadTools;
     function ReadTool(const Value: TJSONValue): TMCPRemoteTool;
+    function CallParams(const Name: string; const Arguments, Responses: TJSONObject;
+      const RequestState: string): TJSONObject;
+    function PostCall(const Name: string; const Params: TJSONObject): TMCPToolCallOutcome;
     function ReadOutcome(const Response: TJSONObject; const Http: TMCPHttpResponse): TMCPToolCallOutcome;
     function ErrorOutcome(const Error: TJSONObject; const Http: TMCPHttpResponse): TMCPToolCallOutcome;
     procedure ReadContent(const Content: TJSONArray; var Outcome: TMCPToolCallOutcome);
+
+    function AnswerInputRequests(const Name: string; const Arguments: TJSONObject;
+      const First: TMCPToolCallOutcome): TMCPToolCallOutcome;
+    function TryBuildInputResponses(const RequestsJson: string; out Responses: TJSONObject;
+      out Failure: string): Boolean;
+
+    procedure DispatchNotification(const Notification: TJSONObject);
+    procedure ReportProgress(const Params: TJSONObject);
+    procedure ReportLogMessage(const Params: TJSONObject);
+    procedure CancelInFlight;
 
     class function SummariseBlock(const Block: TJSONObject): string; static;
     class function ResourceByteCount(const Resource: TJSONObject): Integer; static;
     class function Base64ByteCount(const Data: string): Integer; static;
     class function TextOf(const Owner: TJSONObject; const Name: string): string; static;
+    class function TokenText(const Value: TJSONValue): string; static;
+    class function NumberOf(const Owner: TJSONObject; const Name: string;
+      const Missing: Double): Double; static;
     class function JsonOf(const Owner: TJSONObject; const Name: string): string; static;
     class function IntOf(const Owner: TJSONObject; const Name: string): Integer; static;
     class function BoolOf(const Owner: TJSONObject; const Name: string): Boolean; static;
@@ -141,8 +168,10 @@ type
     property CapabilitiesJson: string read FCapabilitiesJson;
     property DiscoverTtlMs: Integer read FDiscoverTtlMs;
     property CacheScope: string read FCacheScope;
-    { Every request body just before it goes on the wire, which is what a host traces. }
+    { Every request body just before it goes on the wire, and every response body as it comes
+      back, which is what a host traces. }
     property OnRequestBody: TProc<string> read FOnRequestBody write FOnRequestBody;
+    property OnResponseBody: TProc<string> read FOnResponseBody write FOnResponseBody;
   end;
 
 implementation
@@ -177,7 +206,19 @@ const
   CAPABILITY_SAMPLING = 'sampling';
   CAPABILITY_ROOTS = 'roots';
 
+  KEY_REQUEST_ID = 'requestId';
+  KEY_REASON = 'reason';
+  KEY_PROGRESS = 'progress';
+  KEY_TOTAL = 'total';
+  KEY_LEVEL = 'level';
+  KEY_LOGGER = 'logger';
+
   RESULT_TYPE_COMPLETE = 'complete';
+
+  { What the server is told when a call is abandoned, and what the caller is told in return. }
+  CANCELLATION_REASON = 'client cancelled';
+  { A progress notification without a total says nothing about how much work is left. }
+  PROGRESS_TOTAL_UNKNOWN = -1;
 
   BASE64_GROUP = 4;
   BASE64_GROUP_BYTES = 3;
@@ -190,6 +231,10 @@ const
   MESSAGE_SERVER_ERROR = 'The MCP server refused %s: %s';
   MESSAGE_ID_MISMATCH = 'The MCP server answered request %d with a response for a different request.';
   MESSAGE_REPEATED_CURSOR = 'The MCP server repeated the tools/list cursor "%s".';
+  MESSAGE_NO_RESPONDER = 'The server asked for client input and no input responder is configured.';
+  MESSAGE_TOO_MANY_ROUNDS = 'The server asked for input more than %d times.';
+  MESSAGE_NO_ANSWER = 'The input responder produced no answer for %s.';
+  MESSAGE_CANCELLED = 'The tool call was cancelled.';
 
 { TMCPClient }
 
@@ -200,7 +245,13 @@ begin
   FServerUrl := AServerUrl;
   FOptions := AOptions;
   FEra := AOptions.Era;
+  FAuth := AAuth;
   FTransport := TMCPHttpTransport.Create(AServerUrl, AOptions, AAuth);
+  FTransport.OnNotification :=
+    procedure(const Notification: TJSONObject)
+    begin
+      DispatchNotification(Notification);
+    end;
 end;
 
 destructor TMCPClient.Destroy;
@@ -241,9 +292,20 @@ begin
   const Id = TakeId;
   const Body = BuildBody(Method, RequestParams(Params, Id), Id);
 
-  Http := FTransport.Send(TMCPHttpRequest.Call(Method, Body, Id, MirroredName));
+  // The id is what a cancellation names, and it is only nameable while the request is in flight.
+  FInFlightId := Id;
+  FCancellationSent := False;
+  try
+    Http := FTransport.Send(TMCPHttpRequest.Call(Method, Body, Id, MirroredName));
+  finally
+    FInFlightId := 0;
+  end;
+
   if not Http.HasBody then
     Exit(nil);
+
+  if Assigned(FOnResponseBody) then
+    FOnResponseBody(Http.Body);
 
   const Value = TJSONObject.ParseJSONValue(Http.Body);
   if not (Value is TJSONObject) then
@@ -657,13 +719,33 @@ function TMCPClient.CallTool(const Name: string; const Arguments: TJSONObject): 
 begin
   Connect;
 
-  const Params = TJSONObject.Create;
-  Params.AddPair(MCP_KEY_NAME, Name);
-  if Assigned(Arguments) then
-    Params.AddPair(MCP_KEY_ARGUMENTS, TJSONObject(Arguments.Clone))
-  else
-    Params.AddPair(MCP_KEY_ARGUMENTS, TJSONObject.Create);
+  Result := PostCall(Name, CallParams(Name, Arguments, nil, ''));
 
+  const AsksForInput = (Result.ResultType = RESULT_TYPE_INPUT_REQUIRED);
+  if AsksForInput then
+    Result := AnswerInputRequests(Name, Arguments, Result);
+end;
+
+function TMCPClient.CallParams(const Name: string; const Arguments, Responses: TJSONObject;
+  const RequestState: string): TJSONObject;
+begin
+  // The name and the arguments are repeated unchanged in every round, because the server signs
+  // them into the requestState and checks that signature again on the way back.
+  Result := TJSONObject.Create;
+  Result.AddPair(MCP_KEY_NAME, Name);
+  if Assigned(Arguments) then
+    Result.AddPair(MCP_KEY_ARGUMENTS, TJSONObject(Arguments.Clone))
+  else
+    Result.AddPair(MCP_KEY_ARGUMENTS, TJSONObject.Create);
+
+  if Assigned(Responses) then
+    Result.AddPair(MCP_KEY_INPUT_RESPONSES, Responses);
+  if RequestState <> '' then
+    Result.AddPair(MCP_KEY_REQUEST_STATE, RequestState);
+end;
+
+function TMCPClient.PostCall(const Name: string; const Params: TJSONObject): TMCPToolCallOutcome;
+begin
   var Http: TMCPHttpResponse;
   const Response = Post(MCP_METHOD_TOOLS_CALL, Name, Params, Http);
   try
@@ -673,12 +755,88 @@ begin
   end;
 end;
 
+function TMCPClient.AnswerInputRequests(const Name: string; const Arguments: TJSONObject;
+  const First: TMCPToolCallOutcome): TMCPToolCallOutcome;
+begin
+  Result := First;
+
+  for var Round := 1 to FOptions.MaxInputRounds do
+  begin
+    // A server only asks a client that declared it can answer, so this is a host that set a
+    // responder, called, and cleared it again rather than a server overstepping.
+    if not Assigned(FInputResponder) then
+      Exit(TMCPToolCallOutcome.CreateError(MESSAGE_NO_RESPONDER));
+
+    var Responses: TJSONObject := nil;
+    var Failure := '';
+    if not TryBuildInputResponses(Result.InputRequestsJson, Responses, Failure) then
+      Exit(TMCPToolCallOutcome.CreateError(Failure));
+
+    Result := PostCall(Name, CallParams(Name, Arguments, Responses, Result.RequestState));
+
+    const IsAnswered = (Result.ResultType <> RESULT_TYPE_INPUT_REQUIRED);
+    if IsAnswered then
+      Exit;
+  end;
+
+  Result := TMCPToolCallOutcome.CreateError(Format(MESSAGE_TOO_MANY_ROUNDS, [FOptions.MaxInputRounds]));
+end;
+
+function TMCPClient.TryBuildInputResponses(const RequestsJson: string; out Responses: TJSONObject;
+  out Failure: string): Boolean;
+begin
+  Responses := TJSONObject.Create;
+  Failure := '';
+  Result := False;
+
+  const Requests = TJSONObject.ParseJSONValue(RequestsJson);
+  try
+    if Requests is TJSONObject then
+      for var Pair in TJSONObject(Requests) do
+      begin
+        const Key = Pair.JsonString.Value;
+
+        var Request: TJSONObject := nil;
+        if Pair.JsonValue is TJSONObject then
+          Request := TJSONObject(Pair.JsonValue);
+
+        // The responder owns nothing afterwards: the answer becomes part of the request body.
+        const Answer = FInputResponder(Key, TextOf(Request, MCP_KEY_METHOD),
+          ObjectOf(Request, MCP_KEY_PARAMS));
+        if not Assigned(Answer) then
+        begin
+          Failure := Format(MESSAGE_NO_ANSWER, [Key]);
+          Break;
+        end;
+
+        Responses.AddPair(Key, Answer);
+      end;
+
+    Result := (Failure = '');
+  finally
+    Requests.Free;
+    if not Result then
+      FreeAndNil(Responses);
+  end;
+end;
+
 function TMCPClient.ReadOutcome(const Response: TJSONObject; const Http: TMCPHttpResponse): TMCPToolCallOutcome;
 begin
   Result := Default(TMCPToolCallOutcome);
 
+  // A cancelled read leaves a truncated stream behind. The caller asked for this, so it hears the
+  // reason rather than a parse failure.
+  if Http.Cancelled then
+    Exit(TMCPToolCallOutcome.CreateError(MESSAGE_CANCELLED));
+
   if not Assigned(Response) then
-    Exit(TMCPToolCallOutcome.CreateError(Format(MESSAGE_NO_RESULT, [MCP_METHOD_TOOLS_CALL])));
+  begin
+    Result := TMCPToolCallOutcome.CreateError(Format(MESSAGE_NO_RESULT, [MCP_METHOD_TOOLS_CALL]));
+    // A 403 with no body still names the scope in its challenge, which is the one thing a human
+    // has to hear to grant it.
+    Result.RequiredScope := Http.RequiredScope;
+    Exit;
+  end;
 
   const Error = ObjectOf(Response, MCP_KEY_ERROR);
   if Assigned(Error) then
@@ -809,6 +967,28 @@ begin
     Result := TJSONString(Value).Value;
 end;
 
+class function TMCPClient.TokenText(const Value: TJSONValue): string;
+begin
+  if Value is TJSONString then
+    Result := TJSONString(Value).Value
+  else if Assigned(Value) then
+    Result := Value.ToJSON
+  else
+    Result := '';
+end;
+
+class function TMCPClient.NumberOf(const Owner: TJSONObject; const Name: string;
+  const Missing: Double): Double;
+begin
+  Result := Missing;
+  if not Assigned(Owner) then
+    Exit;
+
+  const Value = Owner.GetValue(Name);
+  if Value is TJSONNumber then
+    Result := TJSONNumber(Value).AsDouble;
+end;
+
 class function TMCPClient.JsonOf(const Owner: TJSONObject; const Name: string): string;
 begin
   Result := '';
@@ -868,7 +1048,80 @@ end;
 
 procedure TMCPClient.SetCancellationCheck(const Check: TFunc<Boolean>);
 begin
-  FTransport.CancellationCheck := Check;
+  if not Assigned(Check) then
+  begin
+    FTransport.CancellationCheck := nil;
+    Exit;
+  end;
+
+  // The transport asks this on every chunk it receives, which is the last moment at which the
+  // server can still be told that the answer it is writing is no longer wanted.
+  FTransport.CancellationCheck :=
+    function: Boolean
+    begin
+      Result := Check();
+      if Result then
+        CancelInFlight;
+    end;
+end;
+
+procedure TMCPClient.DispatchNotification(const Notification: TJSONObject);
+begin
+  if not Assigned(FSink) then
+    Exit;
+
+  const Params = ObjectOf(Notification, MCP_KEY_PARAMS);
+  if not Assigned(Params) then
+    Exit;
+
+  const Method = TextOf(Notification, MCP_KEY_METHOD);
+  if Method = MCP_METHOD_NOTIFICATIONS_PROGRESS then
+    ReportProgress(Params)
+  else if Method = MCP_METHOD_NOTIFICATIONS_MESSAGE then
+    ReportLogMessage(Params);
+end;
+
+procedure TMCPClient.ReportProgress(const Params: TJSONObject);
+begin
+  FSink.Progress(TokenText(Params.GetValue(MCP_META_PROGRESS_TOKEN)),
+    NumberOf(Params, KEY_PROGRESS, 0),
+    NumberOf(Params, KEY_TOTAL, PROGRESS_TOTAL_UNKNOWN),
+    TextOf(Params, KEY_MESSAGE));
+end;
+
+procedure TMCPClient.ReportLogMessage(const Params: TJSONObject);
+begin
+  FSink.LogMessage(TextOf(Params, KEY_LEVEL), TextOf(Params, KEY_LOGGER), JsonOf(Params, KEY_DATA));
+end;
+
+procedure TMCPClient.CancelInFlight;
+begin
+  const HasRequest = ((FInFlightId <> 0) and not FCancellationSent);
+  if not HasRequest then
+    Exit;
+
+  FCancellationSent := True;
+
+  const Params = TJSONObject.Create;
+  Params.AddPair(KEY_REQUEST_ID, TJSONNumber.Create(FInFlightId));
+  Params.AddPair(KEY_REASON, CANCELLATION_REASON);
+  const Body = BuildBody(MCP_METHOD_NOTIFICATIONS_CANCELLED, Params, 0);
+
+  // The connection carrying the call is about to be torn down, so the notification needs one of
+  // its own. Telling the server is a courtesy: the call is cancelled whether it arrives or not.
+  const Aside = TMCPHttpTransport.Create(FServerUrl, FOptions, FAuth);
+  try
+    Aside.Era := FEra;
+    Aside.ProtocolVersion := FProtocolVersion;
+    Aside.SessionId := FTransport.SessionId;
+    try
+      Aside.Send(TMCPHttpRequest.Notify(MCP_METHOD_NOTIFICATIONS_CANCELLED, Body));
+    except
+      on EMCPClientError do ;
+    end;
+  finally
+    Aside.Free;
+  end;
 end;
 
 end.
