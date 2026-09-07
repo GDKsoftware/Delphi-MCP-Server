@@ -44,6 +44,12 @@ REM Platform
 set PLATFORM=%2
 if "%PLATFORM%"=="" set PLATFORM=Win32
 
+REM TLS variant. Pass NO_TAURUS_TLS as the third argument, or set the
+REM NO_TAURUS_TLS environment variable to any value, to build against the Indy
+REM OpenSSL handler that ships with Delphi. TaurusTLS is then neither resolved
+REM nor put on any search path.
+if /I "%3"=="NO_TAURUS_TLS" set NO_TAURUS_TLS=1
+
 echo Building MCPServer - %CONFIG% %PLATFORM%
 echo.
 
@@ -51,6 +57,14 @@ REM Locate TaurusTLS. Set TAURUS_PATH yourself to override; otherwise the
 REM highest version installed in the CatalogRepository of this Studio release
 REM is used, so a GetIt update is picked up without editing this script.
 REM Note: OpenSSL 4.x needs TaurusTLS 1.0.5.42 or newer.
+set TLS_DEFINES=
+if not "!NO_TAURUS_TLS!"=="" (
+    set TAURUS_PATH=
+    set TLS_DEFINES=-DNO_TAURUS_TLS
+    echo TaurusTLS disabled, building against the Indy OpenSSL handler.
+    goto :TaurusResolved
+)
+
 for %%i in ("!DELPHI_PATH!") do set STUDIO_VER=%%~nxi
 set CATALOG_DIR=%USERPROFILE%\Documents\Embarcadero\Studio\!STUDIO_VER!\CatalogRepository
 
@@ -63,17 +77,21 @@ if "!TAURUS_PATH!"=="" if exist "!CATALOG_DIR!\TaurusTLS-12\Source" set "TAURUS_
 :TaurusResolved
 if not "!TAURUS_PATH!"=="" (
     echo Using TaurusTLS: !TAURUS_PATH!
-    set EXTRA_UNITS=;!TAURUS_PATH!
+    set "EXTRA_UNITS=;!TAURUS_PATH!"
+    set "EXTRA_INCLUDES=;!TAURUS_PATH!"
+    set "EXTRA_RES=-R!TAURUS_PATH!"
 ) else (
-    set EXTRA_UNITS=
-    echo Warning: TaurusTLS not found. SSL/TLS support may be limited.
+    set "EXTRA_UNITS="
+    set "EXTRA_INCLUDES="
+    set "EXTRA_RES="
+    if "!TLS_DEFINES!"=="" echo Warning: TaurusTLS not found. SSL/TLS support may be limited.
 )
 
 if "%PLATFORM%"=="Win32" (
-    !DCC32! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win32\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;src\Prompts!EXTRA_UNITS! -Isrc;!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
+    !DCC32! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win32\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;src\Prompts!EXTRA_UNITS! -Isrc!EXTRA_INCLUDES! !EXTRA_RES! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% !TLS_DEFINES! src\MCPServer.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Win64" (
-    !DCC64! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win64\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;src\Prompts!EXTRA_UNITS! -Isrc;!TAURUS_PATH! -R!TAURUS_PATH! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% src\MCPServer.dpr
+    !DCC64! -B -H -W -NSWinapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;System;Xml;Data;Datasnap;Web;Soap -U"!DELPHI_PATH!\lib\Win64\debug";src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Libraries;src\Resources;src\Prompts!EXTRA_UNITS! -Isrc!EXTRA_INCLUDES! !EXTRA_RES! -E.\%PLATFORM%\%CONFIG% -N0.\%PLATFORM%\%CONFIG% -LE.\%PLATFORM%\%CONFIG% -LN.\%PLATFORM%\%CONFIG% -D%CONFIG% !TLS_DEFINES! src\MCPServer.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Linux64" (
     REM Use MSBuild for Linux64
@@ -87,7 +105,8 @@ if "%PLATFORM%"=="Win32" (
     set STORED_PLATFORM=%PLATFORM%
     set STORED_CONFIG=%CONFIG%
     call !MSBUILD!
-    msbuild src\MCPServer.dproj /t:Build /p:Config=!STORED_CONFIG! /p:Platform=Linux64
+    if "!TLS_DEFINES!"=="" msbuild src\MCPServer.dproj /t:Build /p:Config=!STORED_CONFIG! /p:Platform=Linux64
+    if not "!TLS_DEFINES!"=="" msbuild src\MCPServer.dproj /t:Build /p:Config=!STORED_CONFIG! /p:Platform=Linux64 /p:DCC_Define=NO_TAURUS_TLS
     REM Restore values for final output message
     set PLATFORM=!STORED_PLATFORM!
     set CONFIG=!STORED_CONFIG!
@@ -95,14 +114,16 @@ if "%PLATFORM%"=="Win32" (
 ) else (
     echo ERROR: Invalid platform. Use Win32, Win64, or Linux64
     echo.
-    echo Usage: build.bat [Config] [Platform]
+    echo Usage: build.bat [Config] [Platform] [NO_TAURUS_TLS]
     echo   Config: Debug or Release (default: Debug)
     echo   Platform: Win32, Win64, or Linux64 (default: Win32)
+    echo   NO_TAURUS_TLS: build without TaurusTLS, on the Indy OpenSSL handler
     echo.
     echo Examples:
-    echo   build.bat                    - Build Debug Win32
-    echo   build.bat Release Win64      - Build Release Win64
-    echo   build.bat Debug Linux64      - Build Debug Linux64
+    echo   build.bat                            - Build Debug Win32
+    echo   build.bat Release Win64              - Build Release Win64
+    echo   build.bat Debug Linux64              - Build Debug Linux64
+    echo   build.bat Debug Win64 NO_TAURUS_TLS  - Build Debug Win64 without TaurusTLS
     exit /b 1
 )
 
