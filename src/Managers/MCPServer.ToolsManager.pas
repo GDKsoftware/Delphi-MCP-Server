@@ -40,7 +40,8 @@ type
     procedure RegisterTool(const Tool: IMCPTool);
     procedure RegisterBuiltInTools;
   public
-    constructor Create;
+    constructor Create; overload;
+    constructor Create(const SeedFromRegistry: Boolean); overload;
     destructor Destroy; override;
 
     procedure AddTool(const Tool: IMCPTool);
@@ -106,13 +107,19 @@ end;
 
 constructor TMCPToolsManager.Create;
 begin
-  inherited;
+  Create(True);
+end;
+
+constructor TMCPToolsManager.Create(const SeedFromRegistry: Boolean);
+begin
+  inherited Create;
   FLock := TCriticalSection.Create;
   FTools := TDictionary<string, IMCPTool>.Create;
   FOrder := TList<string>.Create;
   FListTtlMs := 0;
   FListCacheScope := MCP_CACHE_SCOPE_PRIVATE;
-  RegisterBuiltInTools;
+  if SeedFromRegistry then
+    RegisterBuiltInTools;
 end;
 
 destructor TMCPToolsManager.Destroy;
