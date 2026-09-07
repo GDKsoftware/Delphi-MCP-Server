@@ -251,9 +251,11 @@ begin
 end;
 
 function TSampleTarget.MakeLines: TArray<TCountedLine>;
+const
+  LineCount = 2;
 begin
-  SetLength(Result, 2);
-  for var Index: Integer := 0 to High(Result) do
+  SetLength(Result, LineCount);
+  for var Index: Integer := 0 to LineCount - 1 do
   begin
     Result[Index] := TCountedLine.Create;
     Result[Index].Sku := 'SKU-' + (Index + 1).ToString;
