@@ -6,11 +6,10 @@ CHANGELOG; an unintended change is a regression.
 
 ## Layout
 
-| Directory | Layer | Recorded by | Verified by |
-|---|---|---|---|
-| `legacy/` | JSON-RPC processor (`TMCPJsonRpcProcessor.ProcessRequest`) with the same registry as `MCPServer.dpr`, initialize-based protocol revisions | `scripts\run-tests.ps1 -Record` | `scripts\run-tests.ps1` (DUnitX fixture `TLegacyGoldenTests`) |
-| `modern/` | The same layer for requests that carry per-request `_meta` (MCP 2026-07-28), including the rejected shapes | `scripts\run-tests.ps1 -Record` | `scripts\run-tests.ps1` (DUnitX fixture `TModernGoldenTests`) |
-| `http/` | Streamable HTTP transport (`TMCPIdHTTPServer`) of the built executable, captured with curl | `scripts\capture-http-goldens.ps1 -Record` | `scripts\capture-http-goldens.ps1` |
+| Directory | Layer | Verified by |
+|---|---|---|
+| `legacy/` | JSON-RPC processor (`TMCPJsonRpcProcessor.ProcessRequest`) with the same registry as `MCPServer.dpr`, initialize-based protocol revisions | DUnitX fixture `TLegacyGoldenTests` |
+| `modern/` | The same layer for requests that carry per-request `_meta` (MCP 2026-07-28), including the rejected shapes | DUnitX fixture `TModernGoldenTests` |
 
 ## Legacy case files
 
@@ -46,17 +45,13 @@ formatted `expected` value, so key order and array order matter.
 
 ## Recording procedure
 
-1. `build.bat Debug Win64` and `build-tests.bat Debug Win64` (the test
-   program is `tests\MCPServerTests.dpr`).
-2. `.\scripts\run-tests.ps1 -Record -NoBuild` rewrites the `expected` sections
-   in `legacy/`. Use `-Filter` with the fully qualified test names to
-   re-record single cases.
-3. `.\scripts\capture-http-goldens.ps1 -Record` starts `Win64\Debug\MCPServer.exe`
-   on port 3939 and writes `http/*.txt`.
-4. Review the diff: only the cases whose behaviour changed on purpose may
+1. `build-tests.bat Debug Win64` (the test program is `tests\MCPServerTests.dpr`).
+2. Run `tests\Win64\Debug\MCPServerTests.exe` once with the environment
+   variable `MCP_GOLDEN_RECORD=1`; this rewrites the `expected` sections.
+   Use `-run:` with fully qualified test names to re-record single cases.
+3. Review the diff: only the cases whose behaviour changed on purpose may
    differ.
-5. `.\scripts\run-tests.ps1` and `.\scripts\capture-http-goldens.ps1` must be
-   green before committing.
+4. The test program must be green without the variable before committing.
 
 ## Notes on the recorded behaviour
 
@@ -64,6 +59,3 @@ formatted `expected` value, so key order and array order matter.
   text, so their `text` field is compared by shape.
 - A request with `id: null` is treated as a notification and gets no
   response.
-- HTTP responses are normalised: `Date` and `Server` headers are dropped, GUIDs
-  become `<guid>`, SSE `id:` lines become `id: <n>`, line endings are LF and
-  trailing newlines are trimmed.

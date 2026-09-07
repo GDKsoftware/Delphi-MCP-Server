@@ -112,17 +112,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   drives the JSON-RPC processor; era-detection, processor, capability-builder
   and concurrency tests.
 - Golden files that pin the wire behaviour: JSON-RPC cases for the legacy and
-  the modern era in `tests\golden\legacy` and `tests\golden\modern`, and HTTP
-  transport cases (status line, headers, body) in `tests\golden\http`.
-- `build-tests.bat` and `scripts\run-tests.ps1` (build and run, `-Record`
-  to re-record goldens), `scripts\capture-http-goldens.ps1`.
-- `scripts\run-conformance.ps1` for the official conformance CLI with one
-  expected-failures baseline per requirement set
-  (`conformance-baseline-2026-07-28.yml`, `conformance-baseline-2025-11-25.yml`),
-  `scripts\run-inspector-smoke.ps1` with `ci-servers.json` (legacy, auto and
-  modern eras plus stdio) and `scripts\run-stdio-smoke.ps1`.
-- `package.json` pinning the Node tooling (`@modelcontextprotocol/conformance`
-  0.2.0-alpha.11, `@modelcontextprotocol/inspector` 2.5.0).
+  the modern era in `tests\golden\legacy` and `tests\golden\modern`, re-recorded
+  with `MCP_GOLDEN_RECORD=1`.
+- `build-tests.bat` compiles the test project.
 - Protocol constants in `MCPServer.Types`: revision names and sets
   (`MCP_PROTOCOL_VERSION_*`, `MCP_LATEST_PROTOCOL_VERSION`,
   `MCP_LEGACY_PROTOCOL_VERSIONS`, `MCP_MODERN_PROTOCOL_VERSIONS`), the MCP

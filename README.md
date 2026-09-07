@@ -973,18 +973,14 @@ We welcome contributions! Here's how to help:
 
 ### Automated tests
 
-The `tests` folder holds a DUnitX project that drives the JSON-RPC layer in-process and pins the wire behaviour with golden files (`tests\golden`, see the README there). The scripts under `scripts` wrap the build and the external tooling; the Node tools are pinned in `package.json`.
+The `tests` folder holds a DUnitX project that drives the JSON-RPC layer, the HTTP transport and the stdio transport in-process and pins the wire behaviour with golden files (`tests\golden`, see the README there).
 
-```powershell
-.\scripts\run-tests.ps1                     # build tests\MCPServerTests.dpr (Win64 Debug) and run it
-.\scripts\run-tests.ps1 -Platform Win32
-.\scripts\capture-http-goldens.ps1          # replay the HTTP golden cases with curl against Win64\Debug\MCPServer.exe
-.\scripts\run-stdio-smoke.ps1               # drive --stdio and check the framing of stdout/stderr
-.\scripts\run-conformance.ps1               # official conformance CLI, 2026-07-28 and 2025-11-25 requirement sets
-.\scripts\run-inspector-smoke.ps1           # Inspector CLI tools/list per protocol era (legacy, auto, modern) and over stdio
+```bat
+build-tests.bat Debug Win64
+tests\Win64\Debug\MCPServerTests.exe
 ```
 
-Known conformance failures are listed per requirement set in `conformance-baseline-<revision>.yml`; the conformance run fails on new failures and on entries that started to pass. The Inspector smoke run takes entries that are expected to fail as `-ExpectedFailures`. `build-tests.bat [Config] [Platform]` compiles the test project on its own.
+`build-tests.bat [Config] [Platform]` compiles `tests\MCPServerTests.dpr` for Win32 or Win64; the program takes the usual DUnitX switches (`-xml:<file>` for an NUnit report, `-run:<test>` for a selection). Set the environment variable `MCP_GOLDEN_RECORD=1` for one run to re-record the golden expectations, then review the diff.
 
 ## About GDK Software
 

@@ -92,7 +92,6 @@ backup/
 ~$*
 
 # Dependencies
-node_modules/
 package-lock.json
 
 # Test and conformance output
