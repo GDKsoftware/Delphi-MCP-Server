@@ -158,7 +158,12 @@ request accepts `text/event-stream` and a tool sends one, the response turns
 into an SSE stream (chunked, `X-Accel-Buffering: no`) that carries the
 notifications first and the JSON-RPC response as its last event. A request
 that sends none is answered as before. A client that closes the stream
-cancels the request.
+cancels the request: the server's next write to it fails and the tool sees
+`IsCancelled`. That is the HTTP cancellation. A `notifications/cancelled`
+naming the same request is answered `202` and dropped, because the tracker a
+request consults is its own response stream and a notification always arrives
+on a connection of its own; only over stdio, where every message shares one
+channel, does the notification stop a running request.
 
 ### Change notifications (`subscriptions/listen`)
 
@@ -240,20 +245,23 @@ Copy the `src` folder from MCPServer into your project and add the units to your
    - `lib\mcpserver\src\Resources`
    - `lib\mcpserver\src\Prompts`
 
-2. **Required Units**: Include these core units in your project:
+2. **Required Units**: `MCPServer.Host` is the only unit a host needs; it pulls
+   in the managers, the HTTP server and the stdio transport:
    ```pascal
-   MCPServer.Types,
-   MCPServer.Settings,
-   MCPServer.Registration,
-   MCPServer.ManagerRegistry,
-   MCPServer.IdHTTPServer,      // For HTTP transport
-   MCPServer.StdioTransport,    // For STDIO transport
-   MCPServer.JsonRpcProcessor   // Shared JSON-RPC processing
+   MCPServer.Host,              // TMCPServerHost, the library facade
+   MCPServer.Types,             // Interfaces, protocol constants, schema attributes
+   MCPServer.Registration       // TMCPRegistry, for self-registering tools
    ```
+   Composing the managers by hand instead needs `MCPServer.Settings`,
+   `MCPServer.ManagerRegistry`, `MCPServer.CoreManager`, the managers you want,
+   and `MCPServer.IdHTTPServer` or `MCPServer.StdioTransport`.
 
 ### Library Integration
 
-Once you have the project setup complete, the simplest way to add MCP capabilities to your application:
+`TMCPServerHost` (`MCPServer.Host`) is the whole composition behind one class:
+it builds the managers, owns the HTTP server and drives either transport.
+`StartHttp` returns as soon as the server listens, so the host fits into an
+application that has a message loop of its own:
 
 ```pascal
 program YourMCPServer;
@@ -262,36 +270,77 @@ program YourMCPServer;
 
 uses
   System.SysUtils,
-  MCPServer.Types in 'lib\mcpserver\src\Protocol\MCPServer.Types.pas',
-  MCPServer.IdHTTPServer in 'lib\mcpserver\src\Server\MCPServer.IdHTTPServer.pas',
-  MCPServer.Settings in 'lib\mcpserver\src\Core\MCPServer.Settings.pas',
-  MCPServer.ManagerRegistry in 'lib\mcpserver\src\Core\MCPServer.ManagerRegistry.pas',
-  MCPServer.CoreManager in 'lib\mcpserver\src\Managers\MCPServer.CoreManager.pas',
-  MCPServer.ToolsManager in 'lib\mcpserver\src\Managers\MCPServer.ToolsManager.pas',
-  MCPServer.ResourcesManager in 'lib\mcpserver\src\Managers\MCPServer.ResourcesManager.pas';
+  MCPServer.Host in 'lib\mcpserver\src\Server\MCPServer.Host.pas',
+  YourProject.Tool.Custom in 'YourProject.Tool.Custom.pas';
 
-var
-  Server: TMCPIdHTTPServer;
-  Settings: TMCPSettings;
-  ManagerRegistry: IMCPManagerRegistry;
-  
 begin
-  Settings := TMCPSettings.Create;
+  const Host = TMCPServerHost.Create;
+  try
+    Host.Settings.Port := 3000;
+    Host.AddTool(TCustomTool.Create);
+    Host.StartHttp;
+
+    Writeln('MCP Server running on port ', Host.BoundPort);
+    Readln;
+
+    Host.Stop;
+  finally
+    Host.Free;
+  end;
+end.
+```
+
+**What a host starts with.** Nothing. A fresh host publishes only the tools,
+resources, resource templates and prompts it was handed through `AddTool`,
+`AddResource` and `AddPrompt`, so two hosts in one process publish exactly what
+each of them was given. `SeedFromGlobalRegistry := True` takes everything from
+`TMCPRegistry` instead, which is what the standalone server does; set it before
+the first call that builds the managers, or it raises
+`EMCPConfigurationError`. `[Server] ExposeDiagnosticsResources` is honoured
+either way: with it off, `server://status`, `logs://recent` and `logs://{level}`
+never reach the lists.
+
+**Settings.** `Create` reads no file at all and starts from the built-in
+defaults, which `Host.Settings` then lets you change in code.
+`Create(SettingsFile)` reads the `.ini` you name and writes none.
+`Create(Settings)` takes a `TMCPSettings` you built yourself and keep owning.
+Only the standalone server reads `settings.ini` from the executable's own
+directory.
+
+**Ports.** `Settings.Port := 0` asks the operating system for a free port and
+`BoundPort` reports the one it gave. A loopback server takes that same port on
+both its IPv4 and its IPv6 binding, so `localhost` reaches it whichever family
+the client resolves first. `StartHttp` and `Stop` are both idempotent.
+
+**Transports.** `RunStdio` blocks and is a console entry point only: the stdio
+transport claims stdout and redirects the logger to stderr for the whole
+process, so a GUI application must never call it. `RunStdioWith(Input, Output)`
+runs the same dispatch over two streams, which is how a test drives one line in
+and reads one line out.
+
+Composing the managers by hand still works, and is what to do when you need a
+manager the host does not build:
+
+```pascal
+var
+  ManagerRegistry: IMCPManagerRegistry;
+begin
+  const Settings = TMCPSettings.Create;
   try
     ManagerRegistry := TMCPManagerRegistry.Create;
     ManagerRegistry.RegisterManager(TMCPCoreManager.Create(Settings));
-    ManagerRegistry.RegisterManager(TMCPToolsManager.Create);
-    ManagerRegistry.RegisterManager(TMCPResourcesManager.Create);
-    
-    Server := TMCPIdHTTPServer.Create(nil);
+    ManagerRegistry.RegisterManager(TMCPToolsManager.Create(False));
+    ManagerRegistry.RegisterManager(TMCPResourcesManager.Create(False));
+
+    const Server = TMCPIdHTTPServer.Create(nil);
     try
       Server.Settings := Settings;
       Server.ManagerRegistry := ManagerRegistry;
       Server.Start;
-      
-      Writeln('MCP Server running on port ', Settings.Port);
-      Readln; // Keep running
-      
+
+      Writeln('MCP Server running on port ', Server.BoundPort);
+      Readln;
+
       Server.Stop;
     finally
       Server.Free;
@@ -304,10 +353,10 @@ end.
 
 #### Library checklist
 
-- **Register before you start.** `TMCPToolsManager.Create` and `TMCPResourcesManager.Create` read `TMCPRegistry` once. Register your tools and resources (normally from unit `initialization` sections) before the managers are created, which means before `TMCPIdHTTPServer.Start` or `TMCPStdioTransport.Run`. Later registrations are not picked up.
+- **Register before you start, or hand them over afterwards.** The parameterless `TMCPToolsManager.Create`, `TMCPResourcesManager.Create` and `TMCPPromptsManager.Create` read `TMCPRegistry` once, so a registration made after the managers exist is not picked up: register your tools, resources and prompts (normally from unit `initialization` sections) first. `Create(False)`, and a `TMCPServerHost` left at its default `SeedFromGlobalRegistry`, read the registry not at all and publish only what you hand them, which you can do at any time.
 - **STDIO: keep stdout clean.** Everything on stdout must be an MCP message. `TMCPStdioTransport.Create` forces `TLogger.UseStdErr := True` and sets `TLogger.StdoutReserved`, so console logging goes to stderr and an attempt to switch it back is refused with a one-time warning. Never `Writeln` from tools, managers or resources; log through `TLogger`.
-- **`server://status` is registered by default** by the unit initialization of `MCPServer.Resource.Server`. `TServerStatusResource.SetNamePrefix('myapp_')` renames it to `server://myapp_status`; call it before the managers are created.
-- **Error codes and protocol constants** live in `MCPServer.Types` (`JSONRPC_*`, `MCP_ERROR_*`, `MCP_PROTOCOL_VERSION_*`, `MCP_META_*`). The `JSONRPC_*` names in `MCPServer.JsonRpcProcessor` remain as aliases.
+- **`server://status` is registered by default** by the unit initialization of `MCPServer.Resource.Server`, and reaches every manager that seeds from the registry. `TServerStatusResource.SetNamePrefix('myapp_')` renames it to `server://myapp_status`; call it before the managers are created. `[Server] ExposeDiagnosticsResources = false` keeps it, `logs://recent` and `logs://{level}` out of the lists altogether.
+- **Error codes and protocol constants** live in `MCPServer.Types` (`JSONRPC_*`, `MCP_ERROR_*`, `MCP_PROTOCOL_VERSION_*`, `MCP_META_*`, and the header names `MCP_HEADER_SESSION_ID`, `MCP_HEADER_PROTOCOL_VERSION`, `MCP_HEADER_METHOD` and `MCP_HEADER_NAME`). The `JSONRPC_*` names in `MCPServer.JsonRpcProcessor` remain as aliases. `TMCPHeaderValue.Encode` (`MCPServer.HttpHeaders`) writes a value into a header the way `TryDecode` reads one back: a header-safe value passes through, anything else is wrapped in the `=?base64?...?=` sentinel.
 - **Prompts and completion are optional managers**, registered the same way as tools and resources: `ManagerRegistry.RegisterManager(TMCPPromptsManager.Create)` and, if you want argument completion, `ManagerRegistry.RegisterManager(TMCPCompletionManager.Create(PromptsManager, ResourcesManager))` (it needs the concrete manager instances, not the `IMCPCapabilityManager` interface, to look prompts and resource templates up by name). The `prompts` and `completions` capabilities are only advertised when these managers are registered.
 
 ### Creating Custom Tools
@@ -407,6 +456,84 @@ JSON. Set `FAnnotations` or `FIcons` in the constructor to publish them in
 pair for a tool that only reads (pass `True` when it reaches outside the
 server). `MCPServer.Tool.ContentSamples`
 has one small example per content type.
+
+### A tool from a method
+
+`TMCPMethodTool` (`MCPServer.Tool.Method`) turns a method you already have into
+a tool. The input schema comes from the parameter list, the arguments are
+marshalled onto it, the method is invoked, and its result is converted back to
+JSON:
+
+```pascal
+type
+  TOrderService = class
+  public
+    function PlaceOrder([SchemaDescription('Customer code')] const Customer: string;
+                        [Optional] const Quantity: Integer): string;
+  end;
+
+var
+  Context: TRttiContext;
+begin
+  const Service = TOrderService.Create;
+  const Method = Context.GetType(TOrderService).GetMethod('PlaceOrder');
+
+  Host.AddTool(TMCPMethodTool.Create(TValue.From<TOrderService>(Service), Method,
+                                     'place_order', 'Places an order'));
+end;
+```
+
+A parameter is published under its lower-cased name, or under `[SchemaName]`
+when it carries one, and is required unless it carries `[Optional]`; every
+schema attribute that works on a class property works on a parameter. The
+method needs RTTI, which a public method of a class compiled with the default
+`{$RTTI}` settings has, and `MarkReadOnly` writes the `readOnlyHint` pair the
+same way it does for `TMCPToolBase`.
+
+The result of a procedure is `{"ok": true}` and the result of a function is
+`{"result": <value>}`, which is what `GetOutputSchema` describes. A descendant
+that overrides `ResultToJson` replaces that object wholesale, so its envelope is
+the whole structured result and is not nested under `result`; such a descendant
+overrides `GetOutputSchema` with it, or the two disagree.
+
+**Who frees what.** Every object the tool marshalled from the arguments, and
+every object the method returned, is freed after the call, along with the
+elements of a returned dynamic array of objects. That is the wrong rule for a
+method that keeps what it is handed, which is the ordinary `Add(Item)` shape in
+Delphi, and for a method that hands back something it still owns. Both are
+virtual, so a descendant says so:
+
+```pascal
+type
+  TAdoptingTool = class(TMCPMethodTool)
+  protected
+    procedure ReleaseArguments(const Owned: TList<TObject>); override;
+    procedure ReleaseResult(const Value: TValue; const ResultType: TRttiType); override;
+  end;
+
+procedure TAdoptingTool.ReleaseArguments(const Owned: TList<TObject>);
+begin
+end;
+
+procedure TAdoptingTool.ReleaseResult(const Value: TValue; const ResultType: TRttiType);
+begin
+end;
+```
+
+An untyped parameter, and a `var` or `out` parameter, have no place in a schema:
+a tool answers with its result, not through its arguments. Both are refused when
+the tool is created, with an `EArgumentException` naming the parameter.
+
+The three generator entry points are usable on their own:
+`TMCPSchemaGenerator.GenerateSchemaFromMethod` builds the input schema of a
+parameter list, `GenerateSchemaFromType` the schema of a single type, and
+`GenerateSchemaFromMethodResult` the `{"result": ...}` wrapper of a return type
+(`nil` for a procedure, and for a return type that has no JSON shape). `$schema`
+from `[SchemaDialect]` belongs to a root schema only and is never copied into a
+parameter or result member. The marshal underneath them is public too:
+`TMCPSerializer.JsonToValue` builds a `TValue` of a given `TRttiType` from a
+`TJSONValue` and appends every object it created to the list you pass, and
+`TMCPSerializer.ValueToJson` writes one back out.
 
 ### Asking the client for input (multi round-trip requests)
 

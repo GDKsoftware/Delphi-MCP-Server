@@ -10,6 +10,7 @@ type
     const SENTINEL_PREFIX = '=?base64?';
     const SENTINEL_SUFFIX = '?=';
 
+    class function Encode(const Value: string): string; static;
     class function IsHeaderSafe(const Value: string): Boolean; static;
     class function IsSentinel(const Value: string): Boolean; static;
     class function TryDecodeBase64(const Text: string; out Bytes: TBytes): Boolean; static;
@@ -57,6 +58,15 @@ const
 
 
 { TMCPHeaderValue }
+
+class function TMCPHeaderValue.Encode(const Value: string): string;
+begin
+  if IsHeaderSafe(Value) and not IsSentinel(Value) then
+    Exit(Value);
+
+  const Bytes = TEncoding.UTF8.GetBytes(Value);
+  Result := SENTINEL_PREFIX + TNetEncoding.Base64String.EncodeBytesToString(Bytes) + SENTINEL_SUFFIX;
+end;
 
 class function TMCPHeaderValue.IsHeaderSafe(const Value: string): Boolean;
 begin

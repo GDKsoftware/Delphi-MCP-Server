@@ -55,6 +55,8 @@ type
     procedure ConfigureSSL;
     procedure ConfigureBindings;
     procedure AddBinding(const IP: string; IPVersion: TIdIPVersion);
+    procedure AddDualStackBindings(const IPv4Address, IPv6Address: string);
+    function ClaimEphemeralPort(const IP: string): Word;
     procedure HandleQuerySSLPort(APort: Word; var VUseSSL: Boolean);
     procedure HandleParseAuthentication(Context: TIdContext; const AuthType, AuthData: string;
       var VUsername, VPassword: string; var VHandled: Boolean);
@@ -99,6 +101,7 @@ type
     procedure Start;
     procedure Stop;
     function BoundAddresses: TArray<string>;
+    function BoundPort: Word;
     property Port: Word read FPort write FPort;
     property Active: Boolean read FActive;
     property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry write FManagerRegistry;
@@ -135,8 +138,9 @@ const
 
   CORS_MAX_AGE = 86400;
   CORS_ALLOW_METHODS = 'POST, OPTIONS';
-  CORS_ALLOW_HEADERS = 'Accept, Content-Type, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID';
-  CORS_EXPOSE_HEADERS = 'Mcp-Session-Id, WWW-Authenticate';
+  CORS_ALLOW_HEADERS = 'Accept, Content-Type, Authorization, ' + MCP_HEADER_PROTOCOL_VERSION + ', ' +
+    MCP_HEADER_METHOD + ', ' + MCP_HEADER_NAME + ', ' + MCP_HEADER_SESSION_ID + ', Last-Event-ID';
+  CORS_EXPOSE_HEADERS = MCP_HEADER_SESSION_ID + ', WWW-Authenticate';
   ALLOW_HEADER = 'POST, OPTIONS';
 
   HEADER_ORIGIN = 'Origin';
@@ -145,10 +149,6 @@ const
   BEARER_PREFIX = 'Bearer ';
   METADATA_CACHE_CONTROL = 'max-age=3600';
   HEADER_ACCEPT = 'Accept';
-  HEADER_SESSION_ID = 'Mcp-Session-Id';
-  HEADER_PROTOCOL_VERSION = 'MCP-Protocol-Version';
-  HEADER_METHOD = 'Mcp-Method';
-  HEADER_NAME = 'Mcp-Name';
 
 
   LOOPBACK_IPV4 = '127.0.0.1';
@@ -269,12 +269,48 @@ begin
   end;
 end;
 
+function TMCPIdHTTPServer.BoundPort: Word;
+begin
+  if FHTTPServer.Bindings.Count > 0 then
+    Result := Word(FHTTPServer.Bindings[0].Port)
+  else
+    Result := FPort;
+end;
+
 procedure TMCPIdHTTPServer.AddBinding(const IP: string; IPVersion: TIdIPVersion);
 begin
   var Binding := FHTTPServer.Bindings.Add;
   Binding.IP := IP;
   Binding.Port := FPort;
   Binding.IPVersion := IPVersion;
+end;
+
+function TMCPIdHTTPServer.ClaimEphemeralPort(const IP: string): Word;
+begin
+  const Probe = TIdSocketHandle.Create(nil);
+  try
+    Probe.IPVersion := Id_IPv4;
+    Probe.IP := IP;
+    Probe.Port := 0;
+    Probe.AllocateSocket;
+    Probe.Bind;
+    Result := Word(Probe.Port);
+    Probe.CloseSocket;
+  finally
+    Probe.Free;
+  end;
+end;
+
+procedure TMCPIdHTTPServer.AddDualStackBindings(const IPv4Address, IPv6Address: string);
+begin
+  const BindsBothFamilies = GStack.SupportsIPv6;
+  const SystemPicksThePort = (FPort = 0);
+  if BindsBothFamilies and SystemPicksThePort then
+    FPort := ClaimEphemeralPort(IPv4Address);
+
+  AddBinding(IPv4Address, Id_IPv4);
+  if BindsBothFamilies then
+    AddBinding(IPv6Address, Id_IPv6);
 end;
 
 procedure TMCPIdHTTPServer.ConfigureBindings;
@@ -303,16 +339,12 @@ begin
 
   if SameText(Host, HOST_LOCALHOST) or (Host = LOOPBACK_IPV4) or (Host = LOOPBACK_IPV6) then
   begin
-    AddBinding(LOOPBACK_IPV4, Id_IPv4);
-    if GStack.SupportsIPv6 then
-      AddBinding(LOOPBACK_IPV6, Id_IPv6);
+    AddDualStackBindings(LOOPBACK_IPV4, LOOPBACK_IPV6);
   end
   else
   begin
     TLogger.Info('Host ' + Host + ' is not loopback; listening on every network interface (set BindAddress to narrow this)');
-    AddBinding(ANY_IPV4, Id_IPv4);
-    if GStack.SupportsIPv6 then
-      AddBinding(ANY_IPV6, Id_IPv6);
+    AddDualStackBindings(ANY_IPV4, ANY_IPV6);
   end;
 end;
 
@@ -651,19 +683,19 @@ end;
 function TMCPIdHTTPServer.BuildTransportHints(RequestInfo: TIdHTTPRequestInfo): TMCPTransportHints;
 begin
   Result := TMCPTransportHints.ForHttp(
-    HeaderPresent(RequestInfo, HEADER_PROTOCOL_VERSION), HeaderValue(RequestInfo, HEADER_PROTOCOL_VERSION));
-  Result.HasMethodHeader := HeaderPresent(RequestInfo, HEADER_METHOD);
-  Result.MethodHeader := HeaderValue(RequestInfo, HEADER_METHOD);
-  Result.HasNameHeader := HeaderPresent(RequestInfo, HEADER_NAME);
-  Result.NameHeader := HeaderValue(RequestInfo, HEADER_NAME);
+    HeaderPresent(RequestInfo, MCP_HEADER_PROTOCOL_VERSION), HeaderValue(RequestInfo, MCP_HEADER_PROTOCOL_VERSION));
+  Result.HasMethodHeader := HeaderPresent(RequestInfo, MCP_HEADER_METHOD);
+  Result.MethodHeader := HeaderValue(RequestInfo, MCP_HEADER_METHOD);
+  Result.HasNameHeader := HeaderPresent(RequestInfo, MCP_HEADER_NAME);
+  Result.NameHeader := HeaderValue(RequestInfo, MCP_HEADER_NAME);
   Result.RemoteAddress := RequestInfo.RemoteIP;
 end;
 
 procedure TMCPIdHTTPServer.EchoLegacySessionId(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
 begin
-  var SessionId := HeaderValue(RequestInfo, HEADER_SESSION_ID);
+  var SessionId := HeaderValue(RequestInfo, MCP_HEADER_SESSION_ID);
   if (SessionId <> '') and TMCPHeaderValue.IsHeaderSafe(SessionId) and not SessionId.Contains(' ') then
-    ResponseInfo.CustomHeaders.Values[HEADER_SESSION_ID] := SessionId;
+    ResponseInfo.CustomHeaders.Values[MCP_HEADER_SESSION_ID] := SessionId;
 end;
 
 procedure TMCPIdHTTPServer.HandlePostRequest(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo;

@@ -26,6 +26,7 @@ uses
   MCPServer.Registration in '..\src\Core\MCPServer.Registration.pas',
   MCPServer.ManagerRegistry in '..\src\Core\MCPServer.ManagerRegistry.pas',
   MCPServer.Tool.Base in '..\src\Tools\MCPServer.Tool.Base.pas',
+  MCPServer.Tool.Method in '..\src\Tools\MCPServer.Tool.Method.pas',
   MCPServer.Resource.Base in '..\src\Resources\MCPServer.Resource.Base.pas',
   MCPServer.Prompt.Base in '..\src\Prompts\MCPServer.Prompt.Base.pas',
   MCPServer.JsonRpcProcessor in '..\src\Protocol\MCPServer.JsonRpcProcessor.pas',
@@ -37,6 +38,7 @@ uses
   MCPServer.SubscriptionsManager in '..\src\Managers\MCPServer.SubscriptionsManager.pas',
   MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
   MCPServer.StdioChannel in '..\src\Server\MCPServer.StdioChannel.pas',
+  MCPServer.Host in '..\src\Server\MCPServer.Host.pas',
   // The built-in tools and resources register themselves in their
   // initialization sections. Keep the order identical to MCPServer.dpr so the
   // registry (and therefore tools/list and resources/list) matches the server.
@@ -60,6 +62,7 @@ uses
   MCPServer.Tests.Golden.Legacy in 'MCPServer.Tests.Golden.Legacy.pas',
   MCPServer.Tests.Constants in 'MCPServer.Tests.Constants.pas',
   MCPServer.Tests.ServerStatus in 'MCPServer.Tests.ServerStatus.pas',
+  MCPServer.Tests.Settings in 'MCPServer.Tests.Settings.pas',
   MCPServer.Tests.Registration in 'MCPServer.Tests.Registration.pas',
   MCPServer.Tests.Logger in 'MCPServer.Tests.Logger.pas',
   MCPServer.Tests.PathBoundary in 'MCPServer.Tests.PathBoundary.pas',
@@ -68,10 +71,14 @@ uses
   MCPServer.Tests.Capabilities in 'MCPServer.Tests.Capabilities.pas',
   MCPServer.Tests.Golden.Modern in 'MCPServer.Tests.Golden.Modern.pas',
   MCPServer.Tests.HttpHeaders in 'MCPServer.Tests.HttpHeaders.pas',
+  MCPServer.Tests.HeaderEncoding in 'MCPServer.Tests.HeaderEncoding.pas',
   MCPServer.Tests.Http in 'MCPServer.Tests.Http.pas',
   MCPServer.Tests.ToolResult in 'MCPServer.Tests.ToolResult.pas',
   MCPServer.Tests.Serializer in 'MCPServer.Tests.Serializer.pas',
+  MCPServer.Tests.Marshal in 'MCPServer.Tests.Marshal.pas',
   MCPServer.Tests.Schema in 'MCPServer.Tests.Schema.pas',
+  MCPServer.Tests.SchemaFromMethod in 'MCPServer.Tests.SchemaFromMethod.pas',
+  MCPServer.Tests.MethodTool in 'MCPServer.Tests.MethodTool.pas',
   MCPServer.Tests.ToolsManager in 'MCPServer.Tests.ToolsManager.pas',
   MCPServer.Tests.ResourcesManager in 'MCPServer.Tests.ResourcesManager.pas',
   MCPServer.Tests.StdioChannel in 'MCPServer.Tests.StdioChannel.pas',
@@ -83,7 +90,9 @@ uses
   MCPServer.Tests.Subscriptions in 'MCPServer.Tests.Subscriptions.pas',
   MCPServer.Tests.Authorization in 'MCPServer.Tests.Authorization.pas',
   MCPServer.Tests.PromptsManager in 'MCPServer.Tests.PromptsManager.pas',
-  MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas';
+  MCPServer.Tests.CompletionManager in 'MCPServer.Tests.CompletionManager.pas',
+  MCPServer.Tests.Host in 'MCPServer.Tests.Host.pas',
+  MCPServer.Tests.HttpCancellation in 'MCPServer.Tests.HttpCancellation.pas';
 
 procedure RunTests;
 begin

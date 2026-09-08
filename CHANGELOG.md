@@ -172,7 +172,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Streaming HTTP responses (`MCPServer.HttpStream`): when a request accepts
   `text/event-stream` and its handler sends a notification, the response is a
   chunked SSE stream (`X-Accel-Buffering: no`) with the notifications before
-  the final JSON-RPC response; a client that disconnects cancels the request.
+  the final JSON-RPC response; a client that disconnects cancels the request,
+  which is the only cancellation over HTTP: a `notifications/cancelled`
+  arrives on a connection of its own and is answered `202` and dropped.
   `notifications/progress` therefore reaches HTTP clients in both eras.
 - `IMCPRequestContext.Log` and `LogJson`: `notifications/message` on the
   request's own stream, only when the request carries
@@ -219,12 +221,59 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`MCPServer.Tool.InputRequiredSamples`) and the prompt
   `test_input_required_result_prompt`: the multi round-trip fixtures of the
   conformance suite.
+- `MCPServer.Host` (`TMCPServerHost`): the manager composition behind one
+  class, for an application that embeds the server. `StartHttp` returns as soon
+  as the server listens, `Stop` and `StartHttp` are idempotent, and `AddTool`,
+  `RemoveTool`, `HasTool`, `AddResource` and `AddPrompt` fill the managers
+  directly. A host publishes only what it was given; `SeedFromGlobalRegistry`,
+  set before the managers are built, takes `TMCPRegistry` instead, so two hosts
+  in one process publish exactly what each of them was handed.
+  `[Server] ExposeDiagnosticsResources` is honoured either way. `Create` reads
+  no settings file, `Create(SettingsFile)` reads the file it is named and
+  writes none, and `Create(Settings)` takes a `TMCPSettings` the caller keeps
+  owning; only the standalone server reads `settings.ini` from the executable's
+  directory. `RunStdio` is the blocking console entry point and
+  `RunStdioWith(Input, Output)` runs the same dispatch over two streams.
+  `TMCPServerApplication` is built on the host, so the composition exists once.
+- `TMCPToolsManager.Create(SeedFromRegistry)`, and the same overload on
+  `TMCPResourcesManager` and `TMCPPromptsManager`: a manager that starts empty
+  instead of reading `TMCPRegistry`. The parameterless constructor still seeds.
+- `TMCPIdHTTPServer.BoundPort`: the port the listener took, which is the one to
+  dial after `Port = 0`. A loopback or all-interfaces server on port 0 now
+  claims one ephemeral port and gives it to both the IPv4 and the IPv6 binding,
+  so the bound port is the same one whichever family a client resolves first.
+- `MCPServer.Tool.Method` (`TMCPMethodTool`): a tool whose shape comes from a
+  method. The input schema is generated from the parameter list, the arguments
+  are marshalled onto it, the method is invoked and its result is converted
+  back to JSON: `{"ok": true}` for a procedure, `{"result": ...}` for a
+  function. `MarshalArgument`, `ResultToJson`, `ReleaseResult` and
+  `ReleaseArguments` are virtual. By default the tool frees every object it
+  marshalled from the arguments and every object the method returned; a method
+  that keeps what it is handed, or hands back something it still owns,
+  overrides the matching release to do nothing.
+- `TMCPSchemaGenerator.GenerateSchemaFromMethod`, `GenerateSchemaFromType` and
+  `GenerateSchemaFromMethodResult`: the input schema of a parameter list, the
+  schema of a single type, and the `{"result": ...}` wrapper of a return type.
+  An untyped parameter, and a `var` or `out` parameter, are refused with an
+  `EArgumentException` naming the parameter, because a tool answers with its
+  result and not through its arguments. `$schema` from `[SchemaDialect]` stays
+  on the root schema and is never copied into a parameter or result member.
+- `TMCPSerializer.JsonToValue` and `ValueToJson`: the runtime marshal on a
+  `TRttiType` rather than a class. `JsonToValue` appends every object it
+  created to the list the caller passes, so the caller can free them.
+- `TMCPHeaderValue.Encode`: the counterpart of `TryDecode`, passing a
+  header-safe value through and wrapping anything else in the `=?base64?...?=`
+  sentinel. `MCP_HEADER_SESSION_ID`, `MCP_HEADER_PROTOCOL_VERSION`,
+  `MCP_HEADER_METHOD` and `MCP_HEADER_NAME` in `MCPServer.Types` are the one
+  place the four MCP header names are spelled; the HTTP server and the JSON-RPC
+  processor read them from there.
 
 ### Changed
 
 - `MCPServer.Application` holds the wiring the executable used to repeat for
-  each transport: `TMCPServerApplication.RunHttp` and `RunStdio` build the
-  managers once and the program file is the command-line entry point only.
+  each transport: `TMCPServerApplication` builds a `TMCPServerHost` seeded from
+  the global registry, `RunHttp` and `RunStdio` drive it, and the program file
+  is the command-line entry point only.
 - The content block helpers, the protocol version helpers and the redaction
   helpers are class functions on `TMCPContentBlock`, `TMCPProtocolVersion` and
   `TLogger`; `MCPServer.Schema.Generator` keeps its RTTI context in a class
@@ -396,3 +445,6 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `EArgumentException` instead of being silently dropped.
 - A tool result that fails to serialise no longer leaks the partial JSON
   object; the DEBUG `outputSchema` check no longer leaks the schema.
+- `build.bat` and `build-tests.bat` quote the TaurusTLS path they pass to the
+  compiler, so a path with a space no longer splits the `-I` and `-R`
+  arguments, and a build without TaurusTLS no longer passes a bare `-R`.

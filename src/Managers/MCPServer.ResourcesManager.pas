@@ -35,7 +35,8 @@ type
     function FindResource(const URI: string): IMCPResource;
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
   public
-    constructor Create;
+    constructor Create; overload;
+    constructor Create(const SeedFromRegistry: Boolean); overload;
     destructor Destroy; override;
 
     procedure AddResource(const Resource: IMCPResource);
@@ -82,15 +83,23 @@ const
 
 constructor TMCPResourcesManager.Create;
 begin
-  inherited;
+  Create(True);
+end;
+
+constructor TMCPResourcesManager.Create(const SeedFromRegistry: Boolean);
+begin
+  inherited Create;
   FLock := TCriticalSection.Create;
   FResources := TDictionary<string, IMCPResource>.Create;
   FOrder := TList<string>.Create;
   FTemplates := TList<IMCPResourceTemplate>.Create;
   FListTtlMs := 0;
   FListCacheScope := MCP_CACHE_SCOPE_PRIVATE;
-  RegisterBuiltInResources;
-  RegisterBuiltInResourceTemplates;
+  if SeedFromRegistry then
+  begin
+    RegisterBuiltInResources;
+    RegisterBuiltInResourceTemplates;
+  end;
 end;
 
 destructor TMCPResourcesManager.Destroy;

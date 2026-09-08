@@ -13,22 +13,26 @@ type
   private
     const MAX_NESTING_DEPTH = 8;
     class var FContext: TRttiContext;
-    class function GetPropertyJsonName(Prop: TRttiProperty): string;
-    class function IsRequiredProperty(Prop: TRttiProperty): Boolean;
+    class function GetJsonName(const Member: TRttiNamedObject): string;
+    class function IsRequired(const Member: TRttiNamedObject): Boolean;
     class function CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
     class function ListItemType(RttiType: TRttiType): TRttiType;
     class function TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
     class procedure DescribeFloat(RttiType: TRttiType; const Schema: TJSONObject);
     class procedure DescribeSet(RttiType: TRttiType; const Schema: TJSONObject);
     class function ClassSchema(RttiType: TRttiType; Depth: Integer; const Schema: TJSONObject): TJSONObject;
-    class function ObjectSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+    class function ObjectSchema(RttiType: TRttiType; Depth: Integer; const IsRoot: Boolean): TJSONObject;
     class function NumberValue(const Value: Double): TJSONNumber;
-    class procedure ApplyAttributes(Prop: TRttiProperty; const PropSchema: TJSONObject);
+    class procedure ApplyAttributes(const Member: TRttiNamedObject; const MemberSchema: TJSONObject);
+    class procedure GuardParameterHasSchema(const Method: TRttiMethod; const Param: TRttiParameter);
   public
     class constructor Create;
     class destructor Destroy;
     class function GenerateSchema(Cls: TClass): TJSONObject;
     class function GenerateSchemaFromInstance(Instance: TObject): TJSONObject;
+    class function GenerateSchemaFromType(const RttiType: TRttiType): TJSONObject;
+    class function GenerateSchemaFromMethod(const Method: TRttiMethod): TJSONObject;
+    class function GenerateSchemaFromMethodResult(const Method: TRttiMethod): TJSONObject;
   end;
 
 implementation
@@ -50,6 +54,12 @@ const
   SCHEMA_KEY_ITEMS = 'items';
   SCHEMA_KEY_PROPERTIES = 'properties';
   SCHEMA_KEY_REQUIRED = 'required';
+  SCHEMA_KEY_RESULT = 'result';
+
+  DEPTH_ABOVE_ROOT = -1;
+
+  UNDESCRIBABLE_RESULT_KINDS = [tkUnknown, tkPointer, tkProcedure, tkMethod, tkClassRef,
+    tkInterface, tkRecord, tkMRecord];
 
 
 { TMCPSchemaGenerator }
@@ -66,7 +76,7 @@ end;
 
 class function TMCPSchemaGenerator.GenerateSchema(Cls: TClass): TJSONObject;
 begin
-  Result := ObjectSchema(FContext.GetType(Cls), 0);
+  Result := ObjectSchema(FContext.GetType(Cls), 0, True);
 end;
 
 class function TMCPSchemaGenerator.GenerateSchemaFromInstance(Instance: TObject): TJSONObject;
@@ -74,20 +84,111 @@ begin
   Result := GenerateSchema(Instance.ClassType);
 end;
 
-class function TMCPSchemaGenerator.GetPropertyJsonName(Prop: TRttiProperty): string;
+class function TMCPSchemaGenerator.GenerateSchemaFromType(const RttiType: TRttiType): TJSONObject;
 begin
-  for var Attr in Prop.GetAttributes do
+  if not Assigned(RttiType) then
+    Exit(nil);
+
+  if RttiType.TypeKind = tkClass then
+    Exit(ClassSchema(RttiType, DEPTH_ABOVE_ROOT, TJSONObject.Create));
+
+  Result := TypeSchema(RttiType, 0);
+end;
+
+class function TMCPSchemaGenerator.GenerateSchemaFromMethod(const Method: TRttiMethod): TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  try
+    Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
+
+    const Properties = TJSONObject.Create;
+    Result.AddPair(SCHEMA_KEY_PROPERTIES, Properties);
+
+    const RequiredArray = TJSONArray.Create;
+    try
+      for var Param in Method.GetParameters do
+      begin
+        GuardParameterHasSchema(Method, Param);
+
+        const WireName = GetJsonName(Param);
+        const ParamSchema = GenerateSchemaFromType(Param.ParamType);
+        Properties.AddPair(WireName, ParamSchema);
+        ApplyAttributes(Param, ParamSchema);
+
+        if IsRequired(Param) then
+          RequiredArray.Add(WireName);
+      end;
+    except
+      RequiredArray.Free;
+      raise;
+    end;
+
+    const HasRequiredArray = (RequiredArray.Count > 0);
+    if HasRequiredArray then
+      Result.AddPair(SCHEMA_KEY_REQUIRED, RequiredArray)
+    else
+      RequiredArray.Free;
+
+    Result.AddPair(SCHEMA_KEY_ADDITIONAL_PROPERTIES, TJSONBool.Create(False));
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+class function TMCPSchemaGenerator.GenerateSchemaFromMethodResult(const Method: TRttiMethod): TJSONObject;
+begin
+  const ReturnType = Method.ReturnType;
+  if not Assigned(ReturnType) or (ReturnType.TypeKind in UNDESCRIBABLE_RESULT_KINDS) then
+    Exit(nil);
+
+  Result := TJSONObject.Create;
+  try
+    Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
+
+    const Properties = TJSONObject.Create;
+    Result.AddPair(SCHEMA_KEY_PROPERTIES, Properties);
+    Properties.AddPair(SCHEMA_KEY_RESULT, GenerateSchemaFromType(ReturnType));
+
+    const RequiredArray = TJSONArray.Create;
+    Result.AddPair(SCHEMA_KEY_REQUIRED, RequiredArray);
+    RequiredArray.Add(SCHEMA_KEY_RESULT);
+
+    Result.AddPair(SCHEMA_KEY_ADDITIONAL_PROPERTIES, TJSONBool.Create(False));
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+class procedure TMCPSchemaGenerator.GuardParameterHasSchema(const Method: TRttiMethod;
+  const Param: TRttiParameter);
+begin
+  if not Assigned(Param.ParamType) then
+    raise EArgumentException.CreateFmt('Parameter "%s" of %s is untyped, so it has no schema',
+      [Param.Name, Method.Name]);
+
+  const AnswersThroughTheArgument = (([pfVar, pfOut] * Param.Flags) <> []);
+  if AnswersThroughTheArgument then
+    raise EArgumentException.CreateFmt(
+      'Parameter "%s" of %s is a var or out parameter, so it has no schema: a tool answers with its result',
+      [Param.Name, Method.Name]);
+end;
+
+class function TMCPSchemaGenerator.GetJsonName(const Member: TRttiNamedObject): string;
+begin
+  for var Attr in Member.GetAttributes do
     if Attr is SchemaNameAttribute then
       begin
         Result := SchemaNameAttribute(Attr).Name;
         Exit;
       end;
-  Result := LowerCase(Prop.Name);
+  Result := LowerCase(Member.Name);
 end;
 
-class function TMCPSchemaGenerator.IsRequiredProperty(Prop: TRttiProperty): Boolean;
+class function TMCPSchemaGenerator.IsRequired(const Member: TRttiNamedObject): Boolean;
 begin
-  for var Attr in Prop.GetAttributes do
+  for var Attr in Member.GetAttributes do
     if Attr is OptionalAttribute then
       Exit(False);
   Result := True;
@@ -187,7 +288,7 @@ begin
   end;
 
   Schema.Free;
-  Result := ObjectSchema(RttiType, Depth + 1);
+  Result := ObjectSchema(RttiType, Depth + 1, False);
 end;
 
 class function TMCPSchemaGenerator.TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
@@ -249,55 +350,57 @@ begin
     Result := TJSONNumber.Create(Value);
 end;
 
-class procedure TMCPSchemaGenerator.ApplyAttributes(Prop: TRttiProperty; const PropSchema: TJSONObject);
+class procedure TMCPSchemaGenerator.ApplyAttributes(const Member: TRttiNamedObject;
+  const MemberSchema: TJSONObject);
 begin
-  for var Attr in Prop.GetAttributes do
+  for var Attr in Member.GetAttributes do
   begin
     if Attr is SchemaDescriptionAttribute then
-      PropSchema.AddPair(MCP_KEY_DESCRIPTION, SchemaDescriptionAttribute(Attr).Description)
+      MemberSchema.AddPair(MCP_KEY_DESCRIPTION, SchemaDescriptionAttribute(Attr).Description)
     else if Attr is SchemaTitleAttribute then
-      PropSchema.AddPair(MCP_KEY_TITLE, SchemaTitleAttribute(Attr).Title)
+      MemberSchema.AddPair(MCP_KEY_TITLE, SchemaTitleAttribute(Attr).Title)
     else if Attr is SchemaFormatAttribute then
     begin
-      PropSchema.RemovePair(SCHEMA_KEY_FORMAT).Free;
-      PropSchema.AddPair(SCHEMA_KEY_FORMAT, SchemaFormatAttribute(Attr).Format);
+      MemberSchema.RemovePair(SCHEMA_KEY_FORMAT).Free;
+      MemberSchema.AddPair(SCHEMA_KEY_FORMAT, SchemaFormatAttribute(Attr).Format);
     end
     else if Attr is SchemaMinimumAttribute then
-      PropSchema.AddPair('minimum', NumberValue(SchemaMinimumAttribute(Attr).Minimum))
+      MemberSchema.AddPair('minimum', NumberValue(SchemaMinimumAttribute(Attr).Minimum))
     else if Attr is SchemaMaximumAttribute then
-      PropSchema.AddPair('maximum', NumberValue(SchemaMaximumAttribute(Attr).Maximum))
+      MemberSchema.AddPair('maximum', NumberValue(SchemaMaximumAttribute(Attr).Maximum))
     else if Attr is SchemaEnumAttribute then
     begin
-      PropSchema.RemovePair(SCHEMA_KEY_ENUM).Free;
+      MemberSchema.RemovePair(SCHEMA_KEY_ENUM).Free;
       var EnumArray := TJSONArray.Create;
       for var Value in SchemaEnumAttribute(Attr).Values do
       begin
         EnumArray.Add(Value);
       end;
-      PropSchema.AddPair(SCHEMA_KEY_ENUM, EnumArray);
+      MemberSchema.AddPair(SCHEMA_KEY_ENUM, EnumArray);
     end
     else if Attr is SchemaMinLengthAttribute then
-      PropSchema.AddPair('minLength', TJSONNumber.Create(SchemaMinLengthAttribute(Attr).MinLength))
+      MemberSchema.AddPair('minLength', TJSONNumber.Create(SchemaMinLengthAttribute(Attr).MinLength))
     else if Attr is SchemaMaxLengthAttribute then
-      PropSchema.AddPair('maxLength', TJSONNumber.Create(SchemaMaxLengthAttribute(Attr).MaxLength))
+      MemberSchema.AddPair('maxLength', TJSONNumber.Create(SchemaMaxLengthAttribute(Attr).MaxLength))
     else if Attr is SchemaPatternAttribute then
-      PropSchema.AddPair('pattern', SchemaPatternAttribute(Attr).Pattern)
+      MemberSchema.AddPair('pattern', SchemaPatternAttribute(Attr).Pattern)
     else if Attr is SchemaDefaultAttribute then
     begin
       var DefaultValue := TJSONObject.ParseJSONValue(SchemaDefaultAttribute(Attr).Json);
       if not Assigned(DefaultValue) then
         raise EArgumentException.CreateFmt('[SchemaDefault] on %s is not valid JSON: %s',
-          [Prop.Name, SchemaDefaultAttribute(Attr).Json]);
-      PropSchema.AddPair('default', DefaultValue);
+          [Member.Name, SchemaDefaultAttribute(Attr).Json]);
+      MemberSchema.AddPair('default', DefaultValue);
     end;
   end;
 end;
 
-class function TMCPSchemaGenerator.ObjectSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+class function TMCPSchemaGenerator.ObjectSchema(RttiType: TRttiType; Depth: Integer;
+  const IsRoot: Boolean): TJSONObject;
 begin
   Result := TJSONObject.Create;
   try
-    if Depth = 0 then
+    if IsRoot then
       for var Attr in RttiType.GetAttributes do
         if Attr is SchemaDialectAttribute then
           Result.AddPair('$schema', SchemaDialectAttribute(Attr).Uri);
@@ -312,12 +415,12 @@ begin
       if not (RttiProp.IsReadable and RttiProp.IsWritable) then
         Continue;
 
-      var JsonName := GetPropertyJsonName(RttiProp);
+      var JsonName := GetJsonName(RttiProp);
       var PropSchema := TypeSchema(RttiProp.PropertyType, Depth);
       Properties.AddPair(JsonName, PropSchema);
       ApplyAttributes(RttiProp, PropSchema);
 
-      if IsRequiredProperty(RttiProp) then
+      if IsRequired(RttiProp) then
         RequiredArray.Add(JsonName);
     end;
 

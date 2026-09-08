@@ -90,6 +90,7 @@
         <DCCReference Include="..\src\Core\MCPServer.Registration.pas"/>
         <DCCReference Include="..\src\Core\MCPServer.ManagerRegistry.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Base.pas"/>
+        <DCCReference Include="..\src\Tools\MCPServer.Tool.Method.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Base.pas"/>
         <DCCReference Include="..\src\Prompts\MCPServer.Prompt.Base.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.JsonRpcProcessor.pas"/>
@@ -101,6 +102,7 @@
         <DCCReference Include="..\src\Managers\MCPServer.SubscriptionsManager.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioChannel.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.Host.pas"/>
         <DCCReference Include="MCPServer.Tests.StdioChannel.pas"/>
         <DCCReference Include="MCPServer.Tests.Cancellation.pas"/>
         <DCCReference Include="MCPServer.Tests.Stdio.pas"/>
@@ -111,6 +113,7 @@
         <DCCReference Include="MCPServer.Tests.Authorization.pas"/>
         <DCCReference Include="MCPServer.Tests.PromptsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.CompletionManager.pas"/>
+        <DCCReference Include="MCPServer.Tests.Marshal.pas"/>
         <DCCReference Include="..\src\Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.GetTime.pas"/>
@@ -124,6 +127,7 @@
         <DCCReference Include="MCPServer.Tests.Golden.Legacy.pas"/>
         <DCCReference Include="MCPServer.Tests.Constants.pas"/>
         <DCCReference Include="MCPServer.Tests.ServerStatus.pas"/>
+        <DCCReference Include="MCPServer.Tests.Settings.pas"/>
         <DCCReference Include="MCPServer.Tests.Registration.pas"/>
         <DCCReference Include="MCPServer.Tests.Logger.pas"/>
         <DCCReference Include="MCPServer.Tests.PathBoundary.pas"/>
@@ -132,12 +136,17 @@
         <DCCReference Include="MCPServer.Tests.Capabilities.pas"/>
         <DCCReference Include="MCPServer.Tests.Golden.Modern.pas"/>
         <DCCReference Include="MCPServer.Tests.HttpHeaders.pas"/>
+        <DCCReference Include="MCPServer.Tests.HeaderEncoding.pas"/>
         <DCCReference Include="MCPServer.Tests.Http.pas"/>
         <DCCReference Include="MCPServer.Tests.ToolResult.pas"/>
         <DCCReference Include="MCPServer.Tests.Serializer.pas"/>
         <DCCReference Include="MCPServer.Tests.Schema.pas"/>
+        <DCCReference Include="MCPServer.Tests.SchemaFromMethod.pas"/>
+        <DCCReference Include="MCPServer.Tests.MethodTool.pas"/>
         <DCCReference Include="MCPServer.Tests.ToolsManager.pas"/>
         <DCCReference Include="MCPServer.Tests.ResourcesManager.pas"/>
+        <DCCReference Include="MCPServer.Tests.Host.pas"/>
+        <DCCReference Include="MCPServer.Tests.HttpCancellation.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.Result.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="..\src\Tools\MCPServer.Tool.InputRequiredSamples.pas"/>

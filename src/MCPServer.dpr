@@ -35,6 +35,7 @@ uses
   MCPServer.IdHTTPServer in 'Server\MCPServer.IdHTTPServer.pas',
   MCPServer.StdioTransport in 'Server\MCPServer.StdioTransport.pas',
   MCPServer.StdioChannel in 'Server\MCPServer.StdioChannel.pas',
+  MCPServer.Host in 'Server\MCPServer.Host.pas',
   MCPServer.JsonRpcProcessor in 'Protocol\MCPServer.JsonRpcProcessor.pas',
   MCPServer.CoreManager in 'Managers\MCPServer.CoreManager.pas',
   MCPServer.ToolsManager in 'Managers\MCPServer.ToolsManager.pas',

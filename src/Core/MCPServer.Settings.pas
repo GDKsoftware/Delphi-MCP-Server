@@ -52,6 +52,7 @@ type
     procedure CreateDefaultSettingsFile;
   public
     constructor Create(const ASettingsFile: string = ''; const ACreateFile: Boolean = True);
+    constructor CreateDefaults;
     destructor Destroy; override;
 
     procedure LoadFromFile;
@@ -142,6 +143,12 @@ begin
   end;
 
   LoadFromFile;
+end;
+
+constructor TMCPSettings.CreateDefaults;
+begin
+  inherited Create;
+  LoadDefaults;
 end;
 
 destructor TMCPSettings.Destroy;
@@ -363,6 +370,10 @@ procedure TMCPSettings.SaveToFile;
 var
   IniFile: TIniFile;
 begin
+  const HasSettingsFile = (FSettingsFile <> '');
+  if not HasSettingsFile then
+    Exit;
+
   IniFile := TIniFile.Create(FSettingsFile);
   try
     IniFile.WriteInteger(SECTION_SERVER, 'Port', FPort);
