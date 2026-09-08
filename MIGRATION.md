@@ -50,7 +50,11 @@ Such a stream is `200` even when the request ends in a JSON-RPC error,
 because the status line has already been sent. Requests that send no
 notification, and requests without `text/event-stream` in `Accept`, are
 answered as before (single JSON object, or one SSE event, with a
-`Content-Length`). Closing the stream cancels the request.
+`Content-Length`). Closing the stream cancels the request, and that is the
+only cancellation over HTTP: a `notifications/cancelled` for a request still
+in flight arrives on a connection of its own, is answered `202` and is
+dropped, because the tracker a request consults is its own response stream.
+Over stdio the same notification does stop the request.
 
 **TLS 1.0 and 1.1 are disabled** on the OpenSSL 1.0.2 handler (the build
 without `USE_TAURUS_TLS`).

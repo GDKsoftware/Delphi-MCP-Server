@@ -173,6 +173,12 @@ end;
 
 function TMCPHttpResponseStream.TryCancel(const RequestId: TMCPRequestId; const Reason: string): Boolean;
 begin
+  // This tracker is the response stream of one connection, and a notifications/cancelled always
+  // arrives on a connection of its own, whose stream is tracking nothing. So there is never a
+  // request here to cancel by id, and the notification is answered with 202 and dropped. What
+  // cancels a request over HTTP is the client closing the stream: the next write fails and
+  // MarkBroken cancels the request the tool is running. Cancelling by id across connections would
+  // need a process-wide tracker keyed by request id and principal, which is a different server.
   Result := False;
 end;
 

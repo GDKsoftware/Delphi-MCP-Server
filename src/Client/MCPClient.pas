@@ -28,8 +28,17 @@ unit MCPClient;
 // reach IMCPClientSink, so a host can show progress and log lines as they arrive rather than after
 // the fact. A server that answers input_required is answered again, up to MaxInputRounds times,
 // with the responder's answers and its own requestState echoed back untouched. And a cancellation
-// check that turns True aborts the read, tells the server on a second connection and gives the
-// caller a cancelled outcome instead of half an answer.
+// check that turns True aborts the read and gives the caller a cancelled outcome instead of half an
+// answer.
+//
+// Aborting the read is what cancels the call over HTTP: the stream closes, and the server's next
+// write to it fails, which is where MCPServer.HttpStream cancels the request the tool is running.
+// The notifications/cancelled that goes out on a second connection is the courtesy the
+// specification asks for, for a server that tracks requests across connections. This repository's
+// own HTTP server does not: it answers the notification with 202 and drops it, because the tracker
+// it consults is the response stream of the connection the notification arrived on. So the
+// notification is sent, its failure is reported in the cancelled outcome, and nothing depends on
+// it arriving.
 
 interface
 
@@ -84,6 +93,7 @@ type
     FAuth: IMCPClientAuth;
     FInFlightId: Int64;
     FCancellationSent: Boolean;
+    FCancellationFailure: string;
     FNamePrefix: string;
     FOnRequestBody: TProc<string>;
     FOnResponseBody: TProc<string>;
@@ -129,6 +139,7 @@ type
     procedure ReportProgress(const Params: TJSONObject);
     procedure ReportLogMessage(const Params: TJSONObject);
     procedure CancelInFlight;
+    function CancelledText: string;
 
     class function SummariseBlock(const Block: TJSONObject): string; static;
     class function ResourceByteCount(const Resource: TJSONObject): Integer; static;
@@ -235,6 +246,8 @@ const
   MESSAGE_TOO_MANY_ROUNDS = 'The server asked for input more than %d times.';
   MESSAGE_NO_ANSWER = 'The input responder produced no answer for %s.';
   MESSAGE_CANCELLED = 'The tool call was cancelled.';
+  MESSAGE_CANCELLED_NOT_TOLD = MESSAGE_CANCELLED +
+    ' The server could not be told and may still be running the tool: %s';
 
 { TMCPClient }
 
@@ -295,6 +308,7 @@ begin
   // The id is what a cancellation names, and it is only nameable while the request is in flight.
   FInFlightId := Id;
   FCancellationSent := False;
+  FCancellationFailure := '';
   try
     Http := FTransport.Send(TMCPHttpRequest.Call(Method, Body, Id, MirroredName));
   finally
@@ -827,7 +841,7 @@ begin
   // A cancelled read leaves a truncated stream behind. The caller asked for this, so it hears the
   // reason rather than a parse failure.
   if Http.Cancelled then
-    Exit(TMCPToolCallOutcome.CreateError(MESSAGE_CANCELLED));
+    Exit(TMCPToolCallOutcome.CreateError(CancelledText));
 
   if not Assigned(Response) then
   begin
@@ -1108,7 +1122,8 @@ begin
   const Body = BuildBody(MCP_METHOD_NOTIFICATIONS_CANCELLED, Params, 0);
 
   // The connection carrying the call is about to be torn down, so the notification needs one of
-  // its own. Telling the server is a courtesy: the call is cancelled whether it arrives or not.
+  // its own. Telling the server is a courtesy: the call is cancelled by the closed stream whether
+  // the notification arrives or not.
   const Aside = TMCPHttpTransport.Create(FServerUrl, FOptions, FAuth);
   try
     Aside.Era := FEra;
@@ -1117,11 +1132,24 @@ begin
     try
       Aside.Send(TMCPHttpRequest.Notify(MCP_METHOD_NOTIFICATIONS_CANCELLED, Body));
     except
-      on EMCPClientError do ;
+      // Everything the transport raises for a refused, unreachable or unauthenticated server is an
+      // EMCPClientError, and none of it may unwind the caller from inside the read it is aborting.
+      // The caller hears about it in the outcome instead, because a server that was not told is a
+      // server that may still be running the tool.
+      on E: EMCPClientError do
+        FCancellationFailure := E.Message;
     end;
   finally
     Aside.Free;
   end;
+end;
+
+function TMCPClient.CancelledText: string;
+begin
+  if FCancellationFailure = '' then
+    Exit(MESSAGE_CANCELLED);
+
+  Result := Format(MESSAGE_CANCELLED_NOT_TOLD, [FCancellationFailure]);
 end;
 
 end.

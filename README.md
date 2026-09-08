@@ -158,7 +158,12 @@ request accepts `text/event-stream` and a tool sends one, the response turns
 into an SSE stream (chunked, `X-Accel-Buffering: no`) that carries the
 notifications first and the JSON-RPC response as its last event. A request
 that sends none is answered as before. A client that closes the stream
-cancels the request.
+cancels the request: the server's next write to it fails and the tool sees
+`IsCancelled`. That is the HTTP cancellation. A `notifications/cancelled`
+naming the same request is answered `202` and dropped, because the tracker a
+request consults is its own response stream and a notification always arrives
+on a connection of its own; only over stdio, where every message shares one
+channel, does the notification stop a running request.
 
 ### Change notifications (`subscriptions/listen`)
 

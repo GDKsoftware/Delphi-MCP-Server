@@ -10,6 +10,11 @@ unit MCPClient.Tests.Mrtr;
 // one. Cancellation needs a server that is still writing when the caller changes its mind, which
 // no request-response fixture can be, so TStreamingStub streams one notification and then holds
 // its connection open until the cancellation arrives on another one.
+//
+// What cancels a call over HTTP is the closed stream, not the notifications/cancelled that goes
+// out beside it, and TCancelWatchTool proves both halves of that against a real TMCPServerHost:
+// the tool sees its request cancelled when the client abandons the read, and it runs on when the
+// notification arrives by itself on a second connection.
 
 interface
 
@@ -70,6 +75,32 @@ type
     constructor Create; override;
   end;
 
+  { Runs until the test releases it or its request is cancelled, and remembers which of the two
+    happened. Reporting progress on every step is what makes a closed connection visible to the
+    server: the write fails, and MCPServer.HttpStream cancels the request the tool is running. }
+  TCancelWatchTool = class(TMCPToolBase<TNoParams>)
+  strict private
+    FStarted: TEvent;
+    FRelease: TEvent;
+    FCancelSeen: TEvent;
+    FRequestId: string;
+  protected
+    function ExecuteWithContext(const Params: TNoParams;
+      const Context: IMCPRequestContext): TValue; override;
+  public
+    constructor Create; override;
+    destructor Destroy; override;
+
+    function WaitForStart(const TimeoutMs: Cardinal): Boolean;
+    function WaitForCancellation(const TimeoutMs: Cardinal): Boolean;
+    function SawCancellation: Boolean;
+    procedure Release;
+
+    { The id the server gave this request, which is what a notifications/cancelled has to name.
+      Written before the start is signalled, so a test that waited for the start may read it. }
+    property RequestId: string read FRequestId;
+  end;
+
   TSinkEvent = record
     Kind: string;
     Token: string;
@@ -112,6 +143,7 @@ type
     FStreaming: Boolean;
     FCancelledWhileStreaming: Boolean;
     FAlwaysAsksForInput: Boolean;
+    FRefusesCancellations: Boolean;
     procedure HandleCommand(Context: TIdContext; RequestInfo: TIdHTTPRequestInfo;
       ResponseInfo: TIdHTTPResponseInfo);
     procedure StreamCall(Context: TIdContext; ResponseInfo: TIdHTTPResponseInfo; const Id: string);
@@ -134,6 +166,8 @@ type
     { True makes every tools/call answer input_required, which is the one answer a real server
       never gives a client that declared it cannot be asked. }
     property AlwaysAsksForInput: Boolean read FAlwaysAsksForInput write FAlwaysAsksForInput;
+    { True answers the cancellation with 500, which is a server the client cannot tell. }
+    property RefusesCancellations: Boolean read FRefusesCancellations write FRefusesCancellations;
   end;
 
   [TestFixture]
@@ -261,9 +295,13 @@ type
     FTrace: TMCPClient;
     FBodies: TArray<string>;
     FCancelled: Boolean;
+    FWatch: TCancelWatchTool;
+    FWatchTool: IMCPTool;
+    FNotifiedStatus: Integer;
     procedure NewClient(const ServerUrl: string);
     procedure CancelFromNowOn;
     function LastBody: string;
+    function StartCancellingNotifier: TThread;
   public
     [Setup]
     procedure Setup;
@@ -281,11 +319,21 @@ type
 
     [Test]
     procedure Cancellation_IsSentOnceForOneCall;
+
+    [Test]
+    procedure ACancellationTheServerRefuses_IsInTheOutcome;
+
+    [Test]
+    procedure ClosingTheStream_CancelsTheToolOnTheServer;
+
+    [Test]
+    procedure ACancellationOnASecondConnection_IsAcceptedAndTheToolRunsOn;
   end;
 
 implementation
 
 uses
+  IdHTTP,
   MCPServer.Errors,
   MCPServer.Mrtr,
   MCPServer.HttpStream,
@@ -308,6 +356,7 @@ const
   TOOL_OPEN_ENDED = 'test_open_ended_progress';
   TOOL_PROGRESS = 'test_tool_with_progress';
   TOOL_SIMPLE_TEXT = 'test_simple_text';
+  TOOL_CANCEL_WATCH = 'test_cancel_watch';
 
   KEY_ANSWER = 'topic_owner';
   KEY_ACTION = 'action';
@@ -372,6 +421,16 @@ const
     '"requestState":"v1.stub-state"}}';
 
   STREAM_WAIT_MS = 4000;
+  STATUS_SERVER_ERROR = 500;
+
+  WATCH_STEPS = 200;
+  WATCH_STEP_MS = 25;
+  WATCH_WAIT_MS = 5000;
+  WATCH_STEP_MESSAGE = 'still working';
+  WATCH_ANSWER = 'the watch tool ran to the end';
+  CANCEL_NOTIFICATION =
+    '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":%s,' +
+    '"reason":"a second connection"}}';
 
 { TTopicInputTool }
 
@@ -435,6 +494,69 @@ function TOpenEndedProgressTool.ExecuteWithContext(const Params: TNoParams;
 begin
   Context.ReportProgress(OPEN_ENDED_PROGRESS);
   Result := TMCPToolResult.Text(OPEN_ENDED_ANSWER);
+end;
+
+{ TCancelWatchTool }
+
+constructor TCancelWatchTool.Create;
+begin
+  inherited;
+  FName := TOOL_CANCEL_WATCH;
+  FDescription := 'Reports progress until the caller goes away or the test releases it';
+  FStarted := TEvent.Create(nil, True, False, '');
+  FRelease := TEvent.Create(nil, True, False, '');
+  FCancelSeen := TEvent.Create(nil, True, False, '');
+end;
+
+destructor TCancelWatchTool.Destroy;
+begin
+  FCancelSeen.Free;
+  FRelease.Free;
+  FStarted.Free;
+  inherited;
+end;
+
+function TCancelWatchTool.ExecuteWithContext(const Params: TNoParams;
+  const Context: IMCPRequestContext): TValue;
+begin
+  FRequestId := Context.RequestId.AsText;
+  FStarted.SetEvent;
+
+  for var Step := 1 to WATCH_STEPS do
+  begin
+    if Context.IsCancelled then
+    begin
+      FCancelSeen.SetEvent;
+      Break;
+    end;
+
+    Context.ReportProgress(Step, WATCH_STEPS, WATCH_STEP_MESSAGE);
+
+    if FRelease.WaitFor(WATCH_STEP_MS) = TWaitResult.wrSignaled then
+      Break;
+  end;
+
+  Result := TMCPToolResult.Text(WATCH_ANSWER);
+end;
+
+function TCancelWatchTool.WaitForStart(const TimeoutMs: Cardinal): Boolean;
+begin
+  Result := (FStarted.WaitFor(TimeoutMs) = TWaitResult.wrSignaled);
+end;
+
+function TCancelWatchTool.WaitForCancellation(const TimeoutMs: Cardinal): Boolean;
+begin
+  Result := (FCancelSeen.WaitFor(TimeoutMs) = TWaitResult.wrSignaled);
+end;
+
+function TCancelWatchTool.SawCancellation: Boolean;
+begin
+  Result := (FCancelSeen.WaitFor(0) = TWaitResult.wrSignaled);
+end;
+
+procedure TCancelWatchTool.Release;
+begin
+  FRelease.SetEvent;
 end;
 
 { TRecordingSink }
@@ -1174,7 +1296,10 @@ begin
   if Method = MCP_METHOD_NOTIFICATIONS_CANCELLED then
   begin
     Remember(Body);
-    ResponseInfo.ResponseNo := HTTP_STATUS_ACCEPTED;
+    if FRefusesCancellations then
+      ResponseInfo.ResponseNo := STATUS_SERVER_ERROR
+    else
+      ResponseInfo.ResponseNo := HTTP_STATUS_ACCEPTED;
     ResponseInfo.ContentText := '';
     Exit;
   end;
@@ -1228,10 +1353,16 @@ procedure TMCPClientCancellationTests.Setup;
 begin
   FCancelled := False;
 
+  FNotifiedStatus := 0;
+
+  FWatch := TCancelWatchTool.Create;
+  FWatchTool := FWatch;
+
   FHost := TMCPServerHost.Create;
   FHost.Settings.Port := 0;
   FHost.Settings.CorsEnabled := False;
   FHost.AddTool(TMCPRegistry.CreateTool(TOOL_PROGRESS));
+  FHost.AddTool(FWatchTool);
   FHost.StartHttp;
 
   FStub := TStreamingStub.Create;
@@ -1242,8 +1373,12 @@ begin
   FTrace := nil;
   FClient := nil;
   FSink := nil;
+  // A tool still counting its steps would hold the host open for as long as its budget lasts.
+  FWatch.Release;
   FreeAndNil(FStub);
   FreeAndNil(FHost);
+  FWatch := nil;
+  FWatchTool := nil;
 end;
 
 procedure TMCPClientCancellationTests.NewClient(const ServerUrl: string);
@@ -1328,6 +1463,81 @@ begin
   finally
     Told.Free;
   end;
+end;
+
+function TMCPClientCancellationTests.StartCancellingNotifier: TThread;
+begin
+  Result := TThread.CreateAnonymousThread(
+    procedure
+    begin
+      if not FWatch.WaitForStart(WATCH_WAIT_MS) then
+        Exit;
+
+      var Http := TIdHTTP.Create(nil);
+      var Request := TStringStream.Create(Format(CANCEL_NOTIFICATION, [FWatch.RequestId]),
+        TEncoding.UTF8);
+      try
+        Http.HTTPOptions := Http.HTTPOptions + [hoNoProtocolErrorException];
+        Http.Request.ContentType := MEDIA_TYPE_JSON;
+        Http.Post(Format(URL_TEMPLATE, [LOOPBACK, FHost.BoundPort, ENDPOINT]), Request);
+        FNotifiedStatus := Http.ResponseCode;
+      finally
+        Request.Free;
+        Http.Free;
+      end;
+
+      // The tool has now outlived the notification, which is the whole point; it may stop.
+      FWatch.Release;
+    end);
+  Result.FreeOnTerminate := False;
+  Result.Start;
+end;
+
+procedure TMCPClientCancellationTests.ACancellationTheServerRefuses_IsInTheOutcome;
+begin
+  FStub.RefusesCancellations := True;
+  NewClient(FStub.Url);
+  CancelFromNowOn;
+
+  const Outcome = FClient.CallTool(TOOL_PROGRESS, nil);
+
+  Assert.AreEqual(1, FStub.CancellationCount, 'the client never tried to tell the server');
+  Assert.IsTrue(Outcome.IsError, 'a cancelled call reported success');
+  Assert.IsTrue(Outcome.Text.Contains(IntToStr(STATUS_SERVER_ERROR)),
+    'the refused cancellation was swallowed: ' + Outcome.Text);
+end;
+
+procedure TMCPClientCancellationTests.ClosingTheStream_CancelsTheToolOnTheServer;
+begin
+  NewClient(Format(URL_TEMPLATE, [LOOPBACK, FHost.BoundPort, ENDPOINT]));
+  CancelFromNowOn;
+
+  const Outcome = FClient.CallTool(TOOL_CANCEL_WATCH, nil);
+
+  Assert.IsTrue(Outcome.IsError, 'a cancelled call reported success');
+  Assert.IsTrue(FWatch.WaitForCancellation(WATCH_WAIT_MS),
+    'the tool never saw its request cancelled, so the closed stream cancelled nothing');
+end;
+
+procedure TMCPClientCancellationTests.ACancellationOnASecondConnection_IsAcceptedAndTheToolRunsOn;
+begin
+  NewClient(Format(URL_TEMPLATE, [LOOPBACK, FHost.BoundPort, ENDPOINT]));
+
+  const Notifier = StartCancellingNotifier;
+  try
+    const Outcome = FClient.CallTool(TOOL_CANCEL_WATCH, nil);
+
+    Assert.IsFalse(Outcome.IsError, 'the call failed: ' + Outcome.Text);
+    Assert.AreEqual(WATCH_ANSWER, Outcome.Text, 'the tool did not answer');
+  finally
+    Notifier.WaitFor;
+    Notifier.Free;
+  end;
+
+  Assert.AreEqual(HTTP_STATUS_ACCEPTED, FNotifiedStatus,
+    'the server answered the cancellation with something other than 202');
+  Assert.IsFalse(FWatch.SawCancellation,
+    'the notification reached the request after all, which the documents deny');
 end;
 
 procedure TMCPClientCancellationTests.Cancellation_IsSentOnceForOneCall;

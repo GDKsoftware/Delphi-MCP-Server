@@ -172,7 +172,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Streaming HTTP responses (`MCPServer.HttpStream`): when a request accepts
   `text/event-stream` and its handler sends a notification, the response is a
   chunked SSE stream (`X-Accel-Buffering: no`) with the notifications before
-  the final JSON-RPC response; a client that disconnects cancels the request.
+  the final JSON-RPC response; a client that disconnects cancels the request,
+  which is the only cancellation over HTTP: a `notifications/cancelled`
+  arrives on a connection of its own and is answered `202` and dropped.
   `notifications/progress` therefore reaches HTTP clients in both eras.
 - `IMCPRequestContext.Log` and `LogJson`: `notifications/message` on the
   request's own stream, only when the request carries
