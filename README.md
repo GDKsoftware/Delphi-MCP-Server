@@ -431,6 +431,86 @@ parameter. Integer properties are published as `integer`, `TDateTime` as a
 `[SchemaTitle]`, `[SchemaFormat]`, `[SchemaMinimum]` and `[SchemaMaximum]`
 add the corresponding keywords.
 
+#### Records in a schema
+
+A record is described exactly the way a class is: `type: object` with one
+`properties` member per **public field**, and a `required` array holding the
+fields that carry no `[Optional]`. Records nest, hold arrays, hold classes and
+sit inside classes; the walk stops at the same depth guard the class walk uses,
+so a record that reaches itself through a `TArray<T>` cannot recurse forever.
+Every attribute that works on a class property works on a record field:
+`[SchemaDescription]`, `[SchemaTitle]`, `[SchemaFormat]`, `[SchemaMinimum]`,
+`[SchemaMaximum]`, `[SchemaMinLength]`, `[SchemaMaxLength]`, `[SchemaPattern]`,
+`[SchemaDefault]`, `[SchemaName]` and `[Optional]`.
+
+```pascal
+type
+  TMoney = record
+    [SchemaDescription('Amount in the smallest unit')]
+    [SchemaMinimum(0)]
+    Amount: Double;
+
+    [SchemaName('currency_code')]
+    [SchemaPattern('^[A-Z]{3}$')]
+    Currency: string;
+
+    [Optional]
+    Note: string;
+  end;
+```
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "amount": { "type": "number", "description": "Amount in the smallest unit", "minimum": 0 },
+    "currency_code": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "note": { "type": "string" }
+  },
+  "required": ["amount", "currency_code"]
+}
+```
+
+The same shape crosses the wire in both directions: `MCPServer.Serializer`
+builds the record from a JSON object and writes it back out, with enumerations
+by name, `TDateTime` as ISO 8601, and an absent `[Optional]` field left at the
+default of its type. A record is a value, so nothing about it is freed after a
+call; an object a record holds is owned by the call and freed with it.
+
+**What a record needs from RTTI.** The generator reads a record's fields and
+their attributes through extended RTTI, so the unit that declares the record
+must publish field RTTI for the visibility the fields have. Delphi's default
+(`FIELDS([vcPrivate, vcProtected, vcPublic])`) already does, so a record in an
+ordinary unit needs nothing. A unit that narrows the setting must keep public
+fields in it:
+
+```pascal
+{$RTTI EXPLICIT FIELDS([vcPublic])}
+```
+
+A record whose fields are invisible has nothing to describe. As a property of a
+parameter class it keeps the `{"type": "string"}` every record was published as
+before, so a tool that has always listed goes on listing. As a parameter of a
+method tool it is refused instead, naming the record and this directive,
+because a tool written against this version should not ship a schema that does
+not match what the method takes.
+
+The same split applies to a type with no JSON shape at all: a pointer, a
+procedure or method reference, a class reference, an interface or a variant is
+published as `string` on the class walk, the way it always was, and refused as
+a method parameter, naming the parameter and its type. One property the
+generator cannot describe therefore never costs a `tools/list` its other tools.
+A field, property or array element whose type carries no RTTI at all is refused
+wherever it appears, naming the member, because there is nothing left to fall
+back on. Private fields are skipped silently, because a private field is not
+part of the wire.
+
+**`TGUID`.** A `TGUID` is a record, but its `D4` member is an anonymous array
+that `System` publishes no type for, so a `TGUID` has no members to walk. It is
+published as `{"type": "string", "format": "uuid"}` and travels as
+`f81d4fae-7dec-11d0-a765-00a0c91e6bf6`, written in lower case without braces
+and read with or without them.
+
 A tool that returns more than text overrides `ExecuteWithContext` and builds
 a `TMCPToolResult` (`MCPServer.Tool.Result`):
 

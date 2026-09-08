@@ -267,6 +267,28 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `MCP_HEADER_METHOD` and `MCP_HEADER_NAME` in `MCPServer.Types` are the one
   place the four MCP header names are spelled; the HTTP server and the JSON-RPC
   processor read them from there.
+- Records are first-class in a schema and on the wire.
+  `MCPServer.Schema.Generator` describes a record as the `type: object` a class
+  produces, with one property per public field, `required` for the fields
+  without `[Optional]`, and the same depth guard, so records nest, hold arrays,
+  hold classes, sit inside classes and cannot recurse forever. Every schema
+  attribute that works on a class property works on a record field.
+  `MCPServer.Serializer` builds a record from a JSON object and writes one back
+  out; a record is a value and is never put up for freeing, while an object it
+  holds is. `TMCPMethodTool` therefore takes a record parameter and returns a
+  record result with no special case of its own. A `TGUID` is described as a
+  `string` with `format: uuid` and travels as
+  `f81d4fae-7dec-11d0-a765-00a0c91e6bf6`, read with or without braces, because
+  its `D4` member is an anonymous array `System` publishes no type for. A
+  record whose unit publishes no field RTTI has no fields to describe and keeps
+  the `string` every record was published as; a method tool refuses such a
+  record as a parameter, naming the record and the
+  `{$RTTI EXPLICIT FIELDS([vcPublic])}` that fixes it, and publishes no output
+  schema for it as a result.
+- `TMCPSchemaGenerator` refuses a field, property or array element whose type
+  carries no RTTI at all, with an `EArgumentException` naming the member.
+  Reading the type kind off a member that has none was an access violation, and
+  a `TGUID` was the way into it.
 
 ### Changed
 
@@ -278,6 +300,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   helpers are class functions on `TMCPContentBlock`, `TMCPProtocolVersion` and
   `TLogger`; `MCPServer.Schema.Generator` keeps its RTTI context in a class
   variable instead of an `initialization` section.
+- A type the schema generator cannot describe is refused instead of published
+  as a string. A parameter, property or field whose type is a pointer,
+  procedure or method reference, class reference, interface or variant raises
+  `EArgumentException` naming the member and its type, and so does a record
+  whose unit publishes no field RTTI, which would otherwise be published as an
+  object with no members.
 - `IMCPAuthorizer.Authorize` returns a `TMCPAuthResult`, a custom authorizer
   overrides `TryValidateToken`, `TMCPLineReader.TryReadLine` returns a
   `TMCPLine`, `TMCPSchemaValidator.TryValidate` replaces `Validate`, and
@@ -388,9 +416,20 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `logs://recent` no longer writes an access-log entry on every read;
   `project://info` reports `MCP 2026-07-28 (initialize-based: 2025-11-25,
   2025-06-18)` and is cacheable for an hour (`cacheScope: public`).
+- A record-typed property of a tool's parameter class is published as the
+  `type: object` its public fields describe and filled from that object. It
+  used to be published as a `string` and dropped when the arguments were
+  unmarshalled. Every other property the generator cannot describe, a variant,
+  an interface, a method pointer or a class reference, keeps that `string`, so
+  a tool that listed before lists now. MIGRATION.md carries the detail.
 
 ### Fixed
 
+- A record that failed to convert halfway leaked the objects it already held:
+  `TMCPSerializer.JsonToValue` adds them to the caller's list only once the
+  whole record is built, so `{"line": {"sku": "a"}, "count": "x"}` created an
+  object and destroyed none. The half-built record is emptied on the way out,
+  the way a nested class already was.
 - Enumeration sets with more than 64 elements were truncated when serialised,
   and a JSON number outside the range of its target integer type was silently
   wrapped instead of rejected.

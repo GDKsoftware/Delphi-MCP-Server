@@ -14,6 +14,53 @@ type
 
   TMoney = record
     Amount: Double;
+    Currency: string;
+  end;
+
+  TAddress = record
+    Street: string;
+    City: string;
+  end;
+
+  TContact = record
+    Name: string;
+    Home: TAddress;
+  end;
+
+  TBasket = record
+    Owner: string;
+    Skus: TArray<string>;
+  end;
+
+  TSelfNode = record
+    Name: string;
+    Children: TArray<TSelfNode>;
+  end;
+
+  TAnnotatedFields = record
+  private
+    FChecksum: Integer;
+  public
+    [SchemaName('placed_at')]
+    [SchemaTitle('Placed at')]
+    [SchemaDescription('When the order was placed')]
+    [SchemaFormat('date')]
+    PlacedAt: TDateTime;
+
+    [SchemaMinimum(1)]
+    [SchemaMaximum(10)]
+    Count: Integer;
+
+    [SchemaMinLength(2)]
+    [SchemaMaxLength(8)]
+    [SchemaPattern('^[a-z]+$')]
+    [SchemaDefault('"abc"')]
+    Code: string;
+
+    [Optional]
+    Note: string;
+
+    function Checksum: Integer;
   end;
 
   TOrderLine = class
@@ -44,6 +91,81 @@ type
     property Limit: Integer read FLimit write FLimit;
   end;
 
+  TPricedLine = class
+  private
+    FSku: string;
+    FPrice: TMoney;
+  public
+    property Sku: string read FSku write FSku;
+    property Price: TMoney read FPrice write FPrice;
+  end;
+
+  TCarrier = class
+  private
+    FName: string;
+  public
+    property Name: string read FName write FName;
+  end;
+
+  TShipment = record
+    Reference: string;
+    Carrier: TCarrier;
+  end;
+
+{$RTTI EXPLICIT FIELDS([vcPublic])}
+
+  TDocumentedMoney = record
+  private
+    FInternal: Integer;
+  public
+    [SchemaDescription('Amount in the smallest unit')]
+    [SchemaMinimum(0)]
+    Amount: Double;
+
+    function Internal: Integer;
+  end;
+
+{$RTTI EXPLICIT FIELDS([])}
+
+  TOpaqueMoney = record
+    Amount: Double;
+  end;
+
+{$RTTI EXPLICIT FIELDS([vcPrivate, vcProtected, vcPublic])}
+
+  TRawFrame = record
+    Tag: Byte;
+    Payload: array[0..3] of Byte;
+  end;
+
+  TTaggedFilter = class
+  private
+    FId: TGUID;
+    FName: string;
+  public
+    property Id: TGUID read FId write FId;
+    property Name: string read FName write FName;
+  end;
+
+  TLegacyDoneEvent = procedure of object;
+
+  TLegacyFilter = class
+  private
+    FAnything: Variant;
+    FThing: IInterface;
+    FOnDone: TLegacyDoneEvent;
+    FKind: TClass;
+    FMoney: TOpaqueMoney;
+    FCount: Integer;
+  public
+    property Anything: Variant read FAnything write FAnything;
+    property Thing: IInterface read FThing write FThing;
+    property OnDone: TLegacyDoneEvent read FOnDone write FOnDone;
+    property Kind: TClass read FKind write FKind;
+    property Money: TOpaqueMoney read FMoney write FMoney;
+    property Count: Integer read FCount write FCount;
+  end;
+
   TSampleService = class
   public
     procedure NoParameters;
@@ -63,12 +185,28 @@ type
     procedure OutParameter(out Total: Integer);
     procedure VarParameter(var Total: Integer);
     procedure WithDialect(const Filter: TDialectFilter);
+    procedure WithInterface(const Thing: IInterface);
+    procedure WithMoney(const Money: TMoney);
+    procedure WithContact(const Contact: TContact);
+    procedure WithBasket(const Basket: TBasket);
+    procedure WithMoneys(const Moneys: TArray<TMoney>);
+    procedure WithPricedLine(const Line: TPricedLine);
+    procedure WithShipment(const Shipment: TShipment);
+    procedure WithAnnotatedFields(const Stamped: TAnnotatedFields);
+    procedure WithSelfNode(const Node: TSelfNode);
+    procedure WithDocumentedMoney(const Money: TDocumentedMoney);
+    procedure WithOpaqueMoney(const Money: TOpaqueMoney);
+    procedure WithGuid(const Id: TGUID);
+    procedure WithRawFrame(const Frame: TRawFrame);
     function CountOrders: Integer;
     function DescribeOrder: string;
     function FindLine: TOrderLine;
     function FindLines: TArray<TOrderLine>;
     function Total: TMoney;
     function MakeDialect: TDialectFilter;
+    function OpaqueTotal: TOpaqueMoney;
+    function FindThing: IInterface;
+    function MakeGuid: TGUID;
   end;
 
   [TestFixture]
@@ -160,7 +298,73 @@ type
     procedure ClassArrayResult_IsAnArrayOfTheDtoSchema;
 
     [Test]
-    procedure RecordResult_HasNoResultSchema;
+    procedure RecordResult_IsTheRecordSchema;
+
+    [Test]
+    procedure RecordParameter_IsAnObjectWithItsFields;
+
+    [Test]
+    procedure RecordParameter_MatchesWhatSchemaFromTypeProduces;
+
+    [Test]
+    procedure NestedRecord_IsDescribedInPlace;
+
+    [Test]
+    procedure RecordInsideAClass_IsDescribed;
+
+    [Test]
+    procedure ClassInsideARecord_IsDescribed;
+
+    [Test]
+    procedure RecordArrayParameter_ItemsAreTheRecordSchema;
+
+    [Test]
+    procedure RecordHoldingAnArray_IsDescribed;
+
+    [Test]
+    procedure RecordFieldAttributes_AreApplied;
+
+    [Test]
+    procedure OptionalRecordField_StaysOutOfRequired;
+
+    [Test]
+    procedure PrivateRecordField_IsNotDescribed;
+
+    [Test]
+    procedure SelfReferencingRecord_StopsAtTheDepthGuard;
+
+    [Test]
+    procedure RecordWithDocumentedFieldRtti_KeepsItsFieldsAndAttributes;
+
+    [Test]
+    procedure RecordWithoutFieldRtti_IsRejected;
+
+    [Test]
+    procedure RecordResultWithoutFieldRtti_HasNoResultSchema;
+
+    [Test]
+    procedure InterfaceParameter_IsRejected;
+
+    [Test]
+    procedure InterfaceResult_HasNoResultSchema;
+
+    [Test]
+    procedure GuidParameter_IsAStringWithUuidFormat;
+
+    [Test]
+    procedure GuidProperty_IsAStringWithUuidFormat;
+
+    [Test]
+    procedure GuidResult_IsAStringWithUuidFormat;
+
+    [Test]
+    procedure FieldWithoutTypeRtti_IsRejectedNamingTheField;
+
+    [Test]
+    procedure UndescribablePropertyKinds_StayStringsOnTheClassWalk;
+
+    [Test]
+    procedure OpaqueRecordProperty_StaysAStringOnTheClassWalk;
 
     [Test]
     procedure SchemaFromType_DescribesAPrimitiveAnArrayAndAClass;
@@ -174,6 +378,20 @@ implementation
 uses
   System.SysUtils,
   MCPServer.Schema.Generator;
+
+{ TAnnotatedFields }
+
+function TAnnotatedFields.Checksum: Integer;
+begin
+  Result := FChecksum;
+end;
+
+{ TDocumentedMoney }
+
+function TDocumentedMoney.Internal: Integer;
+begin
+  Result := FInternal;
+end;
 
 { TSampleService }
 
@@ -236,6 +454,58 @@ procedure TSampleService.WithDialect(const Filter: TDialectFilter);
 begin
 end;
 
+procedure TSampleService.WithInterface(const Thing: IInterface);
+begin
+end;
+
+procedure TSampleService.WithMoney(const Money: TMoney);
+begin
+end;
+
+procedure TSampleService.WithContact(const Contact: TContact);
+begin
+end;
+
+procedure TSampleService.WithBasket(const Basket: TBasket);
+begin
+end;
+
+procedure TSampleService.WithMoneys(const Moneys: TArray<TMoney>);
+begin
+end;
+
+procedure TSampleService.WithPricedLine(const Line: TPricedLine);
+begin
+end;
+
+procedure TSampleService.WithShipment(const Shipment: TShipment);
+begin
+end;
+
+procedure TSampleService.WithAnnotatedFields(const Stamped: TAnnotatedFields);
+begin
+end;
+
+procedure TSampleService.WithSelfNode(const Node: TSelfNode);
+begin
+end;
+
+procedure TSampleService.WithDocumentedMoney(const Money: TDocumentedMoney);
+begin
+end;
+
+procedure TSampleService.WithOpaqueMoney(const Money: TOpaqueMoney);
+begin
+end;
+
+procedure TSampleService.WithGuid(const Id: TGUID);
+begin
+end;
+
+procedure TSampleService.WithRawFrame(const Frame: TRawFrame);
+begin
+end;
+
 function TSampleService.CountOrders: Integer;
 begin
   Result := 0;
@@ -264,6 +534,21 @@ end;
 function TSampleService.MakeDialect: TDialectFilter;
 begin
   Result := nil;
+end;
+
+function TSampleService.OpaqueTotal: TOpaqueMoney;
+begin
+  Result := Default(TOpaqueMoney);
+end;
+
+function TSampleService.FindThing: IInterface;
+begin
+  Result := nil;
+end;
+
+function TSampleService.MakeGuid: TGUID;
+begin
+  Result := TGUID.Empty;
 end;
 
 { TSchemaFromMethodTests }
@@ -540,9 +825,253 @@ begin
   end;
 end;
 
-procedure TSchemaFromMethodTests.RecordResult_HasNoResultSchema;
+procedure TSchemaFromMethodTests.RecordResult_IsTheRecordSchema;
 begin
-  Assert.IsNull(ResultSchemaOf('Total'));
+  var Schema := ResultSchemaOf('Total');
+  try
+    Assert.AreEqual('object', Schema.GetValue<string>('properties.result.type'));
+    Assert.AreEqual('number', Schema.GetValue<string>('properties.result.properties.amount.type'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.result.properties.currency.type'));
+
+    const Required = Schema.FindValue('properties.result.required') as TJSONArray;
+    Assert.AreEqual(2, Required.Count);
+    Assert.AreEqual('amount', Required.Items[0].Value);
+    Assert.AreEqual('currency', Required.Items[1].Value);
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordParameter_IsAnObjectWithItsFields;
+begin
+  var Schema := SchemaOf('WithMoney');
+  try
+    Assert.AreEqual('object', Schema.GetValue<string>('properties.money.type'));
+    Assert.AreEqual('number', Schema.GetValue<string>('properties.money.properties.amount.type'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.money.properties.currency.type'));
+
+    const Required = Schema.FindValue('properties.money.required') as TJSONArray;
+    Assert.AreEqual(2, Required.Count);
+    Assert.AreEqual('amount', Required.Items[0].Value);
+    Assert.AreEqual('currency', Required.Items[1].Value);
+    Assert.IsNull(Schema.FindValue('properties.money.additionalProperties'),
+      'a record with fields says as little about additional properties as a class with properties');
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordParameter_MatchesWhatSchemaFromTypeProduces;
+begin
+  var Schema := SchemaOf('WithMoney');
+  try
+    const Parameters = MethodOf('WithMoney').GetParameters;
+    var Expected := TMCPSchemaGenerator.GenerateSchemaFromType(Parameters[0].ParamType);
+    try
+      Assert.AreEqual(Expected.ToJSON, (Schema.FindValue('properties.money') as TJSONObject).ToJSON);
+    finally
+      Expected.Free;
+    end;
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.NestedRecord_IsDescribedInPlace;
+begin
+  var Schema := SchemaOf('WithContact');
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.contact.properties.name.type'));
+    Assert.AreEqual('object', Schema.GetValue<string>('properties.contact.properties.home.type'));
+    Assert.AreEqual('string',
+      Schema.GetValue<string>('properties.contact.properties.home.properties.street.type'));
+    Assert.AreEqual('string',
+      Schema.GetValue<string>('properties.contact.properties.home.properties.city.type'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordInsideAClass_IsDescribed;
+begin
+  var Schema := SchemaOf('WithPricedLine');
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.line.properties.sku.type'));
+    Assert.AreEqual('object', Schema.GetValue<string>('properties.line.properties.price.type'));
+    Assert.AreEqual('number',
+      Schema.GetValue<string>('properties.line.properties.price.properties.amount.type'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.ClassInsideARecord_IsDescribed;
+begin
+  var Schema := SchemaOf('WithShipment');
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.shipment.properties.reference.type'));
+    Assert.AreEqual('object', Schema.GetValue<string>('properties.shipment.properties.carrier.type'));
+    Assert.AreEqual('string',
+      Schema.GetValue<string>('properties.shipment.properties.carrier.properties.name.type'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordArrayParameter_ItemsAreTheRecordSchema;
+begin
+  var Schema := SchemaOf('WithMoneys');
+  try
+    Assert.AreEqual('array', Schema.GetValue<string>('properties.moneys.type'));
+    Assert.AreEqual('object', Schema.GetValue<string>('properties.moneys.items.type'));
+    Assert.AreEqual('number', Schema.GetValue<string>('properties.moneys.items.properties.amount.type'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.moneys.items.properties.currency.type'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordHoldingAnArray_IsDescribed;
+begin
+  var Schema := SchemaOf('WithBasket');
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.basket.properties.owner.type'));
+    Assert.AreEqual('array', Schema.GetValue<string>('properties.basket.properties.skus.type'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.basket.properties.skus.items.type'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordFieldAttributes_AreApplied;
+begin
+  var Schema := SchemaOf('WithAnnotatedFields');
+  try
+    const Fields = Schema.FindValue('properties.stamped.properties') as TJSONObject;
+
+    Assert.IsNotNull(Fields.GetValue('placed_at'), '[SchemaName] renames the field');
+    Assert.IsNull(Fields.GetValue('placedat'), 'and the field name itself is gone');
+    Assert.AreEqual('Placed at', Fields.GetValue<string>('placed_at.title'));
+    Assert.AreEqual('When the order was placed', Fields.GetValue<string>('placed_at.description'));
+    Assert.AreEqual('date', Fields.GetValue<string>('placed_at.format'),
+      'SchemaFormat replaces the date-time a TDateTime carries by default');
+
+    Assert.AreEqual(1, Fields.GetValue<Integer>('count.minimum'));
+    Assert.AreEqual(10, Fields.GetValue<Integer>('count.maximum'));
+
+    Assert.AreEqual(2, Fields.GetValue<Integer>('code.minLength'));
+    Assert.AreEqual(8, Fields.GetValue<Integer>('code.maxLength'));
+    Assert.AreEqual('^[a-z]+$', Fields.GetValue<string>('code.pattern'));
+    Assert.AreEqual('abc', Fields.GetValue<string>('code.default'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.OptionalRecordField_StaysOutOfRequired;
+begin
+  var Schema := SchemaOf('WithAnnotatedFields');
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.stamped.properties.note.type'),
+      'an optional field is still described');
+
+    const Required = Schema.FindValue('properties.stamped.required') as TJSONArray;
+    Assert.AreEqual(3, Required.Count);
+    Assert.AreEqual('placed_at', Required.Items[0].Value);
+    Assert.AreEqual('count', Required.Items[1].Value);
+    Assert.AreEqual('code', Required.Items[2].Value);
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.PrivateRecordField_IsNotDescribed;
+begin
+  var Schema := SchemaOf('WithAnnotatedFields');
+  try
+    const Fields = Schema.FindValue('properties.stamped.properties') as TJSONObject;
+    Assert.AreEqual(4, Fields.Count, 'only the public fields are on the wire');
+    Assert.IsNull(Fields.GetValue('fchecksum'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.SelfReferencingRecord_StopsAtTheDepthGuard;
+begin
+  var Schema := SchemaOf('WithSelfNode');
+  try
+    var Level := Schema.FindValue('properties.node') as TJSONObject;
+    var Depth := 0;
+    while Assigned(Level.FindValue('properties.children.items.properties')) do
+    begin
+      Level := Level.FindValue('properties.children.items') as TJSONObject;
+      Inc(Depth);
+      Assert.IsTrue(Depth < 32, 'the walk must stop, not recurse forever');
+    end;
+
+    Assert.IsTrue(Depth > 0, 'the record describes itself at least once');
+    Assert.AreEqual('object',
+      (Level.FindValue('properties.children.items') as TJSONObject).GetValue<string>('type'),
+      'the deepest level is an opaque object, not another walk');
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordWithDocumentedFieldRtti_KeepsItsFieldsAndAttributes;
+begin
+  var Schema := SchemaOf('WithDocumentedMoney');
+  try
+    Assert.AreEqual('number', Schema.GetValue<string>('properties.money.properties.amount.type'));
+    Assert.AreEqual('Amount in the smallest unit',
+      Schema.GetValue<string>('properties.money.properties.amount.description'));
+    Assert.AreEqual(0, Schema.GetValue<Integer>('properties.money.properties.amount.minimum'));
+
+    const Fields = Schema.FindValue('properties.money.properties') as TJSONObject;
+    Assert.AreEqual(1, Fields.Count,
+      'FIELDS([vcPublic]) publishes the public fields and leaves the private one off the wire');
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.RecordWithoutFieldRtti_IsRejected;
+begin
+  const Method = MethodOf('WithOpaqueMoney');
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      TMCPSchemaGenerator.GenerateSchemaFromMethod(Method).Free;
+    end,
+    EArgumentException,
+    'Parameter "Money" of WithOpaqueMoney is record TOpaqueMoney, which publishes no field RTTI, ' +
+    'so it has no schema. Declare it in a unit whose field RTTI covers its public fields, for ' +
+    'example {$RTTI EXPLICIT FIELDS([vcPublic])}.');
+end;
+
+procedure TSchemaFromMethodTests.RecordResultWithoutFieldRtti_HasNoResultSchema;
+begin
+  Assert.IsNull(ResultSchemaOf('OpaqueTotal'),
+    'a result whose members cannot be seen is published as no output schema at all');
+end;
+
+procedure TSchemaFromMethodTests.InterfaceParameter_IsRejected;
+begin
+  const Method = MethodOf('WithInterface');
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      TMCPSchemaGenerator.GenerateSchemaFromMethod(Method).Free;
+    end,
+    EArgumentException,
+    'Parameter "Thing" of WithInterface is of type IInterface, which has no JSON schema');
+end;
+
+procedure TSchemaFromMethodTests.InterfaceResult_HasNoResultSchema;
+begin
+  Assert.IsNull(ResultSchemaOf('FindThing'),
+    'a result that cannot cross a wire is published as no output schema at all');
 end;
 
 procedure TSchemaFromMethodTests.SchemaFromType_DescribesAPrimitiveAnArrayAndAClass;
@@ -629,6 +1158,80 @@ begin
   var Schema := TMCPSchemaGenerator.GenerateSchema(TDialectFilter);
   try
     Assert.AreEqual('https://json-schema.org/draft/2020-12/schema', Schema.GetValue<string>('$schema'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.GuidParameter_IsAStringWithUuidFormat;
+begin
+  var Schema := SchemaOf('WithGuid');
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.id.type'));
+    Assert.AreEqual('uuid', Schema.GetValue<string>('properties.id.format'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.GuidProperty_IsAStringWithUuidFormat;
+begin
+  var Schema := TMCPSchemaGenerator.GenerateSchema(TTaggedFilter);
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.id.type'),
+      'TGUID.D4 has no type RTTI, so a TGUID is described as the string it travels as');
+    Assert.AreEqual('uuid', Schema.GetValue<string>('properties.id.format'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.name.type'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.GuidResult_IsAStringWithUuidFormat;
+begin
+  var Schema := ResultSchemaOf('MakeGuid');
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.result.type'));
+    Assert.AreEqual('uuid', Schema.GetValue<string>('properties.result.format'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.FieldWithoutTypeRtti_IsRejectedNamingTheField;
+begin
+  const Method = MethodOf('WithRawFrame');
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      TMCPSchemaGenerator.GenerateSchemaFromMethod(Method).Free;
+    end,
+    EArgumentException,
+    'Field TRawFrame.Payload has no type RTTI, so it has no schema');
+end;
+
+procedure TSchemaFromMethodTests.UndescribablePropertyKinds_StayStringsOnTheClassWalk;
+begin
+  var Schema := TMCPSchemaGenerator.GenerateSchema(TLegacyFilter);
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.anything.type'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.thing.type'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.ondone.type'));
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.kind.type'));
+    Assert.AreEqual('integer', Schema.GetValue<string>('properties.count.type'),
+      'one property the generator cannot describe leaves the rest of the class described');
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TSchemaFromMethodTests.OpaqueRecordProperty_StaysAStringOnTheClassWalk;
+begin
+  var Schema := TMCPSchemaGenerator.GenerateSchema(TLegacyFilter);
+  try
+    Assert.AreEqual('string', Schema.GetValue<string>('properties.money.type'),
+      'a record whose fields are invisible keeps the string every record was described as');
+    Assert.IsNull(Schema.FindValue('properties.money.properties'));
   finally
     Schema.Free;
   end;

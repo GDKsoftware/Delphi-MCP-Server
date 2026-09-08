@@ -15,16 +15,30 @@ type
     class var FContext: TRttiContext;
     class function GetJsonName(const Member: TRttiNamedObject): string;
     class function IsRequired(const Member: TRttiNamedObject): Boolean;
+    class function IsGuid(const RttiType: TRttiType): Boolean;
+    class function IsSchemaField(const RttiField: TRttiField): Boolean;
+    class function HasSchemaFields(const RttiType: TRttiType): Boolean;
+    class function IsOpaqueRecord(const RttiType: TRttiType): Boolean;
     class function CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
     class function ListItemType(RttiType: TRttiType): TRttiType;
     class function TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+    class function SimpleSchema(const JsonType: string): TJSONObject;
+    class function GuidSchema: TJSONObject;
+    class function ItemsSchema(const Site: string; const ElementType: TRttiType; Depth: Integer): TJSONObject;
     class procedure DescribeFloat(RttiType: TRttiType; const Schema: TJSONObject);
     class procedure DescribeSet(RttiType: TRttiType; const Schema: TJSONObject);
-    class function ClassSchema(RttiType: TRttiType; Depth: Integer; const Schema: TJSONObject): TJSONObject;
+    class function ClassSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+    class function RecordSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
     class function ObjectSchema(RttiType: TRttiType; Depth: Integer; const IsRoot: Boolean): TJSONObject;
+    class procedure DescribeProperties(RttiType: TRttiType; Depth: Integer;
+                                       const Properties: TJSONObject; const RequiredArray: TJSONArray);
+    class procedure DescribeFields(RttiType: TRttiType; Depth: Integer;
+                                   const Properties: TJSONObject; const RequiredArray: TJSONArray);
     class function NumberValue(const Value: Double): TJSONNumber;
     class procedure ApplyAttributes(const Member: TRttiNamedObject; const MemberSchema: TJSONObject);
+    class procedure GuardMemberHasType(const Site: string; const RttiType: TRttiType);
     class procedure GuardParameterHasSchema(const Method: TRttiMethod; const Param: TRttiParameter);
+    class procedure GuardParameterRecordHasFields(const Method: TRttiMethod; const Param: TRttiParameter);
   public
     class constructor Create;
     class destructor Destroy;
@@ -55,11 +69,14 @@ const
   SCHEMA_KEY_PROPERTIES = 'properties';
   SCHEMA_KEY_REQUIRED = 'required';
   SCHEMA_KEY_RESULT = 'result';
+  SCHEMA_FORMAT_UUID = 'uuid';
 
   DEPTH_ABOVE_ROOT = -1;
 
-  UNDESCRIBABLE_RESULT_KINDS = [tkUnknown, tkPointer, tkProcedure, tkMethod, tkClassRef,
-    tkInterface, tkRecord, tkMRecord];
+  UNDESCRIBABLE_KINDS = [tkUnknown, tkPointer, tkProcedure, tkMethod, tkClassRef,
+    tkInterface, tkVariant];
+
+  RECORD_KINDS = [tkRecord, tkMRecord];
 
 
 { TMCPSchemaGenerator }
@@ -89,8 +106,9 @@ begin
   if not Assigned(RttiType) then
     Exit(nil);
 
-  if RttiType.TypeKind = tkClass then
-    Exit(ClassSchema(RttiType, DEPTH_ABOVE_ROOT, TJSONObject.Create));
+  const DescribesItsOwnMembers = (RttiType.TypeKind = tkClass) or (RttiType.TypeKind in RECORD_KINDS);
+  if DescribesItsOwnMembers then
+    Exit(TypeSchema(RttiType, DEPTH_ABOVE_ROOT));
 
   Result := TypeSchema(RttiType, 0);
 end;
@@ -139,7 +157,10 @@ end;
 class function TMCPSchemaGenerator.GenerateSchemaFromMethodResult(const Method: TRttiMethod): TJSONObject;
 begin
   const ReturnType = Method.ReturnType;
-  if not Assigned(ReturnType) or (ReturnType.TypeKind in UNDESCRIBABLE_RESULT_KINDS) then
+  if not Assigned(ReturnType) or (ReturnType.TypeKind in UNDESCRIBABLE_KINDS) then
+    Exit(nil);
+
+  if IsOpaqueRecord(ReturnType) then
     Exit(nil);
 
   Result := TJSONObject.Create;
@@ -173,6 +194,33 @@ begin
     raise EArgumentException.CreateFmt(
       'Parameter "%s" of %s is a var or out parameter, so it has no schema: a tool answers with its result',
       [Param.Name, Method.Name]);
+
+  const HasNoJsonShape = (Param.ParamType.TypeKind in UNDESCRIBABLE_KINDS);
+  if HasNoJsonShape then
+    raise EArgumentException.CreateFmt(
+      'Parameter "%s" of %s is of type %s, which has no JSON schema',
+      [Param.Name, Method.Name, Param.ParamType.Name]);
+
+  GuardParameterRecordHasFields(Method, Param);
+end;
+
+class procedure TMCPSchemaGenerator.GuardParameterRecordHasFields(const Method: TRttiMethod;
+  const Param: TRttiParameter);
+begin
+  if not IsOpaqueRecord(Param.ParamType) then
+    Exit;
+
+  raise EArgumentException.CreateFmt(
+    'Parameter "%s" of %s is record %s, which publishes no field RTTI, so it has no schema. ' +
+    'Declare it in a unit whose field RTTI covers its public fields, for example ' +
+    '{$RTTI EXPLICIT FIELDS([vcPublic])}.',
+    [Param.Name, Method.Name, Param.ParamType.Name]);
+end;
+
+class procedure TMCPSchemaGenerator.GuardMemberHasType(const Site: string; const RttiType: TRttiType);
+begin
+  if not Assigned(RttiType) then
+    raise EArgumentException.CreateFmt('%s has no type RTTI, so it has no schema', [Site]);
 end;
 
 class function TMCPSchemaGenerator.GetJsonName(const Member: TRttiNamedObject): string;
@@ -192,6 +240,30 @@ begin
     if Attr is OptionalAttribute then
       Exit(False);
   Result := True;
+end;
+
+class function TMCPSchemaGenerator.IsGuid(const RttiType: TRttiType): Boolean;
+begin
+  Result := (RttiType.Handle = TypeInfo(TGUID));
+end;
+
+class function TMCPSchemaGenerator.IsSchemaField(const RttiField: TRttiField): Boolean;
+begin
+  Result := (RttiField.Visibility in SCHEMA_FIELD_VISIBILITIES);
+end;
+
+class function TMCPSchemaGenerator.HasSchemaFields(const RttiType: TRttiType): Boolean;
+begin
+  for var RttiField in RttiType.GetFields do
+    if IsSchemaField(RttiField) then
+      Exit(True);
+  Result := False;
+end;
+
+class function TMCPSchemaGenerator.IsOpaqueRecord(const RttiType: TRttiType): Boolean;
+begin
+  Result := ((RttiType.TypeKind in RECORD_KINDS) and not IsGuid(RttiType) and
+             not HasSchemaFields(RttiType));
 end;
 
 class function TMCPSchemaGenerator.CreateEnumValuesArray(RttiType: TRttiType): TJSONArray;
@@ -256,43 +328,77 @@ begin
     Items.AddPair(SCHEMA_KEY_ENUM, Names);
 end;
 
-class function TMCPSchemaGenerator.ClassSchema(RttiType: TRttiType; Depth: Integer;
-  const Schema: TJSONObject): TJSONObject;
+class function TMCPSchemaGenerator.SimpleSchema(const JsonType: string): TJSONObject;
 begin
-  Result := Schema;
+  Result := TJSONObject.Create;
+  Result.AddPair(MCP_KEY_TYPE, JsonType);
+end;
+
+class function TMCPSchemaGenerator.GuidSchema: TJSONObject;
+begin
+  Result := SimpleSchema(SCHEMA_TYPE_STRING);
+  Result.AddPair(SCHEMA_KEY_FORMAT, SCHEMA_FORMAT_UUID);
+end;
+
+class function TMCPSchemaGenerator.ItemsSchema(const Site: string; const ElementType: TRttiType;
+  Depth: Integer): TJSONObject;
+begin
+  GuardMemberHasType(Site, ElementType);
+
+  Result := TypeSchema(ElementType, Depth + 1);
+end;
+
+class function TMCPSchemaGenerator.ClassSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+begin
   const Metaclass = TRttiInstanceType(RttiType).MetaclassType;
   if Metaclass.InheritsFrom(TJSONArray) then
-  begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
-    Exit;
-  end;
+    Exit(SimpleSchema(SCHEMA_TYPE_ARRAY));
   if Metaclass.InheritsFrom(TJSONValue) then
-  begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
-    Exit;
-  end;
+    Exit(SimpleSchema(SCHEMA_TYPE_OBJECT));
 
   const ItemType = ListItemType(RttiType);
   if Assigned(ItemType) then
   begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
-    Schema.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ItemType, Depth + 1));
+    Result := SimpleSchema(SCHEMA_TYPE_ARRAY);
+    try
+      Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ItemType, Depth + 1));
+    except
+      Result.Free;
+      raise;
+    end;
     Exit;
   end;
 
   const FitsAnotherLevel = (Depth < MAX_NESTING_DEPTH);
   if not FitsAnotherLevel then
-  begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
-    Exit;
-  end;
+    Exit(SimpleSchema(SCHEMA_TYPE_OBJECT));
 
-  Schema.Free;
+  Result := ObjectSchema(RttiType, Depth + 1, False);
+end;
+
+class function TMCPSchemaGenerator.RecordSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
+begin
+  if IsGuid(RttiType) then
+    Exit(GuidSchema);
+
+  if not HasSchemaFields(RttiType) then
+    Exit(SimpleSchema(SCHEMA_TYPE_STRING));
+
+  const FitsAnotherLevel = (Depth < MAX_NESTING_DEPTH);
+  if not FitsAnotherLevel then
+    Exit(SimpleSchema(SCHEMA_TYPE_OBJECT));
+
   Result := ObjectSchema(RttiType, Depth + 1, False);
 end;
 
 class function TMCPSchemaGenerator.TypeSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
 begin
+  if RttiType.TypeKind = tkClass then
+    Exit(ClassSchema(RttiType, Depth));
+
+  if RttiType.TypeKind in RECORD_KINDS then
+    Exit(RecordSchema(RttiType, Depth));
+
   Result := TJSONObject.Create;
   try
     case RttiType.TypeKind of
@@ -321,18 +427,17 @@ begin
         begin
           Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
           const ElementType = TRttiDynamicArrayType(RttiType).ElementType;
-          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ElementType, Depth + 1));
+          const ElementSite = Format('Element of %s', [RttiType.Name]);
+          Result.AddPair(SCHEMA_KEY_ITEMS, ItemsSchema(ElementSite, ElementType, Depth));
         end;
 
       tkArray:
         begin
           Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_ARRAY);
           const ElementType = TRttiArrayType(RttiType).ElementType;
-          Result.AddPair(SCHEMA_KEY_ITEMS, TypeSchema(ElementType, Depth + 1));
+          const ElementSite = Format('Element of %s', [RttiType.Name]);
+          Result.AddPair(SCHEMA_KEY_ITEMS, ItemsSchema(ElementSite, ElementType, Depth));
         end;
-
-      tkClass:
-        Result := ClassSchema(RttiType, Depth, Result);
     else
       Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
     end;
@@ -406,22 +511,18 @@ begin
           Result.AddPair('$schema', SchemaDialectAttribute(Attr).Uri);
 
     Result.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_OBJECT);
-    var Properties := TJSONObject.Create;
+    const Properties = TJSONObject.Create;
     Result.AddPair(SCHEMA_KEY_PROPERTIES, Properties);
-    var RequiredArray := TJSONArray.Create;
-
-    for var RttiProp in RttiType.GetProperties do
-    begin
-      if not (RttiProp.IsReadable and RttiProp.IsWritable) then
-        Continue;
-
-      var JsonName := GetJsonName(RttiProp);
-      var PropSchema := TypeSchema(RttiProp.PropertyType, Depth);
-      Properties.AddPair(JsonName, PropSchema);
-      ApplyAttributes(RttiProp, PropSchema);
-
-      if IsRequired(RttiProp) then
-        RequiredArray.Add(JsonName);
+    const RequiredArray = TJSONArray.Create;
+    try
+      const DescribesItsFields = (RttiType.TypeKind in RECORD_KINDS);
+      if DescribesItsFields then
+        DescribeFields(RttiType, Depth, Properties, RequiredArray)
+      else
+        DescribeProperties(RttiType, Depth, Properties, RequiredArray);
+    except
+      RequiredArray.Free;
+      raise;
     end;
 
     const HasRequiredArray = (RequiredArray.Count > 0);
@@ -443,6 +544,48 @@ begin
   except
     Result.Free;
     raise;
+  end;
+end;
+
+class procedure TMCPSchemaGenerator.DescribeProperties(RttiType: TRttiType; Depth: Integer;
+  const Properties: TJSONObject; const RequiredArray: TJSONArray);
+begin
+  for var RttiProp in RttiType.GetProperties do
+  begin
+    if not (RttiProp.IsReadable and RttiProp.IsWritable) then
+      Continue;
+
+    GuardMemberHasType(Format('Property %s.%s', [RttiType.Name, RttiProp.Name]),
+      RttiProp.PropertyType);
+
+    const JsonName = GetJsonName(RttiProp);
+    const PropSchema = TypeSchema(RttiProp.PropertyType, Depth);
+    Properties.AddPair(JsonName, PropSchema);
+    ApplyAttributes(RttiProp, PropSchema);
+
+    if IsRequired(RttiProp) then
+      RequiredArray.Add(JsonName);
+  end;
+end;
+
+class procedure TMCPSchemaGenerator.DescribeFields(RttiType: TRttiType; Depth: Integer;
+  const Properties: TJSONObject; const RequiredArray: TJSONArray);
+begin
+  for var RttiField in RttiType.GetFields do
+  begin
+    if not IsSchemaField(RttiField) then
+      Continue;
+
+    GuardMemberHasType(Format('Field %s.%s', [RttiType.Name, RttiField.Name]),
+      RttiField.FieldType);
+
+    const JsonName = GetJsonName(RttiField);
+    const FieldSchema = TypeSchema(RttiField.FieldType, Depth);
+    Properties.AddPair(JsonName, FieldSchema);
+    ApplyAttributes(RttiField, FieldSchema);
+
+    if IsRequired(RttiField) then
+      RequiredArray.Add(JsonName);
   end;
 end;
 

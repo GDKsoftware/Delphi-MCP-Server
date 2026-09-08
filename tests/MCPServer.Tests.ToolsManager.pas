@@ -53,6 +53,30 @@ type
     constructor CreateNamed(const AName: string);
   end;
 
+  TLegacyDoneEvent = procedure of object;
+
+  TLegacyParams = class
+  private
+    FAnything: Variant;
+    FThing: IInterface;
+    FOnDone: TLegacyDoneEvent;
+    FKind: TClass;
+    FCount: Integer;
+  public
+    property Anything: Variant read FAnything write FAnything;
+    property Thing: IInterface read FThing write FThing;
+    property OnDone: TLegacyDoneEvent read FOnDone write FOnDone;
+    property Kind: TClass read FKind write FKind;
+    property Count: Integer read FCount write FCount;
+  end;
+
+  TLegacyTool = class(TMCPToolBase<TLegacyParams>)
+  protected
+    function ExecuteWithParams(const Params: TLegacyParams): string; override;
+  public
+    constructor Create; override;
+  end;
+
   [TestFixture]
   TToolsManagerTests = class
   private
@@ -94,6 +118,9 @@ type
 
     [Test]
     procedure List_IsInRegistrationOrder_WithAnnotations;
+
+    [Test]
+    procedure UndescribableProperties_AreStringsAndHideNoOtherTool;
 
     [Test]
     procedure MarkReadOnly_SetsBothHints_Once;
@@ -190,6 +217,20 @@ begin
   FName := 'read_only';
   MarkReadOnly(True);
   MarkReadOnly(True);
+end;
+
+{ TLegacyTool }
+
+constructor TLegacyTool.Create;
+begin
+  inherited;
+  FName := 'legacy_variant';
+  FDescription := 'A tool whose parameter class predates the schema rules';
+end;
+
+function TLegacyTool.ExecuteWithParams(const Params: TLegacyParams): string;
+begin
+  Result := Params.Count.ToString;
 end;
 
 function THandWrittenTool.BuildSchema: TJSONObject;
@@ -350,6 +391,31 @@ begin
     Assert.IsTrue(ReadOnly);
     Assert.AreEqual('integer',
       Json.GetValue<string>('tools[' + (Tools.Count - 2).ToString + '].inputSchema.properties.value.type'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TToolsManagerTests.UndescribableProperties_AreStringsAndHideNoOtherTool;
+begin
+  FManager.AddTool(TLegacyTool.Create);
+
+  const Json = FManager.ListTools(nil, TMCPProtocolEra.Legacy).AsType<TJSONObject>;
+  try
+    const Tools = Json.GetValue('tools') as TJSONArray;
+    const Last = Tools.Count - 1;
+    Assert.AreEqual('legacy_variant', Tools.Items[Last].GetValue<string>('name'));
+    Assert.AreEqual('hand_written', Tools.Items[Last - 1].GetValue<string>('name'),
+      'a property the generator cannot describe hides no tool that was listed before it');
+    Assert.AreEqual('doubling', Tools.Items[Last - 2].GetValue<string>('name'));
+    Assert.AreEqual('echo', Json.GetValue<string>('tools[0].name'));
+
+    const Prefix = Format('tools[%d].inputSchema.properties.', [Last]);
+    Assert.AreEqual('string', Json.GetValue<string>(Prefix + 'anything.type'));
+    Assert.AreEqual('string', Json.GetValue<string>(Prefix + 'thing.type'));
+    Assert.AreEqual('string', Json.GetValue<string>(Prefix + 'ondone.type'));
+    Assert.AreEqual('string', Json.GetValue<string>(Prefix + 'kind.type'));
+    Assert.AreEqual('integer', Json.GetValue<string>(Prefix + 'count.type'));
   finally
     Json.Free;
   end;

@@ -35,6 +35,18 @@ type
     property Quantity: Integer read FQuantity write FQuantity;
   end;
 
+  TSampleBox = record
+    Width: Integer;
+    Height: Integer;
+  end;
+
+  TSampleLabelled = record
+    Caption: string;
+    Box: TSampleBox;
+    [Optional]
+    Note: string;
+  end;
+
   TSampleTarget = class
   private
     FSeen: string;
@@ -53,6 +65,9 @@ type
     function Tagged([SchemaName('colour_tag')] const Tag: string): string;
     function WithOptional(const Base: string; [Optional] const Suffix: string): string;
     function Keep(const Filter: TCountedFilter): string;
+    function Area(const Box: TSampleBox): Integer;
+    function Grow(const Box: TSampleBox): TSampleBox;
+    function Caption(const Labelled: TSampleLabelled): string;
     property Seen: string read FSeen;
     property Kept: TCountedFilter read FKept;
   end;
@@ -175,6 +190,30 @@ type
 
     [Test]
     procedure ThroughTheManager_ReportsAnEnvelopeWithoutItsOutputSchema;
+
+    [Test]
+    procedure RecordParameter_IsMarshalled;
+
+    [Test]
+    procedure RecordResult_IsTheResultMember;
+
+    [Test]
+    procedure RecordResult_ValidatesAgainstItsOutputSchema;
+
+    [Test]
+    procedure RecordParameter_IsPublishedAsAnObjectInTheInputSchema;
+
+    [Test]
+    procedure NestedRecordParameter_IsMarshalled;
+
+    [Test]
+    procedure RecordParameter_OptionalFieldMayBeOmitted;
+
+    [Test]
+    procedure RecordParameter_MissingFieldRaisesArgumentException;
+
+    [Test]
+    procedure RecordParameter_WrongFieldTypeRaisesArgumentException;
   end;
 
 implementation
@@ -279,6 +318,23 @@ begin
   FKept.Free;
   FKept := Filter;
   Result := Filter.Customer;
+end;
+
+function TSampleTarget.Area(const Box: TSampleBox): Integer;
+begin
+  Result := Box.Width * Box.Height;
+end;
+
+function TSampleTarget.Grow(const Box: TSampleBox): TSampleBox;
+begin
+  Result.Width := Box.Width * 2;
+  Result.Height := Box.Height * 2;
+end;
+
+function TSampleTarget.Caption(const Labelled: TSampleLabelled): string;
+begin
+  Result := Format('%s %dx%d%s',
+    [Labelled.Caption, Labelled.Box.Width, Labelled.Box.Height, Labelled.Note]);
 end;
 
 destructor TSampleTarget.Destroy;
@@ -775,6 +831,102 @@ begin
     TLogger.MinLogLevel := OriginalLevel;
     Warnings.Free;
   end;
+end;
+
+procedure TMethodToolTests.RecordParameter_IsMarshalled;
+begin
+  const Json = Run(ToolFor('Area'), '{"box":{"width":3,"height":4}}');
+  try
+    Assert.AreEqual(12, Json.GetValue<Integer>('result'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TMethodToolTests.RecordResult_IsTheResultMember;
+begin
+  const Json = Run(ToolFor('Grow'), '{"box":{"width":3,"height":4}}');
+  try
+    Assert.AreEqual('{"result":{"width":6,"height":8}}', Json.ToJSON);
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TMethodToolTests.RecordResult_ValidatesAgainstItsOutputSchema;
+begin
+  const Tool = ToolFor('Grow');
+
+  const Schema = Tool.GetOutputSchema;
+  try
+    Assert.IsNotNull(Schema, 'a record result describes itself');
+
+    const Json = Run(Tool, '{"box":{"width":1,"height":2}}');
+    try
+      var Errors: TArray<string>;
+      Assert.IsTrue(TMCPSchemaValidator.TryValidate(Schema, Json, Errors),
+        string.Join('; ', Errors));
+    finally
+      Json.Free;
+    end;
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TMethodToolTests.RecordParameter_IsPublishedAsAnObjectInTheInputSchema;
+begin
+  const Schema = ToolFor('Area').GetInputSchema;
+  try
+    Assert.AreEqual('object', Schema.GetValue<string>('properties.box.type'));
+    Assert.AreEqual('integer', Schema.GetValue<string>('properties.box.properties.width.type'));
+    Assert.AreEqual('integer', Schema.GetValue<string>('properties.box.properties.height.type'));
+  finally
+    Schema.Free;
+  end;
+end;
+
+procedure TMethodToolTests.NestedRecordParameter_IsMarshalled;
+begin
+  const Json = Run(ToolFor('Caption'),
+    '{"labelled":{"caption":"tile","box":{"width":2,"height":5},"note":"!"}}');
+  try
+    Assert.AreEqual('tile 2x5!', Json.GetValue<string>('result'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TMethodToolTests.RecordParameter_OptionalFieldMayBeOmitted;
+begin
+  const Json = Run(ToolFor('Caption'), '{"labelled":{"caption":"tile","box":{"width":2,"height":5}}}');
+  try
+    Assert.AreEqual('tile 2x5', Json.GetValue<string>('result'));
+  finally
+    Json.Free;
+  end;
+end;
+
+procedure TMethodToolTests.RecordParameter_MissingFieldRaisesArgumentException;
+begin
+  const Tool = ToolFor('Area');
+  Assert.WillRaise(
+    procedure
+    begin
+      Run(Tool, '{"box":{"width":3}}').Free;
+    end,
+    EArgumentException);
+end;
+
+procedure TMethodToolTests.RecordParameter_WrongFieldTypeRaisesArgumentException;
+begin
+  const Tool = ToolFor('Area');
+  Assert.WillRaise(
+    procedure
+    begin
+      Run(Tool, '{"box":{"width":"three","height":4}}').Free;
+    end,
+    EArgumentException);
 end;
 
 end.
