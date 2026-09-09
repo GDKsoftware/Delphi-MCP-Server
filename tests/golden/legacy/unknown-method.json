@@ -1,0 +1,15 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 20,
+    "method": "totally/bogus/method"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 20,
+    "error": {
+      "code": -32601,
+      "message": "Method [totally/bogus/method] not found. The method does not exist or is not available."
+    }
+  }
+}

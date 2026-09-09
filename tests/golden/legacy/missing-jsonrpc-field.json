@@ -1,0 +1,14 @@
+{
+  "request": {
+    "id": 25,
+    "method": "ping"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 25,
+    "error": {
+      "code": -32600,
+      "message": "jsonrpc must be \"2.0\""
+    }
+  }
+}

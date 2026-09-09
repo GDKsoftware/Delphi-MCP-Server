@@ -10,7 +10,7 @@ uses
 
 type
   TOperationType = (otAdd, otSubtract, otMultiply, otDivide);
-  
+
   TCalculateParams = class
   private
     FOperation: string;
@@ -20,10 +20,10 @@ type
     [SchemaDescription('Operation: add, subtract, multiply, divide')]
     [SchemaEnum('add', 'subtract', 'multiply', 'divide')]
     property Operation: string read FOperation write FOperation;
-    
+
     [SchemaDescription('First number')]
     property A: Double read FA write FA;
-    
+
     [SchemaDescription('Second number')]
     property B: Double read FB write FB;
   end;
@@ -40,12 +40,16 @@ implementation
 uses
   MCPServer.Registration;
 
+const
+  TOOL_NAME = 'calculate';
+
+
 { TCalculateTool }
 
 constructor TCalculateTool.Create;
 begin
   inherited;
-  FName := 'calculate';
+  FName := TOOL_NAME;
   FDescription := 'Perform basic arithmetic calculations';
 end;
 
@@ -74,14 +78,14 @@ begin
     Result := 'Error: Unknown operation: ' + Params.Operation;
     Exit;
   end;
-  
+
   Result := Format('%s %s %s = %g', [
     FloatToStr(Params.A), Params.Operation, FloatToStr(Params.B), ResultValue
   ]);
 end;
 
 initialization
-  TMCPRegistry.RegisterTool('calculate',
+  TMCPRegistry.RegisterTool(TOOL_NAME,
     function: IMCPTool
     begin
       Result := TCalculateTool.Create;

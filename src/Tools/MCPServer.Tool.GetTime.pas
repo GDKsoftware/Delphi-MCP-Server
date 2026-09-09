@@ -24,12 +24,16 @@ implementation
 uses
   MCPServer.Registration;
 
+const
+  TOOL_NAME = 'get_time';
+
+
 { TGetTimeTool }
 
 constructor TGetTimeTool.Create;
 begin
   inherited;
-  FName := 'get_time';
+  FName := TOOL_NAME;
   FDescription := 'Get the current server time in ISO format';
 end;
 
@@ -39,7 +43,7 @@ begin
 end;
 
 initialization
-  TMCPRegistry.RegisterTool('get_time',
+  TMCPRegistry.RegisterTool(TOOL_NAME,
     function: IMCPTool
     begin
       Result := TGetTimeTool.Create;

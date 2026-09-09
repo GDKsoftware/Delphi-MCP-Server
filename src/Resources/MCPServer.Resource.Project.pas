@@ -25,7 +25,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    
+
     property Name: string read FName write FName;
     property Version: string read FVersion write FVersion;
     property Description: string read FDescription write FDescription;
@@ -59,11 +59,17 @@ type
     constructor Create; override;
   end;
 
-
 implementation
 
 uses
   MCPServer.Registration;
+
+const
+  FENCE = '```';
+  FENCE_BASH = '```bash';
+  URI_INFO = 'project://info';
+  URI_README = 'project://readme';
+  PROJECT_RESOURCE_TTL_MS = 3600000;
 
 { TProjectInfo }
 
@@ -84,10 +90,12 @@ end;
 constructor TProjectInfoResource.Create;
 begin
   inherited;
-  FURI := 'project://info';
+  FURI := URI_INFO;
   FName := 'Project Information';
   FDescription := 'Basic information about the Delphi MCP Server project';
   FMimeType := 'application/json';
+  FTtlMs := PROJECT_RESOURCE_TTL_MS;
+  FCacheScope := MCP_CACHE_SCOPE_PUBLIC;
 end;
 
 function TProjectInfoResource.GetResourceData: TProjectInfo;
@@ -98,7 +106,8 @@ begin
   Result.Description := 'A Model Context Protocol (MCP) server implementation in Delphi';
   Result.Language := 'Delphi';
   Result.Framework := 'Indy HTTP Server (TIdHTTPServer)';
-  Result.Protocol := 'MCP ' + MCP_PROTOCOL_VERSION;
+  Result.Protocol := 'MCP ' + MCP_LATEST_PROTOCOL_VERSION + ' (initialize-based: '
+    + MCP_PROTOCOL_VERSION_2025_11_25 + ', ' + MCP_PROTOCOL_VERSION_2025_06_18 + ')';
   Result.Transport := 'Streamable HTTP';
   Result.Author := 'GDK Software';
   Result.Repository := 'https://github.com/GDKsoftware/delphi-mcp-server';
@@ -113,10 +122,12 @@ end;
 constructor TProjectReadmeResource.Create;
 begin
   inherited;
-  FURI := 'project://readme';
+  FURI := URI_README;
   FName := 'Project README';
   FDescription := 'README.md file contents';
   FMimeType := 'text/markdown';
+  FTtlMs := PROJECT_RESOURCE_TTL_MS;
+  FCacheScope := MCP_CACHE_SCOPE_PUBLIC;
 end;
 
 function TProjectReadmeResource.GetResourceData: TTextContent;
@@ -135,37 +146,36 @@ begin
 '- CORS support for cross-origin requests' + sLineBreak +
 '' + sLineBreak +
 '## Building' + sLineBreak +
-'```bash' + sLineBreak +
+FENCE_BASH + sLineBreak +
 'build.bat' + sLineBreak +
-'```' + sLineBreak +
+FENCE + sLineBreak +
 '' + sLineBreak +
 '## Running' + sLineBreak +
-'```bash' + sLineBreak +
+FENCE_BASH + sLineBreak +
 'Win32\Debug\MCPServer.exe' + sLineBreak +
-'```' + sLineBreak +
+FENCE + sLineBreak +
 '' + sLineBreak +
 '## Testing' + sLineBreak +
-'```bash' + sLineBreak +
+FENCE_BASH + sLineBreak +
 'npx @wong2/mcp-cli --url http://localhost:8080/mcp' + sLineBreak +
-'```' + sLineBreak +
+FENCE + sLineBreak +
 '''';
 end;
 
-
 initialization
-  TMCPRegistry.RegisterResource('project://info',
+  TMCPRegistry.RegisterResource(URI_INFO,
     function: IMCPResource
     begin
       Result := TProjectInfoResource.Create;
     end
   );
-  
-  TMCPRegistry.RegisterResource('project://readme',
+
+  TMCPRegistry.RegisterResource(URI_README,
     function: IMCPResource
     begin
       Result := TProjectReadmeResource.Create;
     end
   );
-  
+
 
 end.

@@ -1,0 +1,32 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "tools/call",
+    "params": {
+      "name": "no_such_tool",
+      "arguments": {
+      },
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {
+        },
+        "io.modelcontextprotocol/clientInfo": {
+          "name": "golden-client",
+          "version": "1.0.0"
+        }
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "error": {
+      "code": -32602,
+      "message": "Unknown tool: no_such_tool",
+      "data": {
+        "name": "no_such_tool"
+      }
+    }
+  }
+}

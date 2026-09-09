@@ -1,0 +1,27 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 19,
+    "method": "resources/templates/list"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 19,
+    "result": {
+      "resourceTemplates": [
+        {
+          "uriTemplate": "logs://{level}",
+          "name": "Recent logs by level",
+          "description": "Recent log entries at the given level, e.g. logs://INFO",
+          "mimeType": "application/json"
+        },
+        {
+          "uriTemplate": "test://template/{id}/data",
+          "name": "Template data",
+          "description": "Data keyed by an id path segment",
+          "mimeType": "application/json"
+        }
+      ]
+    }
+  }
+}

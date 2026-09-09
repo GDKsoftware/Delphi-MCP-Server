@@ -1,0 +1,181 @@
+unit MCPServer.Errors;
+
+interface
+
+uses
+  System.SysUtils,
+  System.JSON,
+  MCPServer.Types;
+
+type
+  EMCPError = class(Exception)
+  private
+    FCode: Integer;
+    FData: TJSONValue;
+    FHttpStatus: Integer;
+  public
+    constructor Create(ACode: Integer; const AMessage: string; AData: TJSONValue = nil;
+      AHttpStatus: Integer = 0); reintroduce;
+    destructor Destroy; override;
+
+    function DetachData: TJSONValue;
+
+    class function ParseError(const AMessage: string): EMCPError;
+    class function InvalidRequest(const AMessage: string): EMCPError;
+    class function MethodNotFound(const Method: string): EMCPError;
+    class function InvalidParams(const AMessage: string; AData: TJSONValue = nil): EMCPError;
+    class function InternalError(const AMessage: string): EMCPError;
+    class function HeaderMismatch(const AMessage: string): EMCPError;
+    class function MissingRequiredClientCapability(const RequiredCapabilities: TJSONObject): EMCPError;
+    class function UnsupportedProtocolVersion(const Requested: string; const Supported: TArray<string>): EMCPError;
+    class function UnknownTool(const Name: string): EMCPError;
+    class function UnknownPrompt(const Name: string): EMCPError;
+    class function ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
+    class function InsufficientScope(const Scope: string): EMCPError;
+    function RequiredScope: string;
+
+    property Code: Integer read FCode;
+    property Data: TJSONValue read FData;
+    property HttpStatus: Integer read FHttpStatus write FHttpStatus;
+  end;
+
+  EMCPToolError = class(Exception);
+
+  EMCPTransportError = class(Exception)
+  end;
+
+  EMCPConfigurationError = class(Exception)
+  end;
+
+  EMCPRequestCancelled = class(Exception);
+
+const
+  HTTP_STATUS_OK = 200;
+  HTTP_STATUS_FORBIDDEN = 403;
+  HTTP_STATUS_ACCEPTED = 202;
+  HTTP_STATUS_BAD_REQUEST = 400;
+  HTTP_STATUS_NOT_FOUND = 404;
+
+implementation
+
+const
+  KEY_REQUIRED_SCOPE = 'requiredScope';
+  MESSAGE_RESOURCE_NOT_FOUND = 'Resource not found';
+
+{ EMCPError }
+
+constructor EMCPError.Create(ACode: Integer; const AMessage: string; AData: TJSONValue; AHttpStatus: Integer);
+begin
+  inherited Create(AMessage);
+  FCode := ACode;
+  FData := AData;
+  FHttpStatus := AHttpStatus;
+end;
+
+destructor EMCPError.Destroy;
+begin
+  FData.Free;
+  inherited;
+end;
+
+function EMCPError.DetachData: TJSONValue;
+begin
+  Result := FData;
+  FData := nil;
+end;
+
+class function EMCPError.ParseError(const AMessage: string): EMCPError;
+begin
+  Result := EMCPError.Create(JSONRPC_PARSE_ERROR, AMessage);
+end;
+
+class function EMCPError.InvalidRequest(const AMessage: string): EMCPError;
+begin
+  Result := EMCPError.Create(JSONRPC_INVALID_REQUEST, AMessage);
+end;
+
+class function EMCPError.MethodNotFound(const Method: string): EMCPError;
+begin
+  Result := EMCPError.Create(JSONRPC_METHOD_NOT_FOUND,
+    Format('Method [%s] not found. The method does not exist or is not available.', [Method]));
+end;
+
+class function EMCPError.InvalidParams(const AMessage: string; AData: TJSONValue): EMCPError;
+begin
+  Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, AMessage, AData);
+end;
+
+class function EMCPError.InternalError(const AMessage: string): EMCPError;
+begin
+  Result := EMCPError.Create(JSONRPC_INTERNAL_ERROR, AMessage);
+end;
+
+class function EMCPError.HeaderMismatch(const AMessage: string): EMCPError;
+begin
+  Result := EMCPError.Create(MCP_ERROR_HEADER_MISMATCH, AMessage, nil, HTTP_STATUS_BAD_REQUEST);
+end;
+
+class function EMCPError.MissingRequiredClientCapability(const RequiredCapabilities: TJSONObject): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair('requiredCapabilities', RequiredCapabilities);
+  Result := EMCPError.Create(MCP_ERROR_MISSING_REQUIRED_CLIENT_CAPABILITY,
+    'Missing required client capability', Data, HTTP_STATUS_BAD_REQUEST);
+end;
+
+class function EMCPError.UnsupportedProtocolVersion(const Requested: string; const Supported: TArray<string>): EMCPError;
+begin
+  var SupportedArray := TJSONArray.Create;
+  for var Version in Supported do
+  begin
+    SupportedArray.Add(Version);
+  end;
+
+  var Data := TJSONObject.Create;
+  Data.AddPair('supported', SupportedArray);
+  Data.AddPair('requested', Requested);
+
+  Result := EMCPError.Create(MCP_ERROR_UNSUPPORTED_PROTOCOL_VERSION,
+    'Unsupported protocol version', Data, HTTP_STATUS_BAD_REQUEST);
+end;
+
+class function EMCPError.UnknownTool(const Name: string): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair(MCP_KEY_NAME, Name);
+  Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown tool: ' + Name, Data);
+end;
+
+class function EMCPError.UnknownPrompt(const Name: string): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair(MCP_KEY_NAME, Name);
+  Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, 'Unknown prompt: ' + Name, Data);
+end;
+
+function EMCPError.RequiredScope: string;
+begin
+  Result := '';
+  if Data is TJSONObject then
+    Result := TJSONObject(Data).GetValue<string>(KEY_REQUIRED_SCOPE, '');
+end;
+
+class function EMCPError.InsufficientScope(const Scope: string): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair(KEY_REQUIRED_SCOPE, Scope);
+  Result := EMCPError.Create(JSONRPC_INVALID_REQUEST, Format('The %s scope is required', [Scope]), Data, HTTP_STATUS_FORBIDDEN);
+end;
+
+class function EMCPError.ResourceNotFound(const Uri: string; Era: TMCPProtocolEra): EMCPError;
+begin
+  var Data := TJSONObject.Create;
+  Data.AddPair(MCP_KEY_URI, Uri);
+  const IsModern = (Era = TMCPProtocolEra.Modern);
+  if IsModern then
+    Result := EMCPError.Create(JSONRPC_INVALID_PARAMS, MESSAGE_RESOURCE_NOT_FOUND, Data)
+  else
+    Result := EMCPError.Create(MCP_ERROR_RESOURCE_NOT_FOUND_LEGACY, MESSAGE_RESOURCE_NOT_FOUND, Data);
+end;
+
+end.

@@ -1,0 +1,73 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "resources/list",
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {
+        },
+        "io.modelcontextprotocol/clientInfo": {
+          "name": "golden-client",
+          "version": "1.0.0"
+        }
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "result": {
+      "resources": [
+        {
+          "uri": "server://status",
+          "name": "server_status",
+          "description": "Current server status and health information",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "logs://recent",
+          "name": "Recent Logs",
+          "description": "Recent log entries from all categories",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "project://info",
+          "name": "Project Information",
+          "description": "Basic information about the Delphi MCP Server project",
+          "mimeType": "application/json"
+        },
+        {
+          "uri": "project://readme",
+          "name": "Project README",
+          "description": "README.md file contents",
+          "mimeType": "text/markdown"
+        },
+        {
+          "uri": "test://static-text",
+          "name": "Static text",
+          "title": "Static text resource",
+          "description": "A fixed text resource",
+          "mimeType": "text/plain"
+        },
+        {
+          "uri": "test://static-binary",
+          "name": "Static binary",
+          "title": "Static binary resource",
+          "description": "A fixed PNG image",
+          "mimeType": "image/png"
+        }
+      ],
+      "ttlMs": 0,
+      "cacheScope": "private",
+      "resultType": "complete",
+      "_meta": {
+        "io.modelcontextprotocol/serverInfo": {
+          "name": "delphi-mcp-server",
+          "version": "1.0.0"
+        }
+      }
+    }
+  }
+}

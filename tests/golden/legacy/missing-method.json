@@ -1,0 +1,14 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 26
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 26,
+    "error": {
+      "code": -32600,
+      "message": "method must be a string"
+    }
+  }
+}

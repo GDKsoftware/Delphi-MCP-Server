@@ -1,0 +1,19 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 27,
+    "method": "tools/call",
+    "params": [
+      1,
+      2
+    ]
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 27,
+    "error": {
+      "code": -32602,
+      "message": "params must be an object"
+    }
+  }
+}

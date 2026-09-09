@@ -1,0 +1,23 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "tools/call",
+    "params": {
+      "name": "no_such_tool",
+      "arguments": {
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "error": {
+      "code": -32602,
+      "message": "Unknown tool: no_such_tool",
+      "data": {
+        "name": "no_such_tool"
+      }
+    }
+  }
+}

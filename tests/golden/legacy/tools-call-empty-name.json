@@ -1,0 +1,20 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "tools/call",
+    "params": {
+      "name": "",
+      "arguments": {
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "error": {
+      "code": -32602,
+      "message": "params.name is required and must be a non-empty string"
+    }
+  }
+}

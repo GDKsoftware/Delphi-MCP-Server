@@ -1,0 +1,13 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": "request-24",
+    "method": "ping"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": "request-24",
+    "result": {
+    }
+  }
+}

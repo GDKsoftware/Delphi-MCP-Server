@@ -91,6 +91,9 @@ backup/
 *.temp
 ~$*
 
-# Claude Code specific
-
 # Dependencies
+package-lock.json
+
+# Test and conformance output
+tests/results/
+results/

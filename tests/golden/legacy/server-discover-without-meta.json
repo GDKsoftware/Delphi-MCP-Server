@@ -1,0 +1,15 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 21,
+    "method": "server/discover"
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 21,
+    "error": {
+      "code": -32602,
+      "message": "server/discover requires params._meta.io.modelcontextprotocol/protocolVersion"
+    }
+  }
+}

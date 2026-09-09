@@ -1,0 +1,23 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 14,
+    "method": "resources/read",
+    "params": {
+      "uri": "project://info"
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 14,
+    "result": {
+      "contents": [
+        {
+          "uri": "project://info",
+          "mimeType": "application/json",
+          "text": "{\"name\":\"delphi-mcp-server\",\"version\":\"1.0.0\",\"description\":\"A Model Context Protocol (MCP) server implementation in Delphi\",\"language\":\"Delphi\",\"framework\":\"Indy HTTP Server (TIdHTTPServer)\",\"protocol\":\"MCP 2026-07-28 (initialize-based: 2025-11-25, 2025-06-18)\",\"transport\":\"Streamable HTTP\",\"author\":\"GDK Software\",\"repository\":\"https://github.com/GDKsoftware/delphi-mcp-server\",\"features\":[\"Tools capability\",\"Resources capability\",\"JSON-RPC 2.0 support\",\"CORS support\"]}"
+        }
+      ]
+    }
+  }
+}

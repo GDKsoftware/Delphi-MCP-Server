@@ -1,0 +1,105 @@
+unit MCPServer.Tests.Capabilities;
+
+interface
+
+uses
+  DUnitX.TestFramework;
+
+type
+  [TestFixture]
+  TCapabilityBuilderTests = class
+  public
+    [Test]
+    procedure Registry_YieldsAllManagersInRegistrationOrder;
+
+    [Test]
+    procedure Registry_NeverEmitsLogging;
+
+    [Test]
+    procedure RegistryWithoutEnumeration_YieldsDefaults;
+  end;
+
+implementation
+
+uses
+  System.SysUtils,
+  System.JSON,
+  MCPServer.Types,
+  MCPServer.Capabilities,
+  MCPServer.Tests.Harness,
+  System.Generics.Collections;
+
+type
+  TOpaqueRegistry = class(TInterfacedObject, IMCPManagerRegistry)
+  public
+    procedure RegisterManager(const Manager: IMCPCapabilityManager);
+    function GetManagerForMethod(const Method: string): IMCPCapabilityManager;
+  end;
+
+procedure TOpaqueRegistry.RegisterManager(const Manager: IMCPCapabilityManager);
+begin
+end;
+
+function TOpaqueRegistry.GetManagerForMethod(const Method: string): IMCPCapabilityManager;
+begin
+  Result := nil;
+end;
+
+{ TCapabilityBuilderTests }
+
+procedure TCapabilityBuilderTests.Registry_YieldsAllManagersInRegistrationOrder;
+begin
+  var Harness := TMCPTestHarness.Create;
+  try
+    var Capabilities := TMCPCapabilityBuilder.Build(Harness.ManagerRegistry, TMCPProtocolEra.Modern);
+    try
+      Assert.AreEqual(4, Capabilities.Count);
+      Assert.AreEqual('tools', Capabilities.Pairs[0].JsonString.Value);
+      Assert.AreEqual('resources', Capabilities.Pairs[1].JsonString.Value);
+      Assert.AreEqual('prompts', Capabilities.Pairs[2].JsonString.Value);
+      Assert.AreEqual('completions', Capabilities.Pairs[3].JsonString.Value);
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('tools.listChanged'));
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('resources.subscribe'));
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('resources.listChanged'));
+      Assert.IsTrue(Capabilities.GetValue<Boolean>('prompts.listChanged'));
+      Assert.IsTrue(Capabilities.GetValue('completions') is TJSONObject);
+    finally
+      Capabilities.Free;
+    end;
+  finally
+    Harness.Free;
+  end;
+end;
+
+procedure TCapabilityBuilderTests.Registry_NeverEmitsLogging;
+begin
+  var Harness := TMCPTestHarness.Create;
+  try
+    for var Era in [TMCPProtocolEra.Legacy, TMCPProtocolEra.Modern] do
+    begin
+      var Capabilities := TMCPCapabilityBuilder.Build(Harness.ManagerRegistry, Era);
+      try
+        Assert.IsNull(Capabilities.GetValue('logging'));
+        Assert.IsNull(Capabilities.GetValue('extensions'));
+      finally
+        Capabilities.Free;
+      end;
+    end;
+  finally
+    Harness.Free;
+  end;
+end;
+
+procedure TCapabilityBuilderTests.RegistryWithoutEnumeration_YieldsDefaults;
+begin
+  var Registry: IMCPManagerRegistry := TOpaqueRegistry.Create;
+  var Capabilities := TMCPCapabilityBuilder.Build(Registry, TMCPProtocolEra.Legacy);
+  try
+    Assert.IsNotNull(Capabilities.GetValue('tools'));
+    Assert.IsNotNull(Capabilities.GetValue('resources'));
+  finally
+    Capabilities.Free;
+  end;
+end;
+
+end.

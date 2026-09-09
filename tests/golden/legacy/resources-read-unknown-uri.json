@@ -1,0 +1,21 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 17,
+    "method": "resources/read",
+    "params": {
+      "uri": "nope://missing"
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 17,
+    "error": {
+      "code": -32002,
+      "message": "Resource not found",
+      "data": {
+        "uri": "nope://missing"
+      }
+    }
+  }
+}
