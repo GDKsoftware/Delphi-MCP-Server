@@ -5,8 +5,10 @@ echo Delphi MCP Server Test Build Script (DUnitX)
 echo ============================================
 echo.
 
-REM Set Delphi installation path - adjust if needed (same as build.bat)
-set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\37.0
+REM Set Delphi installation path - adjust if needed (same as build.bat). Set
+REM DELPHI_PATH yourself before calling this script to build with another Delphi
+REM version, for example Studio\22.0 for Delphi 11 Alexandria.
+if "%DELPHI_PATH%"=="" set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\37.0
 
 if not exist "!DELPHI_PATH!\bin\dcc32.exe" (
     echo ERROR: dcc32.exe not found at !DELPHI_PATH!\bin\

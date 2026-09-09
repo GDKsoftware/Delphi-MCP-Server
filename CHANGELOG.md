@@ -289,8 +289,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   carries no RTTI at all, with an `EArgumentException` naming the member.
   Reading the type kind off a member that has none was an access violation, and
   a `TGUID` was the way into it.
+- Delphi 11 Alexandria project files `src/MCPServer.D11.dproj` and
+  `tests/MCPServerTests.D11.dproj`, which build the same units into a separate
+  `D11` output directory. The source itself needs nothing newer than
+  Alexandria; only the Athens project files (`ProjectVersion 20.3`) did.
 
 ### Changed
+
+- `build.bat` and `build-tests.bat` keep a `DELPHI_PATH` set in the
+  environment instead of overwriting it, so another Delphi installation can be
+  used without editing the scripts.
 
 - `MCPServer.Application` holds the wiring the executable used to repeat for
   each transport: `TMCPServerApplication` builds a `TMCPServerHost` seeded from

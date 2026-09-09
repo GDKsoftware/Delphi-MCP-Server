@@ -1,6 +1,6 @@
 # Delphi MCP Server
 
-![Delphi](https://img.shields.io/badge/Delphi-12%2B-red)
+![Delphi](https://img.shields.io/badge/Delphi-11%2B-red)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![MCP](https://img.shields.io/badge/MCP-2026--07--28%20(dual--era)-green)
@@ -45,9 +45,20 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 
 ## Requirements
 
-- Delphi 12 Athens or later
+- Delphi 11 Alexandria or later. The source uses no language feature beyond inline variables (10.3) and no RTL unit newer than Delphi 11; development happens on Delphi 12 Athens, which is what the default project files target.
 - Windows (Win32/Win64) or Linux (x64)
 - No external dependencies (all required libraries included)
+
+### Building with Delphi 11 Alexandria
+
+`build.bat` and `build-tests.bat` compile the `.dpr` directly, so only `DELPHI_PATH` needs to point at your installation:
+
+```bash
+set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\22.0
+build.bat
+```
+
+For the IDE and for the Linux64 build, open `src/MCPServer.D11.dproj` (tests: `tests/MCPServerTests.D11.dproj`) instead of the Athens project files. They carry the same units and settings, write their output to a separate `D11` subdirectory, and exist because Alexandria will not load a `ProjectVersion 20.3` project file.
 
 ## Installation
 
@@ -1181,8 +1192,8 @@ We welcome contributions! Here's how to help:
 5. Submit a pull request
 
 ### Development Setup
-- Requires Delphi 12+ 
-- Open `MCPServer.dproj` or build with `build.bat`
+- Requires Delphi 11 Alexandria or later; the project files target Delphi 12 Athens
+- Open `MCPServer.dproj` or build with `build.bat`; on Alexandria use `MCPServer.D11.dproj`
 - Test with `npx @modelcontextprotocol/inspector` or Claude Code or similar
 
 ### Automated tests

@@ -13,8 +13,10 @@ if "%ERRORLEVEL%"=="0" (
     timeout /t 1 /nobreak >NUL
 )
 
-REM Set Delphi installation path - adjust if needed
-set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\37.0
+REM Set Delphi installation path - adjust if needed. Set DELPHI_PATH yourself
+REM before calling this script to build with another Delphi version, for example
+REM Studio\22.0 for Delphi 11 Alexandria.
+if "%DELPHI_PATH%"=="" set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\37.0
 
 REM Check if dcc32 exists
 if not exist "!DELPHI_PATH!\bin\dcc32.exe" (
