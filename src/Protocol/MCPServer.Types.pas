@@ -6,6 +6,7 @@ uses
   System.SysUtils,
   System.JSON,
   System.Rtti,
+  System.TypInfo,
   System.Generics.Collections;
 
 const
@@ -129,6 +130,8 @@ const
   );
   MCP_LOG_LEVELS: array[0..7] of string = (
     'debug', 'info', 'notice', 'warning', 'error', 'critical', 'alert', 'emergency');
+
+  SCHEMA_FIELD_VISIBILITIES = [mvPublic, mvPublished];
 
 type
   TMCPProtocolVersion = record

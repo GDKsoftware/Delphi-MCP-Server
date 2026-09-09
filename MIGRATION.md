@@ -89,6 +89,19 @@ and sets list their names, and a tool without parameters declares
 `additionalProperties: false`. Clients that validate arguments against the
 schema now reject `1.5` for an integer.
 
+**A record property is described and filled.** A property whose type is a
+record used to be published as `{"type": "string"}` and dropped when the
+arguments were unmarshalled. It is now published as the `type: object` its
+public fields describe, and filled from that object, so a client that sent a
+string for it must send an object, and a tool that always read such a property
+as empty now receives what the caller sent. A `TGUID` property stays a string
+and gains `format: uuid`. A record whose unit publishes no field RTTI has no
+fields to describe and stays the string it was; "Records in a schema" in the
+README carries the directive that makes those fields visible. Properties of
+every other kind are unchanged: a variant, an interface, a method pointer or a
+class reference is still published as `string`, so a tool that listed before
+lists now.
+
 **Result and resource JSON changed.** Enumerations are written by name (they
 were booleans), sets and dynamic arrays as arrays, `nil` objects as `null`
 and `TDateTime` as an ISO 8601 string. The `logs://recent` timestamps and the
