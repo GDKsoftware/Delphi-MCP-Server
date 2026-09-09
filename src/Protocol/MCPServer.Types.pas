@@ -81,6 +81,11 @@ const
   MEDIA_TYPE_EVENT_STREAM = 'text/event-stream';
   CHARSET_UTF8 = 'utf-8';
 
+  MCP_HEADER_SESSION_ID = 'Mcp-Session-Id';
+  MCP_HEADER_PROTOCOL_VERSION = 'MCP-Protocol-Version';
+  MCP_HEADER_METHOD = 'Mcp-Method';
+  MCP_HEADER_NAME = 'Mcp-Name';
+
   MCP_KEY_JSONRPC = 'jsonrpc';
   MCP_KEY_ID = 'id';
   MCP_KEY_METHOD = 'method';

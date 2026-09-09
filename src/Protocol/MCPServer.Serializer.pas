@@ -36,6 +36,9 @@ type
 
     class function NormalizeKey(const Name: string): string; inline;
     class function IsRequiredProperty(const Prop: TRttiProperty): Boolean;
+
+    class procedure CollectCreatedObjects(const Value: TValue; const RttiType: TRttiType;
+      const Owned: TList<TObject>);
   public
     class constructor Create;
     class destructor Destroy;
@@ -44,6 +47,10 @@ type
 
     class function Deserialize<T: class, constructor>(const Json: TJSONObject): T;
     class procedure Serialize(Obj: TObject; Json: TJSONObject);
+
+    class function JsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType;
+      const Owned: TList<TObject>): TValue;
+    class function ValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
 
     class function SerializeToString(Obj: TObject): string;
   end;
@@ -208,6 +215,53 @@ begin
   end;
 end;
 
+class procedure TMCPSerializer.CollectCreatedObjects(const Value: TValue; const RttiType: TRttiType;
+  const Owned: TList<TObject>);
+begin
+  if not Assigned(Owned) or Value.IsEmpty then
+    Exit;
+
+  case RttiType.TypeKind of
+    tkClass:
+      if Value.IsObject and (Value.AsObject <> nil) then
+        Owned.Add(Value.AsObject);
+
+    tkDynArray:
+      begin
+        const ElementType = TRttiDynamicArrayType(RttiType).ElementType;
+        if not Assigned(ElementType) or (ElementType.TypeKind <> tkClass) then
+          Exit;
+
+        for var I := 0 to Value.GetArrayLength - 1 do
+        begin
+          const Element = Value.GetArrayElement(I);
+          if Element.IsObject and (Element.AsObject <> nil) then
+            Owned.Add(Element.AsObject);
+        end;
+      end;
+  end;
+end;
+
+class function TMCPSerializer.JsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType;
+  const Owned: TList<TObject>): TValue;
+begin
+  Result := TValue.Empty;
+  if not Assigned(RttiType) then
+    Exit;
+
+  Result := ConvertJsonToValue(JsonValue, RttiType);
+  CollectCreatedObjects(Result, RttiType, Owned);
+end;
+
+class function TMCPSerializer.ValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
+begin
+  Result := nil;
+  if not Assigned(RttiType) then
+    Exit;
+
+  Result := ConvertValueToJson(Value, RttiType);
+end;
+
 class function TMCPSerializer.SerializeToString(Obj: TObject): string;
 var
   Json: TJSONObject;
@@ -260,6 +314,8 @@ begin
     Result := TValue.From<TDateTime>(ISO8601ToDate(JsonValue.Value, False));
   except
     on E: EConvertError do
+      raise EArgumentException.Create('expected an ISO 8601 date-time');
+    on E: EDateTimeException do
       raise EArgumentException.Create('expected an ISO 8601 date-time');
   end;
 end;

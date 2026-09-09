@@ -29,7 +29,8 @@ type
     function CreatePromptJSON(const Prompt: IMCPPrompt): TJSONObject;
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
   public
-    constructor Create;
+    constructor Create; overload;
+    constructor Create(const SeedFromRegistry: Boolean); overload;
     destructor Destroy; override;
 
     procedure AddPrompt(const Prompt: IMCPPrompt);
@@ -69,13 +70,19 @@ const
 
 constructor TMCPPromptsManager.Create;
 begin
-  inherited;
+  Create(True);
+end;
+
+constructor TMCPPromptsManager.Create(const SeedFromRegistry: Boolean);
+begin
+  inherited Create;
   FLock := TCriticalSection.Create;
   FPrompts := TDictionary<string, IMCPPrompt>.Create;
   FOrder := TList<string>.Create;
   FListTtlMs := 0;
   FListCacheScope := MCP_CACHE_SCOPE_PRIVATE;
-  RegisterBuiltInPrompts;
+  if SeedFromRegistry then
+    RegisterBuiltInPrompts;
 end;
 
 destructor TMCPPromptsManager.Destroy;

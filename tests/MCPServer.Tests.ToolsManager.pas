@@ -45,6 +45,14 @@ type
     constructor Create; override;
   end;
 
+  TProbeTool = class(TMCPToolBase)
+  protected
+    function BuildSchema: TJSONObject; override;
+    function DoExecute(const Arguments: TJSONObject): TValue; override;
+  public
+    constructor CreateNamed(const AName: string);
+  end;
+
   [TestFixture]
   TToolsManagerTests = class
   private
@@ -106,12 +114,49 @@ type
     procedure HandWrittenTool_WrongType_IsErrorResult;
   end;
 
+  [TestFixture]
+  TToolsManagerIsolationTests = class
+  private
+    function ToolNames(const Manager: TMCPToolsManager): TArray<string>;
+    function NewManagerWith(const SeedFromRegistry: Boolean; const ToolName: string): TMCPToolsManager;
+    function FirstRegisteredToolName: string;
+  public
+    [Test]
+    procedure Registry_HasAtLeastOneTool;
+
+    [Test]
+    procedure NoSeed_PublishesNoRegistryTool;
+
+    [Test]
+    procedure NoSeed_ListsOnlyItsOwnTool;
+
+    [Test]
+    procedure NoSeed_TwoManagersDoNotShareTools;
+
+    [Test]
+    procedure NoSeed_CallingARegistryTool_IsInvalidParams;
+
+    [Test]
+    procedure NoSeed_RunsItsOwnTool;
+
+    [Test]
+    procedure Parameterless_SeedsFromRegistry;
+
+    [Test]
+    procedure SeedTrue_MatchesTheParameterlessConstructor;
+  end;
+
 implementation
 
 uses
   System.SysUtils,
   MCPServer.Errors,
+  MCPServer.Registration,
   System.Generics.Collections;
+
+const
+  PROBE_FIRST = 'probe_first';
+  PROBE_SECOND = 'probe_second';
 
 { TDoublingTool }
 
@@ -396,6 +441,173 @@ begin
     Assert.IsTrue(Json.GetValue<string>('content[0].text').Contains('expected integer'));
   finally
     Json.Free;
+  end;
+end;
+
+{ TProbeTool }
+
+constructor TProbeTool.CreateNamed(const AName: string);
+begin
+  inherited Create;
+  FName := AName;
+  FDescription := 'A probe tool handed to a single manager';
+end;
+
+function TProbeTool.BuildSchema: TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(
+    '{"type":"object","properties":{},"additionalProperties":false}') as TJSONObject;
+end;
+
+function TProbeTool.DoExecute(const Arguments: TJSONObject): TValue;
+begin
+  Result := TValue.From<string>(FName + ' ran');
+end;
+
+{ TToolsManagerIsolationTests }
+
+function TToolsManagerIsolationTests.ToolNames(const Manager: TMCPToolsManager): TArray<string>;
+begin
+  Result := nil;
+  var Json := Manager.ListTools(nil, TMCPProtocolEra.Modern).AsType<TJSONObject>;
+  try
+    for var Tool in Json.GetValue('tools') as TJSONArray do
+      Result := Result + [Tool.GetValue<string>('name')];
+  finally
+    Json.Free;
+  end;
+end;
+
+function TToolsManagerIsolationTests.NewManagerWith(const SeedFromRegistry: Boolean;
+  const ToolName: string): TMCPToolsManager;
+begin
+  Result := TMCPToolsManager.Create(SeedFromRegistry);
+  Result.AddTool(TProbeTool.CreateNamed(ToolName));
+end;
+
+function TToolsManagerIsolationTests.FirstRegisteredToolName: string;
+begin
+  var Names := TMCPRegistry.GetToolNames;
+  Assert.IsTrue(Length(Names) > 0, 'no tool is registered globally');
+  Result := Names[0];
+end;
+
+procedure TToolsManagerIsolationTests.Registry_HasAtLeastOneTool;
+begin
+  Assert.IsTrue(Length(TMCPRegistry.GetToolNames) > 0,
+    'the seeding tests only mean something while the registry holds a tool');
+end;
+
+procedure TToolsManagerIsolationTests.NoSeed_PublishesNoRegistryTool;
+begin
+  var Manager := TMCPToolsManager.Create(False);
+  try
+    for var ToolName in TMCPRegistry.GetToolNames do
+      Assert.IsFalse(Manager.HasTool(ToolName), 'an unseeded manager must not publish ' + ToolName);
+    Assert.AreEqual<NativeInt>(0, Length(ToolNames(Manager)), 'an unseeded manager starts empty');
+  finally
+    Manager.Free;
+  end;
+end;
+
+procedure TToolsManagerIsolationTests.NoSeed_ListsOnlyItsOwnTool;
+begin
+  var Manager := NewManagerWith(False, PROBE_FIRST);
+  try
+    var Names := ToolNames(Manager);
+    Assert.AreEqual<NativeInt>(1, Length(Names), 'only the added tool is listed');
+    Assert.AreEqual(PROBE_FIRST, Names[0]);
+  finally
+    Manager.Free;
+  end;
+end;
+
+procedure TToolsManagerIsolationTests.NoSeed_TwoManagersDoNotShareTools;
+begin
+  var First := NewManagerWith(False, PROBE_FIRST);
+  try
+    var Second := NewManagerWith(False, PROBE_SECOND);
+    try
+      Assert.IsTrue(First.HasTool(PROBE_FIRST));
+      Assert.IsFalse(First.HasTool(PROBE_SECOND), 'the first manager sees only what it was given');
+      Assert.IsTrue(Second.HasTool(PROBE_SECOND));
+      Assert.IsFalse(Second.HasTool(PROBE_FIRST), 'the second manager sees only what it was given');
+    finally
+      Second.Free;
+    end;
+  finally
+    First.Free;
+  end;
+end;
+
+procedure TToolsManagerIsolationTests.NoSeed_CallingARegistryTool_IsInvalidParams;
+begin
+  var Manager := NewManagerWith(False, PROBE_FIRST);
+  try
+    var Params := TJSONObject.ParseJSONValue(
+      '{"name":"' + FirstRegisteredToolName + '","arguments":{}}') as TJSONObject;
+    try
+      try
+        Manager.CallTool(Params, TMCPProtocolEra.Modern).AsType<TJSONObject>.Free;
+        Assert.Fail('a globally registered tool must not be callable on an unseeded manager');
+      except
+        on E: EMCPError do
+          Assert.AreEqual(JSONRPC_INVALID_PARAMS, E.Code, E.Message);
+      end;
+    finally
+      Params.Free;
+    end;
+  finally
+    Manager.Free;
+  end;
+end;
+
+procedure TToolsManagerIsolationTests.NoSeed_RunsItsOwnTool;
+begin
+  var Manager := NewManagerWith(False, PROBE_FIRST);
+  try
+    var Params := TJSONObject.ParseJSONValue(
+      '{"name":"' + PROBE_FIRST + '","arguments":{}}') as TJSONObject;
+    try
+      var Json := Manager.CallTool(Params, TMCPProtocolEra.Modern).AsType<TJSONObject>;
+      try
+        Assert.IsNull(Json.GetValue('isError'));
+        Assert.AreEqual(PROBE_FIRST + ' ran', Json.GetValue<string>('content[0].text'));
+      finally
+        Json.Free;
+      end;
+    finally
+      Params.Free;
+    end;
+  finally
+    Manager.Free;
+  end;
+end;
+
+procedure TToolsManagerIsolationTests.Parameterless_SeedsFromRegistry;
+begin
+  var Manager := TMCPToolsManager.Create;
+  try
+    for var ToolName in TMCPRegistry.GetToolNames do
+      Assert.IsTrue(Manager.HasTool(ToolName), 'the parameterless constructor still seeds ' + ToolName);
+  finally
+    Manager.Free;
+  end;
+end;
+
+procedure TToolsManagerIsolationTests.SeedTrue_MatchesTheParameterlessConstructor;
+begin
+  var Seeded := TMCPToolsManager.Create(True);
+  try
+    var Parameterless := TMCPToolsManager.Create;
+    try
+      Assert.AreEqual(string.Join(',', ToolNames(Parameterless)), string.Join(',', ToolNames(Seeded)),
+        'Create(True) and Create publish the same tools in the same order');
+    finally
+      Parameterless.Free;
+    end;
+  finally
+    Seeded.Free;
   end;
 end;
 

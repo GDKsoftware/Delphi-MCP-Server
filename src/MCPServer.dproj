@@ -164,6 +164,7 @@
         <DCCReference Include="Resources\MCPServer.Resource.Project.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.Result.pas"/>
         <DCCReference Include="Server\MCPServer.StdioChannel.pas"/>
+        <DCCReference Include="Server\MCPServer.Host.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.InputRequiredSamples.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.SubscriptionSamples.pas"/>

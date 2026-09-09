@@ -41,9 +41,13 @@ if "!TAURUS_PATH!"=="" if exist "!CATALOG_DIR!\TaurusTLS-12\Source" set "TAURUS_
 
 :TaurusResolved
 if not "!TAURUS_PATH!"=="" (
-    set EXTRA_UNITS=;!TAURUS_PATH!
+    set "EXTRA_UNITS=;!TAURUS_PATH!"
+    set "EXTRA_INCLUDES=;!TAURUS_PATH!"
+    set "EXTRA_RES=-R!TAURUS_PATH!"
 ) else (
-    set EXTRA_UNITS=
+    set "EXTRA_UNITS="
+    set "EXTRA_INCLUDES="
+    set "EXTRA_RES="
     echo Warning: TaurusTLS not found. The HTTP server unit needs it.
 )
 
@@ -54,10 +58,10 @@ echo Building MCPServer.Tests - %CONFIG% %PLATFORM%
 echo.
 
 if "%PLATFORM%"=="Win32" (
-    !DCC32! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win32\debug";%UNIT_PATHS% -Isrc;!TAURUS_PATH!;"!DUNITX_PATH!" -R!TAURUS_PATH! -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServerTests.dpr
+    !DCC32! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win32\debug";%UNIT_PATHS% -Isrc!EXTRA_INCLUDES!;"!DUNITX_PATH!" !EXTRA_RES! -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServerTests.dpr
     goto :CheckBuildResult
 ) else if "%PLATFORM%"=="Win64" (
-    !DCC64! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win64\debug";%UNIT_PATHS% -Isrc;!TAURUS_PATH!;"!DUNITX_PATH!" -R!TAURUS_PATH! -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServerTests.dpr
+    !DCC64! -B -H -W -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\Win64\debug";%UNIT_PATHS% -Isrc!EXTRA_INCLUDES!;"!DUNITX_PATH!" !EXTRA_RES! -E%OUTPUT_DIR% -N0%OUTPUT_DIR% -D%CONFIG% tests\MCPServerTests.dpr
     goto :CheckBuildResult
 ) else (
     echo ERROR: Invalid platform. Use Win32 or Win64
