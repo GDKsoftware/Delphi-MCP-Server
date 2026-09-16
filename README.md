@@ -1,9 +1,9 @@
 # Delphi MCP Server
 
-![Delphi](https://img.shields.io/badge/Delphi-12%2B-red)
+![Delphi](https://img.shields.io/badge/Delphi-11%2B-red)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![MCP](https://img.shields.io/badge/MCP-2025--06--18-green)
+![MCP](https://img.shields.io/badge/MCP-2026--07--28%20(dual--era)-green)
 
 A Model Context Protocol (MCP) server implementation in Delphi, designed to integrate with Claude Code, Codex, and other MCP-compatible clients for AI-powered Delphi development workflows.
 
@@ -13,35 +13,52 @@ A Model Context Protocol (MCP) server implementation in Delphi, designed to inte
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Transport Modes](#transport-modes)
+- [Protocol Versions and Dual-Era Behaviour](#protocol-versions-and-dual-era-behaviour)
 - [Using as a Library](#using-as-a-library)
 - [Integration with Claude Code](#integration-with-claude-code)
 - [Integration with Codex](#integration-with-codex)
 - [Testing with MCP Inspector](#testing-with-mcp-inspector)
 - [Available Example Tools](#available-example-tools)
+- [Available Example Prompts](#available-example-prompts)
 - [Available Example Resources](#available-example-resources)
 - [Configuration](#configuration)
+  - [Authentication](#authentication)
+  - [Network and Security](#network-and-security)
 - [License](#license)
 - [Contributing](#contributing)
 - [About GDK Software](#about-gdk-software)
 - [Support](#support)
+- [Commercial Support](#commercial-support)
 
 ## Features
 
-- **Full MCP Protocol Support**: Implements MCP specification 2025-06-18 with Streamable HTTP and SSE
+- **Dual-era MCP**: Serves MCP 2026-07-28 (per-request `_meta`, `server/discover`) and the initialize-based revisions 2025-06-18 and 2025-11-25 on the same endpoint and the same stdio process; see [Protocol versions](#protocol-versions-and-dual-era-behaviour)
 - **Dual Transport Support**: HTTP (Streamable HTTP with SSE) and STDIO (stdin/stdout)
 - **Dual Response Mode**: Supports both JSON-RPC and Server-Sent Events in the same server
 - **Tool System**: Extensible tool system with RTTI-based discovery and execution
 - **Resource Management**: Modular resource system supporting various content types
-- **Security**: Built-in security features including CORS configuration
-- **High Performance**: Native implementation using Indy HTTP Server with keep-alive support
+- **Security**: `Origin` and `Host` validation against DNS rebinding on every request, loopback binding by default, CORS headers for browser clients, request size and nesting limits, opt-in bearer authentication with OAuth 2.1 resource-server discovery
+- **Multi round-trip requests, streaming and subscriptions**: `InputRequiredResult` with signed `requestState`, progress and log notifications on the response stream, `subscriptions/listen` for change notifications
+- **Native HTTP stack**: Indy HTTP server with keep-alive, no external runtime
 - **Optional Parameters**: Support for optional tool parameters using custom attributes
 - **Cross-Platform**: Supports Windows (Win32/Win64) and Linux (x64)
 
 ## Requirements
 
-- Delphi 12 Athens or later
+- Delphi 11 Alexandria or later. The source uses no language feature beyond inline variables (10.3) and no RTL unit newer than Delphi 11; development happens on Delphi 12 Athens, which is what the default project files target.
 - Windows (Win32/Win64) or Linux (x64)
 - No external dependencies (all required libraries included)
+
+### Building with Delphi 11 Alexandria
+
+`build.bat` and `build-tests.bat` compile the `.dpr` directly, so only `DELPHI_PATH` needs to point at your installation:
+
+```bash
+set DELPHI_PATH=C:\Program Files (x86)\Embarcadero\Studio\22.0
+build.bat
+```
+
+For the IDE and for the Linux64 build, open `src/MCPServer.D11.dproj` (tests: `tests/MCPServerTests.D11.dproj`) instead of the Athens project files. They carry the same units and settings, write their output to a separate `D11` subdirectory, and exist because Alexandria will not load a `ProjectVersion 20.3` project file.
 
 ## Installation
 
@@ -118,9 +135,12 @@ Win32\Debug\MCPServer.exe --stdio
 ```
 
 The server will:
-- Read JSON-RPC requests from stdin (one per line)
-- Write JSON-RPC responses to stdout (one per line)
-- Log diagnostic messages to stderr
+- Read JSON-RPC messages from stdin, UTF-8, one per line, no byte-order mark
+- Write JSON-RPC messages to stdout the same way
+- Log diagnostic messages to stderr, never to stdout
+- Answer `notifications/cancelled` by stopping the named request; it gets no response
+- Send `notifications/progress` for a request that carries `_meta.progressToken`, before its response
+- Exit within `[Server] MaxConcurrentRequests` worker threads' drain time (2 seconds by default) once stdin closes
 
 **Use STDIO transport for:**
 - Codex (OpenAI)
@@ -128,6 +148,84 @@ The server will:
 - Automated testing and scripting
 
 **Supported flag variants:** `--stdio`, `-stdio`, `/stdio`
+
+By default requests are answered one at a time, in the order they arrive.
+`[Server] MaxConcurrentRequests` in `settings.ini` raises the number of worker
+threads for a client that issues concurrent requests over the same process; a
+stdio server never writes `settings.ini` on its own, so this and the other
+`[Server]` limits still need explicit configuration when they should differ
+from the defaults.
+
+A tool sees the request it is answering through `TMCPRequestContext.Current`:
+`CheckCancelled` raises once the client cancels, `ReportProgress` sends a
+`notifications/progress` when the request carries a progress token, and
+`Log` sends a `notifications/message` when the request carries
+`_meta.io.modelcontextprotocol/logLevel` and the message's level is at or
+above it. See `test_tool_with_progress` and `test_logging_tool` in
+`MCPServer.Tool.ContentSamples` for worked examples.
+
+Over HTTP the same notifications reach the client on the response: when the
+request accepts `text/event-stream` and a tool sends one, the response turns
+into an SSE stream (chunked, `X-Accel-Buffering: no`) that carries the
+notifications first and the JSON-RPC response as its last event. A request
+that sends none is answered as before. A client that closes the stream
+cancels the request: the server's next write to it fails and the tool sees
+`IsCancelled`. That is the HTTP cancellation. A `notifications/cancelled`
+naming the same request is answered `202` and dropped, because the tracker a
+request consults is its own response stream and a notification always arrives
+on a connection of its own; only over stdio, where every message shares one
+channel, does the notification stop a running request.
+
+### Change notifications (`subscriptions/listen`)
+
+A modern client that wants to hear about changes opens a long-lived
+`subscriptions/listen` request with a `notifications` filter
+(`toolsListChanged`, `promptsListChanged`, `resourcesListChanged`,
+`resourceSubscriptions`: a list of URIs). `TMCPSubscriptionsManager`
+(`MCPServer.SubscriptionsManager`) answers with
+`notifications/subscriptions/acknowledged` carrying the honoured filter and
+keeps the stream open: over HTTP as an SSE response with a keep-alive comment
+every 15 seconds, over stdio on a thread of its own so the worker threads stay
+free. Every message on the subscription carries
+`_meta.io.modelcontextprotocol/subscriptionId`, the JSON-RPC id of the
+`subscriptions/listen` request. Closing the SSE stream, or sending
+`notifications/cancelled` for that id over stdio, ends the subscription;
+when the server stops (or stdin closes) it answers the request with a
+completion result first.
+
+Notifications are delivered synchronously on the thread that causes the
+change, so a subscriber that stops reading can hold up that thread until its
+socket buffer drains.
+
+Assign the manager as `ChangeNotifier` of the tools, prompts and resources
+managers, as `MCPServer.dpr` does, and the `tools`, `prompts` and `resources`
+capabilities announce `listChanged` (and `resources.subscribe`) to modern
+clients. `AddTool`, `RemoveTool`, `AddPrompt`, `RemovePrompt`, `AddResource`,
+`RemoveResource` and `AddResourceTemplate` then notify the subscribed clients,
+and `TMCPResourcesManager.ResourceUpdated(Uri)` reports a changed resource to
+the clients that subscribed to that URI. Without a `ChangeNotifier` nothing is
+announced and nothing is sent.
+
+## Protocol Versions and Dual-Era Behaviour
+
+The server decides per request which protocol era it is speaking; nothing is negotiated per connection and no session is minted.
+
+| Request | Era | Served as |
+|---|---|---|
+| `params._meta` with `io.modelcontextprotocol/protocolVersion` | modern | `2026-07-28`. `clientCapabilities` is required (`-32602`); an unknown revision gets `-32022` with the supported list; `initialize`, `ping`, `logging/setLevel` and `resources/subscribe` do not exist in this era (`-32601`). |
+| `initialize` without modern `_meta` | legacy | The requested revision when it is `2025-06-18` or `2025-11-25`, otherwise `2025-11-25`. The result carries `capabilities` and `serverInfo` only. |
+| `server/discover` without `_meta` | modern, malformed | `-32602` |
+| Anything else | legacy | The revision negotiated by `initialize` on this stdio process, the `MCP-Protocol-Version` header on HTTP, or `2025-11-25` when nothing is known. |
+
+Modern results carry `resultType`, `_meta.io.modelcontextprotocol/serverInfo` and, on `server/discover`, `tools/list`, `resources/list`, `resources/templates/list` and `resources/read`, the cache hints `ttlMs` and `cacheScope`. Legacy results are unchanged. Client responses (`result` or `error` without `method`) are ignored.
+
+Over HTTP, modern requests must carry `MCP-Protocol-Version`, `Mcp-Method` and, for `tools/call`, `resources/read` and `prompts/get`, `Mcp-Name` (Base64 sentinel encoding accepted); a missing or different header is `400` with `-32020`. Modern protocol errors get `400`, an unknown method `404`; legacy requests get `200` for every JSON-RPC error, except `400` for an unknown `MCP-Protocol-Version` header. Notifications get `202` with an empty body. Every 4xx to a modern request carries a JSON-RPC error body, so dual-era clients can tell a modern server from a legacy one.
+
+Handlers can read the era, the negotiated revision and the client's declared capabilities through `TMCPRequestContext.Current` (`MCPServer.RequestContext`) or by implementing `IMCPCapabilityManagerEx`, and can raise `EMCPError` (`MCPServer.Errors`) to send a specific JSON-RPC error code.
+
+`settings.ini` keys: `[Server] Title`, `Description`, `WebsiteUrl` and `Instructions` fill `serverInfo` and `instructions`; `[Protocol] LenientModernPing` answers `ping` in the modern era anyway, `DiscoverListsLegacyVersions` also lists the legacy revisions in `server/discover`, and `DiscoverTtlMs` is the cache hint on `server/discover`.
+
+`2025-03-26` is accepted on `initialize` but answered with `2025-11-25`; JSON-RPC batch arrays are rejected with `-32600`.
 
 ## Using as a Library
 
@@ -156,21 +254,25 @@ Copy the `src` folder from MCPServer into your project and add the units to your
    - `lib\mcpserver\src\Server`
    - `lib\mcpserver\src\Tools`
    - `lib\mcpserver\src\Resources`
+   - `lib\mcpserver\src\Prompts`
 
-2. **Required Units**: Include these core units in your project:
+2. **Required Units**: `MCPServer.Host` is the only unit a host needs; it pulls
+   in the managers, the HTTP server and the stdio transport:
    ```pascal
-   MCPServer.Types,
-   MCPServer.Settings,
-   MCPServer.Registration,
-   MCPServer.ManagerRegistry,
-   MCPServer.IdHTTPServer,      // For HTTP transport
-   MCPServer.StdioTransport,    // For STDIO transport
-   MCPServer.JsonRpcProcessor   // Shared JSON-RPC processing
+   MCPServer.Host,              // TMCPServerHost, the library facade
+   MCPServer.Types,             // Interfaces, protocol constants, schema attributes
+   MCPServer.Registration       // TMCPRegistry, for self-registering tools
    ```
+   Composing the managers by hand instead needs `MCPServer.Settings`,
+   `MCPServer.ManagerRegistry`, `MCPServer.CoreManager`, the managers you want,
+   and `MCPServer.IdHTTPServer` or `MCPServer.StdioTransport`.
 
 ### Library Integration
 
-Once you have the project setup complete, the simplest way to add MCP capabilities to your application:
+`TMCPServerHost` (`MCPServer.Host`) is the whole composition behind one class:
+it builds the managers, owns the HTTP server and drives either transport.
+`StartHttp` returns as soon as the server listens, so the host fits into an
+application that has a message loop of its own:
 
 ```pascal
 program YourMCPServer;
@@ -179,36 +281,77 @@ program YourMCPServer;
 
 uses
   System.SysUtils,
-  MCPServer.Types in 'lib\mcpserver\src\Protocol\MCPServer.Types.pas',
-  MCPServer.IdHTTPServer in 'lib\mcpserver\src\Server\MCPServer.IdHTTPServer.pas',
-  MCPServer.Settings in 'lib\mcpserver\src\Core\MCPServer.Settings.pas',
-  MCPServer.ManagerRegistry in 'lib\mcpserver\src\Core\MCPServer.ManagerRegistry.pas',
-  MCPServer.CoreManager in 'lib\mcpserver\src\Managers\MCPServer.CoreManager.pas',
-  MCPServer.ToolsManager in 'lib\mcpserver\src\Managers\MCPServer.ToolsManager.pas',
-  MCPServer.ResourcesManager in 'lib\mcpserver\src\Managers\MCPServer.ResourcesManager.pas';
+  MCPServer.Host in 'lib\mcpserver\src\Server\MCPServer.Host.pas',
+  YourProject.Tool.Custom in 'YourProject.Tool.Custom.pas';
 
-var
-  Server: TMCPIdHTTPServer;
-  Settings: TMCPSettings;
-  ManagerRegistry: IMCPManagerRegistry;
-  
 begin
-  Settings := TMCPSettings.Create;
+  const Host = TMCPServerHost.Create;
+  try
+    Host.Settings.Port := 3000;
+    Host.AddTool(TCustomTool.Create);
+    Host.StartHttp;
+
+    Writeln('MCP Server running on port ', Host.BoundPort);
+    Readln;
+
+    Host.Stop;
+  finally
+    Host.Free;
+  end;
+end.
+```
+
+**What a host starts with.** Nothing. A fresh host publishes only the tools,
+resources, resource templates and prompts it was handed through `AddTool`,
+`AddResource` and `AddPrompt`, so two hosts in one process publish exactly what
+each of them was given. `SeedFromGlobalRegistry := True` takes everything from
+`TMCPRegistry` instead, which is what the standalone server does; set it before
+the first call that builds the managers, or it raises
+`EMCPConfigurationError`. `[Server] ExposeDiagnosticsResources` is honoured
+either way: with it off, `server://status`, `logs://recent` and `logs://{level}`
+never reach the lists.
+
+**Settings.** `Create` reads no file at all and starts from the built-in
+defaults, which `Host.Settings` then lets you change in code.
+`Create(SettingsFile)` reads the `.ini` you name and writes none.
+`Create(Settings)` takes a `TMCPSettings` you built yourself and keep owning.
+Only the standalone server reads `settings.ini` from the executable's own
+directory.
+
+**Ports.** `Settings.Port := 0` asks the operating system for a free port and
+`BoundPort` reports the one it gave. A loopback server takes that same port on
+both its IPv4 and its IPv6 binding, so `localhost` reaches it whichever family
+the client resolves first. `StartHttp` and `Stop` are both idempotent.
+
+**Transports.** `RunStdio` blocks and is a console entry point only: the stdio
+transport claims stdout and redirects the logger to stderr for the whole
+process, so a GUI application must never call it. `RunStdioWith(Input, Output)`
+runs the same dispatch over two streams, which is how a test drives one line in
+and reads one line out.
+
+Composing the managers by hand still works, and is what to do when you need a
+manager the host does not build:
+
+```pascal
+var
+  ManagerRegistry: IMCPManagerRegistry;
+begin
+  const Settings = TMCPSettings.Create;
   try
     ManagerRegistry := TMCPManagerRegistry.Create;
     ManagerRegistry.RegisterManager(TMCPCoreManager.Create(Settings));
-    ManagerRegistry.RegisterManager(TMCPToolsManager.Create);
-    ManagerRegistry.RegisterManager(TMCPResourcesManager.Create);
-    
-    Server := TMCPIdHTTPServer.Create(nil);
+    ManagerRegistry.RegisterManager(TMCPToolsManager.Create(False));
+    ManagerRegistry.RegisterManager(TMCPResourcesManager.Create(False));
+
+    const Server = TMCPIdHTTPServer.Create(nil);
     try
       Server.Settings := Settings;
       Server.ManagerRegistry := ManagerRegistry;
       Server.Start;
-      
-      Writeln('MCP Server running on port ', Settings.Port);
-      Readln; // Keep running
-      
+
+      Writeln('MCP Server running on port ', Server.BoundPort);
+      Readln;
+
       Server.Stop;
     finally
       Server.Free;
@@ -218,6 +361,14 @@ begin
   end;
 end.
 ```
+
+#### Library checklist
+
+- **Register before you start, or hand them over afterwards.** The parameterless `TMCPToolsManager.Create`, `TMCPResourcesManager.Create` and `TMCPPromptsManager.Create` read `TMCPRegistry` once, so a registration made after the managers exist is not picked up: register your tools, resources and prompts (normally from unit `initialization` sections) first. `Create(False)`, and a `TMCPServerHost` left at its default `SeedFromGlobalRegistry`, read the registry not at all and publish only what you hand them, which you can do at any time.
+- **STDIO: keep stdout clean.** Everything on stdout must be an MCP message. `TMCPStdioTransport.Create` forces `TLogger.UseStdErr := True` and sets `TLogger.StdoutReserved`, so console logging goes to stderr and an attempt to switch it back is refused with a one-time warning. Never `Writeln` from tools, managers or resources; log through `TLogger`.
+- **`server://status` is registered by default** by the unit initialization of `MCPServer.Resource.Server`, and reaches every manager that seeds from the registry. `TServerStatusResource.SetNamePrefix('myapp_')` renames it to `server://myapp_status`; call it before the managers are created. `[Server] ExposeDiagnosticsResources = false` keeps it, `logs://recent` and `logs://{level}` out of the lists altogether.
+- **Error codes and protocol constants** live in `MCPServer.Types` (`JSONRPC_*`, `MCP_ERROR_*`, `MCP_PROTOCOL_VERSION_*`, `MCP_META_*`, and the header names `MCP_HEADER_SESSION_ID`, `MCP_HEADER_PROTOCOL_VERSION`, `MCP_HEADER_METHOD` and `MCP_HEADER_NAME`). The `JSONRPC_*` names in `MCPServer.JsonRpcProcessor` remain as aliases. `TMCPHeaderValue.Encode` (`MCPServer.HttpHeaders`) writes a value into a header the way `TryDecode` reads one back: a header-safe value passes through, anything else is wrapped in the `=?base64?...?=` sentinel.
+- **Prompts and completion are optional managers**, registered the same way as tools and resources: `ManagerRegistry.RegisterManager(TMCPPromptsManager.Create)` and, if you want argument completion, `ManagerRegistry.RegisterManager(TMCPCompletionManager.Create(PromptsManager, ResourcesManager))` (it needs the concrete manager instances, not the `IMCPCapabilityManager` interface, to look prompts and resource templates up by name). The `prompts` and `completions` capabilities are only advertised when these managers are registered.
 
 ### Creating Custom Tools
 
@@ -283,6 +434,251 @@ initialization
 end.
 ```
 
+Arguments are validated against the generated schema before the tool runs: a
+missing property without `[Optional]`, a value of the wrong JSON type or an
+unknown enumeration name is answered as an `isError` result that names the
+parameter. Integer properties are published as `integer`, `TDateTime` as a
+`string` with `format: date-time`, enumerations and sets with their names;
+`[SchemaTitle]`, `[SchemaFormat]`, `[SchemaMinimum]` and `[SchemaMaximum]`
+add the corresponding keywords.
+
+#### Records in a schema
+
+A record is described exactly the way a class is: `type: object` with one
+`properties` member per **public field**, and a `required` array holding the
+fields that carry no `[Optional]`. Records nest, hold arrays, hold classes and
+sit inside classes; the walk stops at the same depth guard the class walk uses,
+so a record that reaches itself through a `TArray<T>` cannot recurse forever.
+Every attribute that works on a class property works on a record field:
+`[SchemaDescription]`, `[SchemaTitle]`, `[SchemaFormat]`, `[SchemaMinimum]`,
+`[SchemaMaximum]`, `[SchemaMinLength]`, `[SchemaMaxLength]`, `[SchemaPattern]`,
+`[SchemaDefault]`, `[SchemaName]` and `[Optional]`.
+
+```pascal
+type
+  TMoney = record
+    [SchemaDescription('Amount in the smallest unit')]
+    [SchemaMinimum(0)]
+    Amount: Double;
+
+    [SchemaName('currency_code')]
+    [SchemaPattern('^[A-Z]{3}$')]
+    Currency: string;
+
+    [Optional]
+    Note: string;
+  end;
+```
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "amount": { "type": "number", "description": "Amount in the smallest unit", "minimum": 0 },
+    "currency_code": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "note": { "type": "string" }
+  },
+  "required": ["amount", "currency_code"]
+}
+```
+
+The same shape crosses the wire in both directions: `MCPServer.Serializer`
+builds the record from a JSON object and writes it back out, with enumerations
+by name, `TDateTime` as ISO 8601, and an absent `[Optional]` field left at the
+default of its type. A record is a value, so nothing about it is freed after a
+call; an object a record holds is owned by the call and freed with it.
+
+**What a record needs from RTTI.** The generator reads a record's fields and
+their attributes through extended RTTI, so the unit that declares the record
+must publish field RTTI for the visibility the fields have. Delphi's default
+(`FIELDS([vcPrivate, vcProtected, vcPublic])`) already does, so a record in an
+ordinary unit needs nothing. A unit that narrows the setting must keep public
+fields in it:
+
+```pascal
+{$RTTI EXPLICIT FIELDS([vcPublic])}
+```
+
+A record whose fields are invisible has nothing to describe. As a property of a
+parameter class it keeps the `{"type": "string"}` every record was published as
+before, so a tool that has always listed goes on listing. As a parameter of a
+method tool it is refused instead, naming the record and this directive,
+because a tool written against this version should not ship a schema that does
+not match what the method takes.
+
+The same split applies to a type with no JSON shape at all: a pointer, a
+procedure or method reference, a class reference, an interface or a variant is
+published as `string` on the class walk, the way it always was, and refused as
+a method parameter, naming the parameter and its type. One property the
+generator cannot describe therefore never costs a `tools/list` its other tools.
+A field, property or array element whose type carries no RTTI at all is refused
+wherever it appears, naming the member, because there is nothing left to fall
+back on. Private fields are skipped silently, because a private field is not
+part of the wire.
+
+**`TGUID`.** A `TGUID` is a record, but its `D4` member is an anonymous array
+that `System` publishes no type for, so a `TGUID` has no members to walk. It is
+published as `{"type": "string", "format": "uuid"}` and travels as
+`f81d4fae-7dec-11d0-a765-00a0c91e6bf6`, written in lower case without braces
+and read with or without them.
+
+A tool that returns more than text overrides `ExecuteWithContext` and builds
+a `TMCPToolResult` (`MCPServer.Tool.Result`):
+
+```pascal
+function TChartTool.ExecuteWithContext(const AParams: TChartParams;
+  const Context: IMCPRequestContext): TValue;
+begin
+  Result := TMCPToolResult.Create
+    .AddText('Chart for ' + AParams.Series)
+    .AddImage(RenderPng(AParams), 'image/png')
+    .AddResourceLink('chart://' + AParams.Series, AParams.Series, '', 'image/png');
+end;
+```
+
+The builder also has `AddAudio`, `AddEmbeddedText`, `AddEmbeddedBlob`,
+`WithAnnotations` (for the last block), `SetStructuredContent`, `SetMeta` and
+`SetError`. Raise `EMCPToolError` for a failure the model should see as an
+`isError` result; the request context gives the protocol era and the
+client's `_meta`. Tools that inherit from `TMCPToolBase<T, R>` return an
+object that becomes `structuredContent` plus a text block with the same
+JSON. Set `FAnnotations` or `FIcons` in the constructor to publish them in
+`tools/list`; `MarkReadOnly` writes the `readOnlyHint` and `openWorldHint`
+pair for a tool that only reads (pass `True` when it reaches outside the
+server). `MCPServer.Tool.ContentSamples`
+has one small example per content type.
+
+### A tool from a method
+
+`TMCPMethodTool` (`MCPServer.Tool.Method`) turns a method you already have into
+a tool. The input schema comes from the parameter list, the arguments are
+marshalled onto it, the method is invoked, and its result is converted back to
+JSON:
+
+```pascal
+type
+  TOrderService = class
+  public
+    function PlaceOrder([SchemaDescription('Customer code')] const Customer: string;
+                        [Optional] const Quantity: Integer): string;
+  end;
+
+var
+  Context: TRttiContext;
+begin
+  const Service = TOrderService.Create;
+  const Method = Context.GetType(TOrderService).GetMethod('PlaceOrder');
+
+  Host.AddTool(TMCPMethodTool.Create(TValue.From<TOrderService>(Service), Method,
+                                     'place_order', 'Places an order'));
+end;
+```
+
+A parameter is published under its lower-cased name, or under `[SchemaName]`
+when it carries one, and is required unless it carries `[Optional]`; every
+schema attribute that works on a class property works on a parameter. The
+method needs RTTI, which a public method of a class compiled with the default
+`{$RTTI}` settings has, and `MarkReadOnly` writes the `readOnlyHint` pair the
+same way it does for `TMCPToolBase`.
+
+The result of a procedure is `{"ok": true}` and the result of a function is
+`{"result": <value>}`, which is what `GetOutputSchema` describes. A descendant
+that overrides `ResultToJson` replaces that object wholesale, so its envelope is
+the whole structured result and is not nested under `result`; such a descendant
+overrides `GetOutputSchema` with it, or the two disagree.
+
+**Who frees what.** Every object the tool marshalled from the arguments, and
+every object the method returned, is freed after the call, along with the
+elements of a returned dynamic array of objects. That is the wrong rule for a
+method that keeps what it is handed, which is the ordinary `Add(Item)` shape in
+Delphi, and for a method that hands back something it still owns. Both are
+virtual, so a descendant says so:
+
+```pascal
+type
+  TAdoptingTool = class(TMCPMethodTool)
+  protected
+    procedure ReleaseArguments(const Owned: TList<TObject>); override;
+    procedure ReleaseResult(const Value: TValue; const ResultType: TRttiType); override;
+  end;
+
+procedure TAdoptingTool.ReleaseArguments(const Owned: TList<TObject>);
+begin
+end;
+
+procedure TAdoptingTool.ReleaseResult(const Value: TValue; const ResultType: TRttiType);
+begin
+end;
+```
+
+An untyped parameter, and a `var` or `out` parameter, have no place in a schema:
+a tool answers with its result, not through its arguments. Both are refused when
+the tool is created, with an `EArgumentException` naming the parameter.
+
+The three generator entry points are usable on their own:
+`TMCPSchemaGenerator.GenerateSchemaFromMethod` builds the input schema of a
+parameter list, `GenerateSchemaFromType` the schema of a single type, and
+`GenerateSchemaFromMethodResult` the `{"result": ...}` wrapper of a return type
+(`nil` for a procedure, and for a return type that has no JSON shape). `$schema`
+from `[SchemaDialect]` belongs to a root schema only and is never copied into a
+parameter or result member. The marshal underneath them is public too:
+`TMCPSerializer.JsonToValue` builds a `TValue` of a given `TRttiType` from a
+`TJSONValue` and appends every object it created to the list you pass, and
+`TMCPSerializer.ValueToJson` writes one back out.
+
+### Asking the client for input (multi round-trip requests)
+
+MCP 2026-07-28 replaced server-initiated requests (`elicitation/create`,
+`sampling/createMessage`, `roots/list`) with multi round-trip requests: the
+server answers `tools/call`, `resources/read` or `prompts/get` with an
+`InputRequiredResult` that lists what it needs, the client gathers the
+answers and retries the same request with `inputResponses` (and the
+server's opaque `requestState`). A tool, resource or prompt that needs input
+raises `EMCPInputRequired` (`MCPServer.Mrtr`); the request context carries
+the answers on the retry:
+
+```pascal
+function TGreetTool.ExecuteWithContext(const Params: TNoParams;
+  const Context: IMCPRequestContext): TValue;
+var
+  Response: TJSONObject;
+begin
+  var Name := '';
+  if Context.TryGetInputResponse('user_name', Response) then
+    Name := TMCPInputResponse.ElicitationField(Response, 'name');
+  if Name = '' then
+    raise EMCPInputRequired.Create(TMCPInputRequests.Create
+      .AddElicitation('user_name', 'What is your name?', TMCPInputRequests.FieldSchema('name')));
+
+  Result := TMCPToolResult.Text(Format('Hello, %s!', [Name]));
+end;
+```
+
+`TMCPInputRequests` builds the `inputRequests` map (`AddElicitation`,
+`AddSampling`, `AddListRoots`); `TMCPInputResponse` reads the answers
+(`ElicitationContent`, `ElicitationField`, `SamplingText`, `Roots`). The
+processor only sends input requests the client declared a capability for
+(`elicitation`, `sampling`, `roots`) and answers `-32021` otherwise, so a
+tool can check `Context.HasClientCapability` first and ask for what the
+client can deliver. Missing or wrong answers are handled by raising again:
+the client gets a fresh `InputRequiredResult`.
+
+State that must survive the round trip goes into the second constructor
+argument: `EMCPInputRequired.Create(Requests, State)` with a `TJSONObject`.
+The processor seals it into `requestState` (HMAC-SHA256 over the state, the
+method, a digest of the request parameters, the principal and an expiry)
+and opens it on the retry into `Context.RequestState`; a tampered, expired
+or foreign token is `-32602`. `[Security] RequestStateKey` in `settings.ini`
+is the signing secret (set the same value on every instance behind a load
+balancer; empty means a random key per process) and
+`RequestStateTtlSeconds` the token lifetime (600 by default).
+
+Clients on the 2025 revisions cannot answer input requests, so a request
+that raises `EMCPInputRequired` in the legacy era is answered with
+`-32603`. `MCPServer.Tool.InputRequiredSamples` and
+`test_input_required_result_prompt` are the examples the conformance suite
+exercises.
+
 ### Creating Custom Resources
 
 ```pascal
@@ -340,6 +736,147 @@ initialization
 
 end.
 ```
+
+`FTitle`, `FSize` and `FAnnotations` are published in `resources/list`;
+`FTtlMs` and `FCacheScope` (`private` unless set) are the cache hints modern
+clients get on `resources/read`. A binary resource implements
+`IMCPBinaryResource.ReadBinary` and is delivered as a `blob`;
+`MCPServer.Resource.Samples` shows a text and a binary example. A URI that is
+not registered is answered with a JSON-RPC error (`-32002` for
+initialize-based clients, `-32602` for modern clients), a read that raises
+with `-32603`.
+
+### Resource Templates
+
+A template matches a family of URIs and resolves the actual resource from
+the captured variables. It supports RFC 6570 level 1 (`{var}`, one path
+segment) and a level 2 subset (`{+var}`, the rest of the URI including
+`/`); `{/var}` and `{?var}` are not implemented.
+
+```pascal
+unit YourProject.Resource.CustomTemplate;
+
+interface
+
+uses
+  MCPServer.Resource.Base,
+  MCPServer.Registration;
+
+type
+  TCustomTemplate = class(TMCPResourceTemplateBase)
+  public
+    constructor Create; override;
+    function CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource; override;
+  end;
+
+implementation
+
+constructor TCustomTemplate.Create;
+begin
+  inherited;
+  FUriTemplate := 'custom://{id}';
+  FName := 'Custom item';
+  FMimeType := 'application/json';
+end;
+
+function TCustomTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
+begin
+  Result := TCustomResource.CreateForId(URI, Vars['id']);
+end;
+
+initialization
+  TMCPRegistry.RegisterResourceTemplate('custom://{id}',
+    function: IMCPResourceTemplate
+    begin
+      Result := TCustomTemplate.Create;
+    end
+  );
+
+end.
+```
+
+`CreateResource` gets the actual requested URI (not the template) and the
+captured variables, and returns an ordinary `IMCPResource` (typically a
+`TMCPResourceBase<T>` with a constructor of your own choosing, since the
+registry never constructs a template's resources itself); `resources/read`
+tries an exact match first, then each registered template in order. See
+`MCPServer.Resource.Samples` (`test://template/{id}/data`) and
+`MCPServer.Resource.Logs` (`logs://{level}`, reusing the existing log
+filtering) for worked examples.
+
+### Creating Custom Prompts
+
+```pascal
+unit YourProject.Prompt.Custom;
+
+interface
+
+uses
+  MCPServer.Types,
+  MCPServer.Prompt.Base,
+  MCPServer.Registration;
+
+type
+  TCustomPromptParams = class
+  private
+    FTopic: string;
+  public
+    [SchemaDescription('What to write about')]
+    property Topic: string read FTopic write FTopic;
+  end;
+
+  TCustomPrompt = class(TMCPPromptBase<TCustomPromptParams>)
+  protected
+    function ExecuteWithParams(const Params: TCustomPromptParams;
+      Messages: TMCPPromptMessages): string; override;
+  public
+    constructor Create; override;
+  end;
+
+implementation
+
+constructor TCustomPrompt.Create;
+begin
+  inherited;
+  FName := 'custom_prompt';
+  FDescription := 'Asks the model to write about a topic';
+end;
+
+function TCustomPrompt.ExecuteWithParams(const Params: TCustomPromptParams;
+  Messages: TMCPPromptMessages): string;
+begin
+  Messages.AddText('user', 'Write a short paragraph about ' + Params.Topic + '.');
+  Result := 'Writing prompt';
+end;
+
+initialization
+  TMCPRegistry.RegisterPrompt('custom_prompt',
+    function: IMCPPrompt
+    begin
+      Result := TCustomPrompt.Create;
+    end
+  );
+
+end.
+```
+
+The argument list in `prompts/list` comes from `T`'s string properties, the
+same `[SchemaDescription]`/`[Optional]` attributes tools use; a required
+argument missing from `arguments` is `-32602`, since `prompts/get` has no
+`isError` result to report it through instead. `TMCPPromptMessages` builds
+the messages: `AddText`, `AddImage`, `AddAudio`, `AddResourceLink`,
+`AddEmbeddedText`, `AddEmbeddedBlob`, `AddEmbeddedResource` (wraps an
+existing `IMCPResource`) and `WithAnnotations` for the last message added.
+For a prompt with no natural parameter class, derive from the non-generic
+`TMCPPromptBase` instead and set `FArguments` directly. `MCPServer.Prompt.SummarizeLogs`
+and `MCPServer.Prompt.ContentSamples` show both content and templates in use.
+
+A prompt or resource template that wants to offer argument completion
+implements `IMCPCompletable` (`function Complete(const ArgumentName, Value: string;
+const Context: TArray<TPair<string, string>>): TMCPCompletion`); a target
+that does not implement it answers `completion/complete` with an empty
+`values` array rather than an error, since not offering completion is a
+valid choice.
 
 ## Integration with Claude Code
 
@@ -435,25 +972,122 @@ The easiest way to test and debug your MCP server is using the official MCP Insp
 
 The Inspector provides a web interface to interact with your MCP server, making it perfect for development and debugging.
 
-## Available Example tools
+## Available Example Tools
 
 - **echo**: Echo a message back to the user
 - **get_time**: Get the current server time
 - **list_files**: List files in a directory
 - **calculate**: Perform basic arithmetic calculations
+- **test_simple_text**, **test_image_content**, **test_audio_content**,
+  **test_embedded_resource**, **test_multiple_content_types**,
+  **test_error_handling**, **test_tool_with_progress**, **test_logging_tool**:
+  one small tool per content type, one that fails, one that reports progress
+  and honours cancellation, and one that logs at every level, from
+  `MCPServer.Tool.ContentSamples`; the conformance suite calls these by name
+- **json_schema_2020_12_tool**: a hand-written schema exercising `$schema`,
+  `$defs`, `$anchor`, `$ref`, `allOf`/`anyOf` and `if`/`then`/`else`, for the
+  conformance suite's schema-preservation check
+- **test_input_required_result_elicitation**, **..._sampling**,
+  **..._list_roots**, **..._request_state**, **..._multiple_inputs**,
+  **..._multi_round**, **..._tampered_state**, **..._capabilities**: multi
+  round-trip requests, one per kind of client input plus signed request
+  state across one or two round trips, from
+  `MCPServer.Tool.InputRequiredSamples`; **test_missing_capability**
+  requires the `sampling` client capability and answers `-32021` without it,
+  **test_streaming_elicitation** logs to the response stream and then asks
+  for a confirmation
+- **test_trigger_tool_change**, **test_trigger_prompt_change**,
+  **test_trigger_resource_change**: add or remove `test_dynamic_tool` and
+  `test_dynamic_prompt`, or report `test://static-text` as updated, so that
+  clients on `subscriptions/listen` receive the change notifications, from
+  `MCPServer.Tool.SubscriptionSamples`
 
-## Available Example resources
+## Available Example Prompts
 
-The server provides four essential resources accessible via URIs:
+- **summarize_logs**: summarizes the server's recent log entries, optionally
+  filtered by level (argument completion suggests the levels actually
+  present in the log buffer)
+- **test_simple_prompt**, **test_prompt_with_arguments**,
+  **test_prompt_with_embedded_resource**, **test_prompt_with_image**: one
+  prompt per content type, from `MCPServer.Prompt.ContentSamples`; the
+  conformance suite calls these by name
+- **test_input_required_result_prompt**: asks the client for a context
+  through an elicitation input request before it renders
 
+## Available Example Resources
+
+The server provides six resources and two resource templates, accessible via URIs:
+
+- **server://status** - Current server status and health information (request and connection counters)
 - **project://info** - Project information (JSON metadata with collections)
-- **project://readme** - This README file (markdown content) 
+- **project://readme** - This README file (markdown content)
 - **logs://recent** - Recent log entries from all categories (with thread safety)
-- **server://status** - Current server status and health information
+- **logs://{level}** - Recent log entries at one level, e.g. `logs://WARNING`
+- **test://template/{id}/data** - A template resource for the conformance suite
+- **test://static-text** - A fixed text resource
+- **test://static-binary** - A fixed PNG image, delivered as a `blob`
 
 ## Configuration
 
 The server supports configuration through `settings.ini` files. A default `settings.ini.example` is provided in the repository.
+
+### Authentication
+
+The HTTP endpoint is open by default, which is fine for a loopback-only
+server. A server that other machines can reach should require a token:
+
+- `[Auth] BearerTokens`: comma-separated pre-shared tokens. With this set the
+  executable installs `TMCPStaticBearerAuthorizer`; every request except
+  `OPTIONS` and the protected resource metadata must carry
+  `Authorization: Bearer <token>`. A missing token is `401` with a
+  `WWW-Authenticate: Bearer` challenge, an unknown token `401` with
+  `error="invalid_token"`, another scheme `400` with `error="invalid_request"`.
+  Tokens are compared in constant time and never logged.
+- `[Auth] AuthorizationServers`: issuer URLs of the OAuth 2.1 authorization
+  servers, published in `GET /.well-known/oauth-protected-resource` and
+  `/.well-known/oauth-protected-resource<Endpoint>` (RFC 9728) and referenced
+  by the `resource_metadata` parameter of every challenge, so clients can
+  discover where to obtain a token. `ResourceUri` is the canonical URI of this
+  server that the tokens must name as their audience (default
+  `<Protocol>://<Host>:<Port><Endpoint>`); `ScopesSupported` lists the scopes
+  clients may request (`offline_access` is never advertised).
+
+A library that hosts `TMCPIdHTTPServer` assigns its own `Authorizer`
+(`MCPServer.Authorization`):
+
+- `TMCPStaticBearerAuthorizer.Create(Tokens, Scopes)`: the pre-shared tokens,
+  optionally limited to a set of scopes (all scopes by default).
+- `TMCPOAuthResourceServerAuthorizer`: the base for token validation against
+  an authorization server. Override `ValidateToken(Token, out Claims)`; the
+  base class then requires the `aud` claim to name `ExpectedAudience`, the
+  `exp` claim to lie in the future, and the `RequiredScopes` to be present in
+  `scope` or `scp`, answering `401 invalid_token` or `403 insufficient_scope`
+  otherwise. `TMCPIntrospectionAuthorizer` implements `ValidateToken` with an
+  RFC 7662 token introspection request (client credentials over HTTP basic
+  authentication). Signed-JWT validation is not built in: the RTL has no JOSE
+  library, so a deployment that validates JWTs locally supplies its own
+  `ValidateToken` on top of its JWT library of choice.
+- `[RequiresScope('name')]` on a tool class makes `tools/call` answer `403`
+  with `WWW-Authenticate: Bearer error="insufficient_scope", scope="name"`
+  unless the caller's token grants that scope. On an open server, and over
+  stdio, nobody holds a scope, so such a tool is unusable there.
+
+Tools see the authenticated caller as `Context.Principal` and
+`Context.HasScope`. The inbound token is bound to this server: a tool that
+calls an upstream API must obtain its own credentials and must never forward
+the `Authorization` header it was called with. Authentication is an HTTP
+concern; the stdio transport trusts the process that spawned it and never
+consults an authorizer.
+
+### Network and Security
+
+- `[Server] BindAddress`: the interface to listen on. Empty (default) derives it from `Host`: a loopback `Host` binds `127.0.0.1` and `::1`, any other `Host` binds every interface. Set `0.0.0.0` to listen everywhere explicitly.
+- `[Security] AllowedOrigins`: origins that pass the `Origin` check next to the loopback origins (`localhost`, `127.0.0.1`, `[::1]`, any port). Comma-separated `scheme://host[:port]`; `:*` allows any port; `*` allows everything. Falls back to `[CORS] AllowedOrigins`. A rejected origin gets `403` with a JSON-RPC error body, also when CORS is disabled.
+- `[Security] AllowedHosts`: `Host` header values the server answers, comma-separated `host[:port]` (an entry without a port matches any port, `*` matches everything). Empty means any host. Set it when the server is reachable through a public name, so that a rebinding DNS name cannot reach it; a rejected host gets `403`.
+- `[Server] ExposeDiagnosticsResources`: `1` (default) registers `logs://recent`, `logs://{level}` and `server://status`; set `0` on a server that strangers can reach, the log buffer and the status counters are diagnostics.
+- `[CORS] Enabled`: adds the CORS response headers for browser clients; the `Origin` check runs regardless.
+- `[Server] EndpointInfoPath`: optional GET path (for example `/info`) that answers a JSON document with the endpoint URL and the protocol versions. The MCP endpoint itself only accepts POST; GET and DELETE get `405`.
+- `[Server] MaxRequestBodyBytes` (4 MB) and `MaxJsonDepth` (64): larger or deeper requests get `413` or `400`; `MaxConnections`: Indy connection limit, `0` = unlimited.
 
 ### SSL/TLS Configuration
 
@@ -553,14 +1187,25 @@ We welcome contributions! Here's how to help:
 ### Pull Requests
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Follow existing code style (inline vars, named constants)
+3. Follow the existing code style: inline variables, named constants instead of literals, typed exceptions, no comments in code
 4. Test your changes
 5. Submit a pull request
 
 ### Development Setup
-- Requires Delphi 12+ 
-- Open `MCPServer.dproj` or build with `build.bat`
+- Requires Delphi 11 Alexandria or later; the project files target Delphi 12 Athens
+- Open `MCPServer.dproj` or build with `build.bat`; on Alexandria use `MCPServer.D11.dproj`
 - Test with `npx @modelcontextprotocol/inspector` or Claude Code or similar
+
+### Automated tests
+
+The `tests` folder holds a DUnitX project that drives the JSON-RPC layer, the HTTP transport and the stdio transport in-process and pins the wire behaviour with golden files (`tests\golden`, see the README there).
+
+```bat
+build-tests.bat Debug Win64
+tests\Win64\Debug\MCPServerTests.exe
+```
+
+`build-tests.bat [Config] [Platform]` compiles `tests\MCPServerTests.dpr` for Win32 or Win64; the program takes the usual DUnitX switches (`-xml:<file>` for an NUnit report, `-run:<test>` for a selection). Set the environment variable `MCP_GOLDEN_RECORD=1` for one run to re-record the golden expectations, then review the diff.
 
 ## About GDK Software
 

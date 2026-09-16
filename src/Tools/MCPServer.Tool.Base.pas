@@ -5,9 +5,15 @@ interface
 uses
   System.SysUtils,
   System.Rtti,
-  System.JSON;
+  System.JSON,
+  MCPServer.Types;
 
 type
+  TMCPToolAnnotationWriter = record
+  public
+    class procedure ReadOnly(var Annotations: TJSONObject; const OpenWorld: Boolean); static;
+  end;
+
   IMCPTool = interface
     ['{F1E2D3C4-B5A6-4798-8901-234567890ABC}']
     function GetName: string;
@@ -24,72 +30,113 @@ type
     property OutputSchema: TJSONObject read GetOutputSchema;
   end;
 
-  TMCPToolBase = class(TInterfacedObject, IMCPTool)
+  TMCPToolBase = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
+    FAnnotations: TJSONObject;
+    FIcons: TJSONArray;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
     function BuildSchema: TJSONObject; virtual; abstract;
+    function DoExecute(const Arguments: TJSONObject): TValue; virtual; abstract;
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
-    function Execute(const Arguments: TJSONObject): TValue; virtual; abstract;
+    function GetAnnotations: TJSONObject;
+    function GetIcons: TJSONArray;
+    function Execute(const Arguments: TJSONObject): TValue;
   end;
 
-  TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool)
+  TMCPToolBase<T : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
-    function ExecuteWithParams(const Params: T): string;virtual; abstract;
+    FAnnotations: TJSONObject;
+    FIcons: TJSONArray;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
+    function ExecuteWithParams(const Params: T): string; virtual;
+    function ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue; virtual;
     function GetParamsClass: TClass; virtual;
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
+    function GetIcons: TJSONArray;
     function Execute(const Arguments: TJSONObject): TValue;
   end;
 
-  TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool)
+  TMCPToolBase<T,R : class, constructor> = class(TInterfacedObject, IMCPTool, IMCPToolMetadata)
   protected
     FName: string;
     FTitle: string;
     FDescription: string;
-    function ExecuteWithParams(const Params: T): R;virtual; abstract;
+    FAnnotations: TJSONObject;
+    FIcons: TJSONArray;
+    procedure MarkReadOnly(const OpenWorld: Boolean = False);
+    function ExecuteWithParams(const Params: T): R; virtual;
+    function ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue; virtual;
   public
     constructor Create; virtual;
+    destructor Destroy; override;
 
     function GetName: string;
     function GetTitle: string;
     function GetDescription: string;
     function GetInputSchema: TJSONObject;
     function GetOutputSchema: TJSONObject;
+    function GetAnnotations: TJSONObject;
+    function GetIcons: TJSONArray;
     function Execute(const Arguments: TJSONObject): TValue;
   end;
-
-
-
 
 implementation
 
 uses
   MCPServer.Schema.Generator,
-  MCPServer.Serializer;
+  MCPServer.Schema.Validator,
+  MCPServer.Serializer,
+  MCPServer.RequestContext,
+  MCPServer.Tool.Result;
+
+{ TMCPToolAnnotationWriter }
+
+class procedure TMCPToolAnnotationWriter.ReadOnly(var Annotations: TJSONObject; const OpenWorld: Boolean);
+begin
+  const HasAnnotations = Assigned(Annotations);
+  if not HasAnnotations then
+    Annotations := TJSONObject.Create;
+  Annotations.RemovePair(MCP_ANNOTATION_READ_ONLY_HINT).Free;
+  Annotations.RemovePair(MCP_ANNOTATION_OPEN_WORLD_HINT).Free;
+  Annotations.AddPair(MCP_ANNOTATION_READ_ONLY_HINT, TJSONBool.Create(True));
+  Annotations.AddPair(MCP_ANNOTATION_OPEN_WORLD_HINT, TJSONBool.Create(OpenWorld));
+end;
 
 { TMCPToolBase }
 
 constructor TMCPToolBase.Create;
 begin
   inherited Create;
+end;
+
+destructor TMCPToolBase.Destroy;
+begin
+  FAnnotations.Free;
+  FIcons.Free;
+  inherited;
 end;
 
 function TMCPToolBase.GetName: string;
@@ -107,7 +154,7 @@ end;
 
 function TMCPToolBase.GetOutputSchema: TJSONObject;
 begin
-  result := nil;
+  Result := nil;
 end;
 
 function TMCPToolBase.GetDescription: string;
@@ -120,11 +167,46 @@ begin
   Result := BuildSchema;
 end;
 
+procedure TMCPToolBase.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  TMCPToolAnnotationWriter.ReadOnly(FAnnotations, OpenWorld);
+end;
+
+function TMCPToolBase.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
+end;
+
+function TMCPToolBase.GetIcons: TJSONArray;
+begin
+  Result := FIcons;
+end;
+
+function TMCPToolBase.Execute(const Arguments: TJSONObject): TValue;
+begin
+  var Schema := BuildSchema;
+  try
+    var Errors: TArray<string>;
+    if not TMCPSchemaValidator.TryValidate(Schema, Arguments, Errors) then
+      raise EArgumentException.Create(string.Join('; ', Errors));
+  finally
+    Schema.Free;
+  end;
+  Result := DoExecute(Arguments);
+end;
+
 { TMCPToolBase<T> }
 
 constructor TMCPToolBase<T>.Create;
 begin
   inherited Create;
+end;
+
+destructor TMCPToolBase<T>.Destroy;
+begin
+  FAnnotations.Free;
+  FIcons.Free;
+  inherited;
 end;
 
 function TMCPToolBase<T>.GetName: string;
@@ -142,7 +224,7 @@ end;
 
 function TMCPToolBase<T>.GetOutputSchema: TJSONObject;
 begin
-  result := nil;
+  Result := nil;
 end;
 
 function TMCPToolBase<T>.GetDescription: string;
@@ -155,13 +237,38 @@ begin
   Result := TMCPSchemaGenerator.GenerateSchema(T);
 end;
 
+procedure TMCPToolBase<T>.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  TMCPToolAnnotationWriter.ReadOnly(FAnnotations, OpenWorld);
+end;
+
+function TMCPToolBase<T>.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
+end;
+
+function TMCPToolBase<T>.GetIcons: TJSONArray;
+begin
+  Result := FIcons;
+end;
+
+function TMCPToolBase<T>.ExecuteWithParams(const Params: T): string;
+begin
+  raise ENotImplemented.CreateFmt('%s overrides neither ExecuteWithParams nor ExecuteWithContext', [ClassName]);
+end;
+
+function TMCPToolBase<T>.ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue;
+begin
+  Result := ExecuteWithParams(Params);
+end;
+
 function TMCPToolBase<T>.Execute(const Arguments: TJSONObject): TValue;
 var
   ParamsInstance: T;
 begin
   ParamsInstance := TMCPSerializer.Deserialize<T>(Arguments);
   try
-    Result := ExecuteWithParams(ParamsInstance);
+    Result := ExecuteWithContext(ParamsInstance, TMCPRequestContext.Current);
   finally
     ParamsInstance.Free;
   end;
@@ -172,7 +279,6 @@ begin
   Result := T;
 end;
 
-
 { TMCPToolBase<T, R> }
 
 constructor TMCPToolBase<T, R>.Create;
@@ -180,22 +286,44 @@ begin
   inherited Create;
 end;
 
+destructor TMCPToolBase<T, R>.Destroy;
+begin
+  FAnnotations.Free;
+  FIcons.Free;
+  inherited;
+end;
+
+function TMCPToolBase<T, R>.ExecuteWithParams(const Params: T): R;
+begin
+  raise ENotImplemented.CreateFmt('%s overrides neither ExecuteWithParams nor ExecuteWithContext', [ClassName]);
+end;
+
+function TMCPToolBase<T, R>.ExecuteWithContext(const Params: T; const Context: IMCPRequestContext): TValue;
+var
+  Response: R;
+begin
+  Response := ExecuteWithParams(Params);
+  try
+    var JsonObj := TJSONObject.Create;
+    try
+      TMCPSerializer.Serialize(Response, JsonObj);
+    except
+      JsonObj.Free;
+      raise;
+    end;
+    Result := TValue.From<TJSONObject>(JsonObj);
+  finally
+    Response.Free;
+  end;
+end;
+
 function TMCPToolBase<T, R>.Execute(const Arguments: TJSONObject): TValue;
 var
   ParamsInstance: T;
-  Response : R;
-  JsonObj : TJSONObject;
 begin
   ParamsInstance := TMCPSerializer.Deserialize<T>(Arguments);
   try
-    Response := ExecuteWithParams(ParamsInstance);
-    try
-      JsonObj := TJSONObject.Create;
-      TMCPSerializer.Serialize(Response, JsonObj);
-      result := TValue.From(JsonObj);
-    finally
-      Response.Free;
-    end;
+    Result := ExecuteWithContext(ParamsInstance, TMCPRequestContext.Current);
   finally
     ParamsInstance.Free;
   end;
@@ -203,7 +331,7 @@ end;
 
 function TMCPToolBase<T, R>.GetDescription: string;
 begin
-  result := FDescription;
+  Result := FDescription;
 end;
 
 function TMCPToolBase<T, R>.GetInputSchema: TJSONObject;
@@ -227,6 +355,21 @@ end;
 function TMCPToolBase<T, R>.GetOutputSchema: TJSONObject;
 begin
   Result := TMCPSchemaGenerator.GenerateSchema(R);
+end;
+
+procedure TMCPToolBase<T, R>.MarkReadOnly(const OpenWorld: Boolean);
+begin
+  TMCPToolAnnotationWriter.ReadOnly(FAnnotations, OpenWorld);
+end;
+
+function TMCPToolBase<T, R>.GetAnnotations: TJSONObject;
+begin
+  Result := FAnnotations;
+end;
+
+function TMCPToolBase<T, R>.GetIcons: TJSONArray;
+begin
+  Result := FIcons;
 end;
 
 end.

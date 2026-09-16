@@ -1,0 +1,29 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "tools/call",
+    "params": {
+      "name": "list_files",
+      "arguments": {
+        "path": "files"
+      }
+    }
+  },
+  "workingDirectory": "fixtures",
+  "mask": [
+    "result.content[0].text"
+  ],
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "<masked>"
+        }
+      ]
+    }
+  }
+}

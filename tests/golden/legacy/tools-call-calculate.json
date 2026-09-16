@@ -1,0 +1,27 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "tools/call",
+    "params": {
+      "name": "calculate",
+      "arguments": {
+        "operation": "add",
+        "a": 2,
+        "b": 3.5
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 5,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "2 add 3,5 = 5,5"
+        }
+      ]
+    }
+  }
+}

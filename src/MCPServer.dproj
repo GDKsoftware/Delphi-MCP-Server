@@ -75,7 +75,7 @@
         <SanitizedProjectName>MCPServer</SanitizedProjectName>
         <DCC_UsePackage>RESTBackendComponents;bindengine;CloudService;DataSnapClient;DataSnapCommon;DataSnapConnectors;DatasnapConnectorsFreePascal;DataSnapProviderClient;DataSnapServer;dbexpress;dbrtl;dbxcds;DbxClientDriver;DbxCommonDriver;DBXInterBaseDriver;DBXMySQLDriver;DBXSqliteDriver;fmx;fmxase;fmxdae;fmxobj;IndyCore;IndyIPClient;IndyIPCommon;IndyIPServer;IndyProtocols;IndySystem;inet;RESTComponents;rtl;soaprtl;vcl;vcldb;vcldsnap;vclimg;vcltouch;vclx;xmlrtl;$(DCC_UsePackage)</DCC_UsePackage>
         <DCC_ConsoleTarget>true</DCC_ConsoleTarget>
-        <DCC_UnitSearchPath>.;.\Managers;.\Server;.\Tools;.\Core;.\Protocol;.\Libraries;.\Resources;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>.;.\Managers;.\Server;.\Tools;.\Core;.\Protocol;.\Libraries;.\Resources;.\Prompts;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Linux64)'!=''">
         <DCC_Namespace>System.Posix;$(DCC_Namespace)</DCC_Namespace>
@@ -129,19 +129,32 @@
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
         <DCCReference Include="Protocol\MCPServer.Types.pas"/>
+        <DCCReference Include="Protocol\MCPServer.Errors.pas"/>
+        <DCCReference Include="Protocol\MCPServer.RequestContext.pas"/>
+        <DCCReference Include="Protocol\MCPServer.Capabilities.pas"/>
+        <DCCReference Include="Server\MCPServer.HttpHeaders.pas"/>
+        <DCCReference Include="Server\MCPServer.HttpStream.pas"/>
         <DCCReference Include="Protocol\MCPServer.Serializer.pas"/>
         <DCCReference Include="Protocol\MCPServer.Schema.Generator.pas"/>
+        <DCCReference Include="Protocol\MCPServer.Schema.Validator.pas"/>
+        <DCCReference Include="Protocol\MCPServer.ContentBlocks.pas"/>
         <DCCReference Include="Core\MCPServer.Logger.pas"/>
         <DCCReference Include="Core\MCPServer.PathBoundary.pas"/>
         <DCCReference Include="Core\MCPServer.Settings.pas"/>
+        <DCCReference Include="Core\MCPServer.Application.pas"/>
+        <DCCReference Include="Core\MCPServer.Authorization.pas"/>
         <DCCReference Include="Core\MCPServer.Registration.pas"/>
         <DCCReference Include="Core\MCPServer.ManagerRegistry.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.Base.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Base.pas"/>
+        <DCCReference Include="Prompts\MCPServer.Prompt.Base.pas"/>
         <DCCReference Include="Server\MCPServer.IdHTTPServer.pas"/>
         <DCCReference Include="Managers\MCPServer.CoreManager.pas"/>
         <DCCReference Include="Managers\MCPServer.ToolsManager.pas"/>
         <DCCReference Include="Managers\MCPServer.ResourcesManager.pas"/>
+        <DCCReference Include="Managers\MCPServer.PromptsManager.pas"/>
+        <DCCReference Include="Managers\MCPServer.CompletionManager.pas"/>
+        <DCCReference Include="Managers\MCPServer.SubscriptionsManager.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Server.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.Echo.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.GetTime.pas"/>
@@ -149,6 +162,15 @@
         <DCCReference Include="Tools\MCPServer.Tool.Calculate.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Logs.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Project.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.Result.pas"/>
+        <DCCReference Include="Server\MCPServer.StdioChannel.pas"/>
+        <DCCReference Include="Server\MCPServer.Host.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.ContentSamples.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.InputRequiredSamples.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.SubscriptionSamples.pas"/>
+        <DCCReference Include="Resources\MCPServer.Resource.Samples.pas"/>
+        <DCCReference Include="Prompts\MCPServer.Prompt.SummarizeLogs.pas"/>
+        <DCCReference Include="Prompts\MCPServer.Prompt.ContentSamples.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

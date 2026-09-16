@@ -6,30 +6,46 @@ uses
   System.SysUtils,
   System.JSON,
   System.Rtti,
-  System.DateUtils,
   MCPServer.Types,
   MCPServer.Settings,
   MCPServer.Logger;
 
 type
-  TMCPCoreManager = class(TInterfacedObject, IMCPCapabilityManager)
+  TMCPCoreManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPRegistryAware)
   private
-    FSessionID: string;
     FSettings: TMCPSettings;
+    [Weak]
+    FManagerRegistry: IMCPManagerRegistry;
+    function GetSessionID: string;
+    function BuildServerInfo: TJSONObject;
+    function BuildCapabilities(Era: TMCPProtocolEra): TJSONObject;
+    function SupportedVersions: TJSONArray;
+    procedure LogClientInfo(const ClientInfo: TJSONValue);
+    procedure WarnAboutDeprecatedClientCapabilities(const Capabilities: TJSONValue);
   public
     constructor Create(ASettings: TMCPSettings);
-    
+
     function GetCapabilityName: string;
     function HandlesMethod(const Method: string): Boolean;
     function ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
-    
-    function Initialize(const Params: TJSONObject): TValue;
+    function ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
+      const Context: IMCPRequestContext): TValue;
+    procedure SetManagerRegistry(const Registry: IMCPManagerRegistry);
+
+    function Initialize(const Params: TJSONObject; const Context: IMCPRequestContext): TValue;
+    function Discover(const Context: IMCPRequestContext): TValue;
     function Ping: TValue;
-    
-    property SessionID: string read FSessionID;
+
+    property SessionID: string read GetSessionID;
+    property ManagerRegistry: IMCPManagerRegistry read FManagerRegistry;
   end;
 
 implementation
+
+uses
+  MCPServer.Capabilities,
+  MCPServer.RequestContext,
+  MCPServer.Errors;
 
 { TMCPCoreManager }
 
@@ -37,7 +53,6 @@ constructor TMCPCoreManager.Create(ASettings: TMCPSettings);
 begin
   inherited Create;
   FSettings := ASettings;
-  FSessionID := '';
 end;
 
 function TMCPCoreManager.GetCapabilityName: string;
@@ -45,93 +60,169 @@ begin
   Result := 'core';
 end;
 
+function TMCPCoreManager.GetSessionID: string;
+begin
+  Result := '';
+end;
+
+procedure TMCPCoreManager.SetManagerRegistry(const Registry: IMCPManagerRegistry);
+begin
+  FManagerRegistry := Registry;
+end;
+
 function TMCPCoreManager.HandlesMethod(const Method: string): Boolean;
 begin
-  Result := (Method = 'initialize') or 
-            (Method = 'notifications/initialized') or
-            (Method = 'ping');
+  Result := (Method = MCP_METHOD_INITIALIZE) or
+            (Method = MCP_METHOD_NOTIFICATIONS_INITIALIZED) or
+            (Method = MCP_METHOD_PING) or
+            (Method = MCP_METHOD_SERVER_DISCOVER);
 end;
 
 function TMCPCoreManager.ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
 begin
-  if Method = 'initialize' then
-    Result := Initialize(Params)
-  else if Method = 'notifications/initialized' then
+  Result := ExecuteMethodWithContext(Method, Params, TMCPRequestContext.Current);
+end;
+
+function TMCPCoreManager.ExecuteMethodWithContext(const Method: string; const Params: TJSONObject;
+  const Context: IMCPRequestContext): TValue;
+begin
+  if Method = MCP_METHOD_INITIALIZE then
+    Result := Initialize(Params, Context)
+  else if Method = MCP_METHOD_NOTIFICATIONS_INITIALIZED then
   begin
     TLogger.Info('MCP Initialized notification received');
     Result := TValue.Empty;
   end
-  else if Method = 'ping' then
+  else if Method = MCP_METHOD_PING then
     Result := Ping
+  else if Method = MCP_METHOD_SERVER_DISCOVER then
+    Result := Discover(Context)
   else
-    raise Exception.CreateFmt('Method %s not handled by %s', [Method, GetCapabilityName]);
+    raise EMCPError.MethodNotFound(Method);
 end;
 
-function TMCPCoreManager.Initialize(const Params: TJSONObject): TValue;
+function TMCPCoreManager.BuildServerInfo: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  Result.AddPair(MCP_KEY_NAME, FSettings.ServerName);
+  Result.AddPair(MCP_KEY_VERSION, FSettings.ServerVersion);
+  const HasServerTitle = (FSettings.ServerTitle <> '');
+  if HasServerTitle then
+    Result.AddPair(MCP_KEY_TITLE, FSettings.ServerTitle);
+  const HasServerDescription = (FSettings.ServerDescription <> '');
+  if HasServerDescription then
+    Result.AddPair(MCP_KEY_DESCRIPTION, FSettings.ServerDescription);
+  const HasServerWebsiteUrl = (FSettings.ServerWebsiteUrl <> '');
+  if HasServerWebsiteUrl then
+    Result.AddPair('websiteUrl', FSettings.ServerWebsiteUrl);
+end;
+
+function TMCPCoreManager.BuildCapabilities(Era: TMCPProtocolEra): TJSONObject;
+begin
+  Result := TMCPCapabilityBuilder.Build(FManagerRegistry, Era);
+end;
+
+function TMCPCoreManager.SupportedVersions: TJSONArray;
+begin
+  Result := TJSONArray.Create;
+  for var Version in MCP_MODERN_PROTOCOL_VERSIONS do
+  begin
+    Result.Add(Version);
+  end;
+  if FSettings.DiscoverListsLegacyVersions then
+    for var Version in MCP_LEGACY_PROTOCOL_VERSIONS do
+    begin
+      Result.Add(Version);
+    end;
+end;
+
+procedure TMCPCoreManager.LogClientInfo(const ClientInfo: TJSONValue);
+begin
+  if not (ClientInfo is TJSONObject) then
+    Exit;
+
+  var ClientName := TJSONObject(ClientInfo).GetValue(MCP_KEY_NAME);
+  var ClientVersion := TJSONObject(ClientInfo).GetValue(MCP_KEY_VERSION);
+  if Assigned(ClientName) and Assigned(ClientVersion) then
+    TLogger.Info(Format('Client: %s v%s', [ClientName.Value, ClientVersion.Value]));
+end;
+
+procedure TMCPCoreManager.WarnAboutDeprecatedClientCapabilities(const Capabilities: TJSONValue);
+begin
+  if not (Capabilities is TJSONObject) then
+    Exit;
+
+  for var Deprecated in ['roots', 'sampling'] do
+    if Assigned(TJSONObject(Capabilities).GetValue(Deprecated)) then
+      TLogger.Warning(Format('Client declares the %s capability; this server does not use it (deprecated in MCP 2026-07-28)', [Deprecated]));
+end;
+
+function TMCPCoreManager.Initialize(const Params: TJSONObject; const Context: IMCPRequestContext): TValue;
 var
-  Capabilities: TJSONObject;
-  ClientInfo: TJSONObject;
-  ClientName: TJSONValue;
-  ClientVersion: TJSONValue;
-  ResourcesCap: TJSONObject;
-  ResultJSON: TJSONObject;
-  ServerInfo: TJSONObject;
-  ToolsCap: TJSONObject;
+  Negotiated: string;
 begin
   TLogger.Info('MCP Initialize called');
-  
+
+  if Assigned(Context) then
+    Negotiated := Context.ProtocolVersion
+  else
+  begin
+    var Requested := '';
+    if Assigned(Params) then
+    begin
+      var RequestedValue := Params.GetValue(MCP_KEY_PROTOCOL_VERSION);
+      if RequestedValue is TJSONString then
+        Requested := TJSONString(RequestedValue).Value;
+    end;
+    Negotiated := TMCPProtocolVersion.NegotiateLegacy(Requested);
+  end;
+
   if Assigned(Params) then
   begin
-    ClientInfo := Params.GetValue('clientInfo') as TJSONObject;
-
-    if Assigned(ClientInfo) then
-    begin
-      ClientName := ClientInfo.GetValue('name');
-      ClientVersion := ClientInfo.GetValue('version');
-
-      if Assigned(ClientName) and Assigned(ClientVersion) then
-        TLogger.Info(Format('Client: %s v%s', [ClientName.Value, ClientVersion.Value]));
-    end;
+    LogClientInfo(Params.GetValue('clientInfo'));
+    WarnAboutDeprecatedClientCapabilities(Params.GetValue(MCP_KEY_CAPABILITIES));
   end;
-  
-  FSessionID := TGuid.NewGuid.ToString;
-  
-  ResultJSON := TJSONObject.Create;
+
+  var ResultJSON := TJSONObject.Create;
   try
-    ResultJSON.AddPair('protocolVersion', MCP_PROTOCOL_VERSION);
-    
-    Capabilities := TJSONObject.Create;
-    ResultJSON.AddPair('capabilities', Capabilities);
-    
-    ToolsCap := TJSONObject.Create;
-    Capabilities.AddPair('tools', ToolsCap);
-{$IF COMPILERVERSION <= 29}
-    ToolsCap.AddPair('supportsProgress', TJSONFalse.Create);
-    ToolsCap.AddPair('supportsCancellation', TJSONFalse.Create);
-{$ELSE}
-    ToolsCap.AddPair('supportsProgress', TJSONBool.Create(False));
-    ToolsCap.AddPair('supportsCancellation', TJSONBool.Create(False));
-{$ENDIF}
-    
-    ResourcesCap := TJSONObject.Create;
-    Capabilities.AddPair('resources', ResourcesCap);
-{$IF COMPILERVERSION <= 29}
-    ResourcesCap.AddPair('subscribe', TJSONFalse.Create);
-    ResourcesCap.AddPair('listChanged', TJSONFalse.Create);
-{$ELSE}
-    ResourcesCap.AddPair('subscribe', TJSONBool.Create(False));
-    ResourcesCap.AddPair('listChanged', TJSONBool.Create(False));
-{$ENDIF}
-    
-    ResultJSON.AddPair('sessionId', FSessionID);
-    
-    ServerInfo := TJSONObject.Create;
-    ResultJSON.AddPair('serverInfo', ServerInfo);
-    ServerInfo.AddPair('name', FSettings.ServerName);
-    ServerInfo.AddPair('version', FSettings.ServerVersion);
-    
-    TLogger.Info('Created new MCP session: ' + FSessionID);
-    
+    ResultJSON.AddPair(MCP_KEY_PROTOCOL_VERSION, Negotiated);
+    ResultJSON.AddPair(MCP_KEY_CAPABILITIES, BuildCapabilities(TMCPProtocolEra.Legacy));
+    ResultJSON.AddPair('serverInfo', BuildServerInfo);
+    const HasInstructions = (FSettings.Instructions <> '');
+    if HasInstructions then
+      ResultJSON.AddPair(MCP_KEY_INSTRUCTIONS, FSettings.Instructions);
+
+    if Assigned(Context) and Assigned(Context.LegacySession) then
+      Context.LegacySession.ProtocolVersion := Negotiated;
+
+    TLogger.Info('Negotiated protocol version ' + Negotiated);
+    Result := TValue.From<TJSONObject>(ResultJSON);
+  except
+    ResultJSON.Free;
+    raise;
+  end;
+end;
+
+function TMCPCoreManager.Discover(const Context: IMCPRequestContext): TValue;
+begin
+  TLogger.Info('MCP Discover called');
+
+  var ResultJSON := TJSONObject.Create;
+  try
+    ResultJSON.AddPair(MCP_KEY_RESULT_TYPE, 'complete');
+    ResultJSON.AddPair('supportedVersions', SupportedVersions);
+    ResultJSON.AddPair(MCP_KEY_CAPABILITIES, BuildCapabilities(TMCPProtocolEra.Modern));
+
+    var Meta := TJSONObject.Create;
+    ResultJSON.AddPair(MCP_KEY_META, Meta);
+    Meta.AddPair(MCP_META_SERVER_INFO, BuildServerInfo);
+
+    const HasInstructions = (FSettings.Instructions <> '');
+    if HasInstructions then
+      ResultJSON.AddPair(MCP_KEY_INSTRUCTIONS, FSettings.Instructions);
+    ResultJSON.AddPair(MCP_KEY_TTL_MS, TJSONNumber.Create(FSettings.DiscoverTtlMs));
+    ResultJSON.AddPair(MCP_KEY_CACHE_SCOPE, MCP_CACHE_SCOPE_PUBLIC);
+
     Result := TValue.From<TJSONObject>(ResultJSON);
   except
     ResultJSON.Free;
@@ -140,18 +231,9 @@ begin
 end;
 
 function TMCPCoreManager.Ping: TValue;
-var
-  ResultJSON: TJSONObject;
 begin
   TLogger.Info('MCP Ping called');
-  
-  ResultJSON := TJSONObject.Create;
-  try
-    Result := TValue.From<TJSONObject>(ResultJSON);
-  except
-    ResultJSON.Free;
-    raise;
-  end;
+  Result := TValue.From<TJSONObject>(TJSONObject.Create);
 end;
 
 end.

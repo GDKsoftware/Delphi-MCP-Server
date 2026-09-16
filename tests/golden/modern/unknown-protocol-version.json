@@ -1,0 +1,28 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "tools/list",
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "1900-01-01",
+        "io.modelcontextprotocol/clientCapabilities": {
+        }
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "error": {
+      "code": -32022,
+      "message": "Unsupported protocol version",
+      "data": {
+        "supported": [
+          "2026-07-28"
+        ],
+        "requested": "1900-01-01"
+      }
+    }
+  }
+}

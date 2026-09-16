@@ -1,0 +1,11 @@
+{
+  "requestText": "[{\"jsonrpc\":\"2.0\",\"id\":23,\"method\":\"ping\"}]",
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": null,
+    "error": {
+      "code": -32600,
+      "message": "JSON-RPC batch requests are not supported"
+    }
+  }
+}

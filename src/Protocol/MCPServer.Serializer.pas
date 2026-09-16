@@ -18,34 +18,74 @@ type
     class procedure DeserializeObject(Instance: TObject; const Json: TJSONObject);
     class function DeserializeArray(RttiType: TRttiType; const JsonArray: TJSONArray): TValue;
 
-    // Extracted type conversion methods
     class function ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToInteger(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToFloat(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToClass(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToRecord(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+    class function ConvertJsonToGuid(const JsonValue: TJSONValue): TValue;
+    class procedure FillRecordFields(const Json: TJSONObject; const RttiType: TRttiType;
+      const Data: Pointer);
+    class procedure FreeRecordObjects(const Value: TValue; const RttiType: TRttiType);
     class function ConvertJsonToEnum(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function GetEnumValueNames(const EnumType: TRttiEnumerationType): string;
     class function ConvertValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
+    class function ConvertRecordToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
+    class function ConvertGuidToJson(const Value: TValue): TJSONValue;
+    class function TrySerializeList(Obj: TObject; out Json: TJSONValue): Boolean;
     class function CreateInstanceFromType(const RttiType: TRttiType): TObject;
+    class function IsGuid(const RttiType: TRttiType): Boolean;
+    class function IsWireField(const RttiField: TRttiField): Boolean;
+    class function HasWireFields(const RttiType: TRttiType): Boolean;
+    class procedure GuardKnownKeys(const Json: TJSONObject; const KnownNorms: TStringList);
+    class procedure GuardRecordKeys(const Json: TJSONObject; const RttiType: TRttiType);
+    class procedure GuardFieldHasType(const RttiType: TRttiType; const RttiField: TRttiField);
 
-    // Array deserialization helpers
     class function DeserializeDynamicArray(const DynArrayType: TRttiDynamicArrayType; const JsonArray: TJSONArray): TValue;
     class function DeserializeGenericList(const ListType: TRttiInstanceType; const JsonArray: TJSONArray): TValue;
     class function FindAddMethod(const ListType: TRttiInstanceType): TRttiMethod;
 
-    // Case-insensitive JSON value lookup
     class function GetJsonValueCaseInsensitive(const Json: TJSONObject; const PropName: string): TJSONValue;
 
-    // Single normalization rule shared by lookup and validation
     class function NormalizeKey(const Name: string): string; inline;
+    class function IsRequiredMember(const Member: TRttiNamedObject): Boolean;
+
+    class procedure CollectCreatedObjects(const Value: TValue; const RttiType: TRttiType;
+      const Owned: TList<TObject>);
+    class procedure CollectFromArray(const Value: TValue; const ElementType: TRttiType;
+      const Owned: TList<TObject>);
+    class procedure CollectFromRecord(const Value: TValue; const RttiType: TRttiType;
+      const Owned: TList<TObject>);
   public
     class constructor Create;
     class destructor Destroy;
 
+    class function GetWireName(const Member: TRttiNamedObject): string;
+
     class function Deserialize<T: class, constructor>(const Json: TJSONObject): T;
     class procedure Serialize(Obj: TObject; Json: TJSONObject);
+
+    class function JsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType;
+      const Owned: TList<TObject>): TValue;
+    class function ValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
 
     class function SerializeToString(Obj: TObject): string;
   end;
 
 implementation
+
+uses
+  System.Math,
+  System.DateUtils,
+  MCPServer.Types;
+
+const
+  MESSAGE_EXPECTED_INTEGER = 'expected an integer';
+  MESSAGE_EXPECTED_OBJECT = 'expected an object';
+  MESSAGE_EXPECTED_UUID = 'expected a UUID string';
+
+  OWNERSHIP_BEARING_KINDS = [tkClass, tkDynArray, tkRecord, tkMRecord];
+
 
 { TMCPSerializer }
 
@@ -93,9 +133,7 @@ end;
 class procedure TMCPSerializer.DeserializeObject(Instance: TObject; const Json: TJSONObject);
 var
   JsonValue: TJSONValue;
-  KeyName: string;
   KnownNorms: TStringList;
-  Pair: TJSONPair;
   PropValue: TValue;
   RttiProp: TRttiProperty;
   RttiType: TRttiType;
@@ -106,16 +144,9 @@ begin
   try
     for RttiProp in RttiType.GetProperties do
       if RttiProp.IsWritable then
-        KnownNorms.Add(NormalizeKey(RttiProp.Name));
+        KnownNorms.Add(NormalizeKey(GetWireName(RttiProp)));
 
-    for Pair in Json do
-    begin
-      KeyName := Pair.JsonString.Value;
-      if KnownNorms.IndexOf(NormalizeKey(KeyName)) < 0 then
-        raise EArgumentException.CreateFmt(
-          'Unknown parameter "%s". Valid parameters: %s.',
-          [KeyName, String.Join(', ', KnownNorms.ToStringArray)]);
-    end;
+    GuardKnownKeys(Json, KnownNorms);
   finally
     KnownNorms.Free;
   end;
@@ -125,16 +156,20 @@ begin
     if not RttiProp.IsWritable then
       Continue;
 
-    JsonValue := GetJsonValueCaseInsensitive(Json, RttiProp.Name);
+    JsonValue := GetJsonValueCaseInsensitive(Json, GetWireName(RttiProp));
 
-    if not Assigned(JsonValue) then
+    if not Assigned(JsonValue) or (JsonValue is TJSONNull) then
+    begin
+      if IsRequiredMember(RttiProp) then
+        raise EArgumentException.CreateFmt('Missing required parameter "%s"', [GetWireName(RttiProp)]);
       Continue;
+    end;
 
     try
       PropValue := ConvertJsonToValue(JsonValue, RttiProp.PropertyType);
     except
       on E: EArgumentException do
-        raise EArgumentException.CreateFmt('Parameter "%s": %s', [LowerCase(RttiProp.Name), E.Message]);
+        raise EArgumentException.CreateFmt('Parameter "%s": %s', [GetWireName(RttiProp), E.Message]);
     end;
 
     if not PropValue.IsEmpty then
@@ -144,6 +179,77 @@ begin
       {$WARN UNSAFE_CAST ON}
     end;
   end;
+end;
+
+class function TMCPSerializer.IsRequiredMember(const Member: TRttiNamedObject): Boolean;
+begin
+  for var Attr in Member.GetAttributes do
+    if Attr is OptionalAttribute then
+      Exit(False);
+  Result := True;
+end;
+
+class function TMCPSerializer.GetWireName(const Member: TRttiNamedObject): string;
+begin
+  for var Attr in Member.GetAttributes do
+    if Attr is SchemaNameAttribute then
+      begin
+        Result := SchemaNameAttribute(Attr).Name;
+        Exit;
+      end;
+  Result := LowerCase(Member.Name);
+end;
+
+class function TMCPSerializer.IsGuid(const RttiType: TRttiType): Boolean;
+begin
+  Result := (RttiType.Handle = TypeInfo(TGUID));
+end;
+
+class function TMCPSerializer.IsWireField(const RttiField: TRttiField): Boolean;
+begin
+  Result := (RttiField.Visibility in SCHEMA_FIELD_VISIBILITIES);
+end;
+
+class function TMCPSerializer.HasWireFields(const RttiType: TRttiType): Boolean;
+begin
+  for var RttiField in RttiType.GetFields do
+    if IsWireField(RttiField) then
+      Exit(True);
+  Result := False;
+end;
+
+class procedure TMCPSerializer.GuardKnownKeys(const Json: TJSONObject; const KnownNorms: TStringList);
+begin
+  for var Pair in Json do
+  begin
+    const KeyName = Pair.JsonString.Value;
+    if KnownNorms.IndexOf(NormalizeKey(KeyName)) < 0 then
+      raise EArgumentException.CreateFmt(
+        'Unknown parameter "%s". Valid parameters: %s.',
+        [KeyName, String.Join(', ', KnownNorms.ToStringArray)]);
+  end;
+end;
+
+class procedure TMCPSerializer.GuardRecordKeys(const Json: TJSONObject; const RttiType: TRttiType);
+begin
+  const KnownNorms = TStringList.Create;
+  try
+    for var RttiField in RttiType.GetFields do
+      if IsWireField(RttiField) then
+        KnownNorms.Add(NormalizeKey(GetWireName(RttiField)));
+
+    GuardKnownKeys(Json, KnownNorms);
+  finally
+    KnownNorms.Free;
+  end;
+end;
+
+class procedure TMCPSerializer.GuardFieldHasType(const RttiType: TRttiType;
+  const RttiField: TRttiField);
+begin
+  if not Assigned(RttiField.FieldType) then
+    raise EArgumentException.CreateFmt('Field %s.%s has no type RTTI, so it has no JSON value',
+      [RttiType.Name, RttiField.Name]);
 end;
 
 class procedure TMCPSerializer.Serialize(Obj: TObject; Json: TJSONObject);
@@ -161,16 +267,83 @@ begin
     if not RttiProp.IsReadable then
       Continue;
 
-    PropName := LowerCase(RttiProp.Name);
+    PropName := GetWireName(RttiProp);
     {$WARN UNSAFE_CAST OFF}
     PropValue := RttiProp.GetValue(Obj);
     {$WARN UNSAFE_CAST ON}
-    
+
     JsonValue := ConvertValueToJson(PropValue, RttiProp.PropertyType);
-    
+
     if Assigned(JsonValue) then
       Json.AddPair(PropName, JsonValue);
   end;
+end;
+
+class procedure TMCPSerializer.CollectCreatedObjects(const Value: TValue; const RttiType: TRttiType;
+  const Owned: TList<TObject>);
+begin
+  if not Assigned(Owned) or not Assigned(RttiType) or Value.IsEmpty then
+    Exit;
+
+  case RttiType.TypeKind of
+    tkClass:
+      if Value.IsObject and (Value.AsObject <> nil) then
+        Owned.Add(Value.AsObject);
+
+    tkDynArray:
+      CollectFromArray(Value, TRttiDynamicArrayType(RttiType).ElementType, Owned);
+
+    tkRecord, tkMRecord:
+      CollectFromRecord(Value, RttiType, Owned);
+  end;
+end;
+
+class procedure TMCPSerializer.CollectFromArray(const Value: TValue; const ElementType: TRttiType;
+  const Owned: TList<TObject>);
+begin
+  const CarriesOwnership = Assigned(ElementType) and (ElementType.TypeKind in OWNERSHIP_BEARING_KINDS);
+  if not CarriesOwnership then
+    Exit;
+
+  for var Index := 0 to Value.GetArrayLength - 1 do
+  begin
+    CollectCreatedObjects(Value.GetArrayElement(Index), ElementType, Owned);
+  end;
+end;
+
+class procedure TMCPSerializer.CollectFromRecord(const Value: TValue; const RttiType: TRttiType;
+  const Owned: TList<TObject>);
+begin
+  if IsGuid(RttiType) then
+    Exit;
+
+  const Data = Value.GetReferenceToRawData;
+  for var RttiField in RttiType.GetFields do
+  begin
+    const HoldsAValue = (IsWireField(RttiField) and Assigned(RttiField.FieldType));
+    if HoldsAValue then
+      CollectCreatedObjects(RttiField.GetValue(Data), RttiField.FieldType, Owned);
+  end;
+end;
+
+class function TMCPSerializer.JsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType;
+  const Owned: TList<TObject>): TValue;
+begin
+  Result := TValue.Empty;
+  if not Assigned(RttiType) then
+    Exit;
+
+  Result := ConvertJsonToValue(JsonValue, RttiType);
+  CollectCreatedObjects(Result, RttiType, Owned);
+end;
+
+class function TMCPSerializer.ValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
+begin
+  Result := nil;
+  if not Assigned(RttiType) then
+    Exit;
+
+  Result := ConvertValueToJson(Value, RttiType);
 end;
 
 class function TMCPSerializer.SerializeToString(Obj: TObject): string;
@@ -186,75 +359,206 @@ begin
   end;
 end;
 
-class function TMCPSerializer.ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
-var
-  NestedInstance: TObject;
+class function TMCPSerializer.ConvertJsonToInteger(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+begin
+  if not (JsonValue is TJSONNumber) then
+    raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
+
+  const Number = TJSONNumber(JsonValue);
+  const IsWhole = (Frac(Number.AsDouble) = 0);
+  if not IsWhole then
+    raise EArgumentException.Create(MESSAGE_EXPECTED_INTEGER);
+
+  if RttiType.TypeKind = tkInt64 then
+    Exit(Number.AsInt64);
+
+  const Ordinal = TRttiOrdinalType(RttiType);
+  const InRange = ((Number.AsInt64 >= Ordinal.MinValue) and (Number.AsInt64 <= Ordinal.MaxValue));
+  if not InRange then
+    raise EArgumentException.CreateFmt('%d is outside the range of %s', [Number.AsInt64, RttiType.Name]);
+  Result := TValue.FromOrdinal(RttiType.Handle, Number.AsInt64);
+end;
+
+class function TMCPSerializer.ConvertJsonToFloat(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+begin
+  const IsDateTime = (RttiType.Handle = TypeInfo(TDateTime));
+  if not IsDateTime then
+  begin
+    if not (JsonValue is TJSONNumber) then
+      raise EArgumentException.Create('expected a number');
+    begin
+      Result := TJSONNumber(JsonValue).AsDouble;
+      Exit;
+    end;
+  end;
+
+  if not IsJsonString(JsonValue) then
+    raise EArgumentException.Create('expected a date-time string');
+  try
+    Result := TValue.From<TDateTime>(ISO8601ToDate(JsonValue.Value, False));
+  except
+    on E: EConvertError do
+      raise EArgumentException.Create('expected an ISO 8601 date-time');
+    on E: EDateTimeException do
+      raise EArgumentException.Create('expected an ISO 8601 date-time');
+  end;
+end;
+
+class function TMCPSerializer.ConvertJsonToClass(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
 begin
   Result := TValue.Empty;
-  
+  if JsonValue is TJSONArray then
+    begin
+      Result := DeserializeArray(RttiType, TJSONArray(JsonValue));
+      Exit;
+    end;
+  if not (JsonValue is TJSONObject) then
+    raise EArgumentException.Create(MESSAGE_EXPECTED_OBJECT);
+
+  const NestedInstance = CreateInstanceFromType(RttiType);
+  if not Assigned(NestedInstance) then
+    Exit;
+
+  try
+    DeserializeObject(NestedInstance, TJSONObject(JsonValue));
+  except
+    NestedInstance.Free;
+    raise;
+  end;
+  Result := NestedInstance;
+end;
+
+class function TMCPSerializer.ConvertJsonToValue(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
+begin
+  Result := TValue.Empty;
   if not Assigned(JsonValue) then
     Exit;
-    
-  case RttiType.TypeKind of
-    tkInteger:
-      if JsonValue is TJSONNumber then
-        Result := (JsonValue as TJSONNumber).AsInt
-      else
-        Result := StrToIntDef(JsonValue.Value, 0);
 
-    tkInt64:
-      if JsonValue is TJSONNumber then
-        Result := (JsonValue as TJSONNumber).AsInt64
-      else
-        Result := StrToInt64Def(JsonValue.Value, 0);
-        
+  case RttiType.TypeKind of
+    tkInteger, tkInt64:
+      Result := ConvertJsonToInteger(JsonValue, RttiType);
+
     tkFloat:
-      if JsonValue is TJSONNumber then
-        Result := (JsonValue as TJSONNumber).AsDouble
-      else
-{$IF COMPILERVERSION <= 28}
-        Result := StrToFloatDef(JsonValue.Value, 0, TFormatSettings.Create('en-US'));
-{$ELSE}
-        Result := StrToFloatDef(JsonValue.Value, 0, FormatSettings.Invariant);
-{$ENDIF}
+      Result := ConvertJsonToFloat(JsonValue, RttiType);
 
     tkString, tkLString, tkWString, tkUString:
-      Result := JsonValue.Value;
-      
+      begin
+        if not IsJsonString(JsonValue) then
+          raise EArgumentException.Create('expected a string');
+        Result := JsonValue.Value;
+      end;
+
     tkEnumeration:
       if RttiType.Handle = TypeInfo(Boolean) then
       begin
-{$IF COMPILERVERSION <= 29}
-        if (JsonValue is TJSONTrue) or (JsonValue is TJSONFalse) then
-          Result := JsonValue is TJSONTrue
-{$ELSE}
-        if JsonValue is TJSONBool then
-          Result := (JsonValue as TJSONBool).AsBoolean
-{$ENDIF}
-        else
-          Result := LowerCase(JsonValue.Value) = 'true';
+        if not (JsonValue is TJSONBool) then
+          raise EArgumentException.Create('expected a boolean');
+        Result := TJSONBool(JsonValue).AsBoolean;
       end
       else
-      begin
         Result := ConvertJsonToEnum(JsonValue, RttiType);
-      end;
 
     tkClass:
-      if JsonValue is TJSONObject then
-      begin
-        NestedInstance := CreateInstanceFromType(RttiType);
-        if Assigned(NestedInstance) then
-        begin
-          DeserializeObject(NestedInstance, JsonValue as TJSONObject);
-          Result := NestedInstance;
-        end;
-      end
-      else if JsonValue is TJSONArray then
-        Result := DeserializeArray(RttiType, JsonValue as TJSONArray);
-        
+      Result := ConvertJsonToClass(JsonValue, RttiType);
+
+    tkRecord, tkMRecord:
+      Result := ConvertJsonToRecord(JsonValue, RttiType);
+
     tkDynArray:
-      if JsonValue is TJSONArray then
-        Result := DeserializeArray(RttiType, JsonValue as TJSONArray);
+      begin
+        if not (JsonValue is TJSONArray) then
+          raise EArgumentException.Create('expected an array');
+        Result := DeserializeArray(RttiType, TJSONArray(JsonValue));
+      end;
+  else
+    Result := TValue.Empty;
+  end;
+end;
+
+class function TMCPSerializer.ConvertJsonToRecord(const JsonValue: TJSONValue;
+  const RttiType: TRttiType): TValue;
+begin
+  if IsGuid(RttiType) then
+    Exit(ConvertJsonToGuid(JsonValue));
+
+  if not HasWireFields(RttiType) then
+    Exit(TValue.Empty);
+
+  if not (JsonValue is TJSONObject) then
+    raise EArgumentException.Create(MESSAGE_EXPECTED_OBJECT);
+
+  const Json = TJSONObject(JsonValue);
+  GuardRecordKeys(Json, RttiType);
+
+  TValue.Make(nil, RttiType.Handle, Result);
+  try
+    FillRecordFields(Json, RttiType, Result.GetReferenceToRawData);
+  except
+    FreeRecordObjects(Result, RttiType);
+    raise;
+  end;
+end;
+
+class function TMCPSerializer.ConvertJsonToGuid(const JsonValue: TJSONValue): TValue;
+begin
+  if not IsJsonString(JsonValue) then
+    raise EArgumentException.Create(MESSAGE_EXPECTED_UUID);
+
+  const Text = JsonValue.Value.Trim;
+  const IsBraced = Text.StartsWith('{');
+  var Braced := Text;
+  if not IsBraced then
+    Braced := Format('{%s}', [Text]);
+
+  try
+    Result := TValue.From<TGUID>(StringToGUID(Braced));
+  except
+    on E: EConvertError do
+      raise EArgumentException.Create(MESSAGE_EXPECTED_UUID);
+  end;
+end;
+
+class procedure TMCPSerializer.FillRecordFields(const Json: TJSONObject; const RttiType: TRttiType;
+  const Data: Pointer);
+begin
+  for var RttiField in RttiType.GetFields do
+  begin
+    if not IsWireField(RttiField) then
+      Continue;
+
+    GuardFieldHasType(RttiType, RttiField);
+
+    const WireName = GetWireName(RttiField);
+    const Member = GetJsonValueCaseInsensitive(Json, WireName);
+
+    const IsAbsent = (not Assigned(Member) or (Member is TJSONNull));
+    if IsAbsent then
+    begin
+      if IsRequiredMember(RttiField) then
+        raise EArgumentException.CreateFmt('Missing required parameter "%s"', [WireName]);
+      Continue;
+    end;
+
+    var FieldValue: TValue;
+    try
+      FieldValue := ConvertJsonToValue(Member, RttiField.FieldType);
+    except
+      on E: EArgumentException do
+        raise EArgumentException.CreateFmt('Parameter "%s": %s', [WireName, E.Message]);
+    end;
+
+    if not FieldValue.IsEmpty then
+      RttiField.SetValue(Data, FieldValue);
+  end;
+end;
+
+class procedure TMCPSerializer.FreeRecordObjects(const Value: TValue; const RttiType: TRttiType);
+begin
+  const Held = TObjectList<TObject>.Create(True);
+  try
+    CollectFromRecord(Value, RttiType, Held);
+  finally
+    Held.Free;
   end;
 end;
 
@@ -298,7 +602,9 @@ begin
   SetLength(Names, EnumType.MaxValue - EnumType.MinValue + 1);
 
   for Ordinal := EnumType.MinValue to EnumType.MaxValue do
+  begin
     Names[Ordinal - EnumType.MinValue] := GetEnumName(EnumType.Handle, Ordinal);
+  end;
 
   Result := String.Join(', ', Names);
 end;
@@ -309,12 +615,12 @@ var
   MetaClass: TClass;
 begin
   Result := nil;
-  
+
   if RttiType is TRttiInstanceType then
   begin
     InstanceType := TRttiInstanceType(RttiType);
     MetaClass := InstanceType.MetaclassType;
-    
+
     if Assigned(MetaClass) then
       Result := MetaClass.Create;
   end;
@@ -326,33 +632,70 @@ var
   Obj: TObject;
 begin
   Result := nil;
-  
+
   if Value.IsEmpty then
+  begin
+    case RttiType.TypeKind of
+      tkClass:
+        Result := TJSONNull.Create;
+      tkDynArray:
+        Result := TJSONArray.Create;
+    end;
     Exit;
-    
+  end;
+
   case RttiType.TypeKind of
     tkInteger:
       Result := TJSONNumber.Create(Value.AsInteger);
 
     tkInt64:
       Result := TJSONNumber.Create(Value.AsInt64);
-      
+
     tkFloat:
-      Result := TJSONNumber.Create(Value.AsExtended);
-      
-    tkString, tkLString, tkWString, tkUString:
+      if RttiType.Handle = TypeInfo(TDateTime) then
+        Result := TJSONString.Create(DateToISO8601(Value.AsType<TDateTime>, False))
+      else
+        Result := TJSONNumber.Create(Value.AsExtended);
+
+    tkString, tkLString, tkWString, tkUString, tkChar, tkWChar:
       Result := TJSONString.Create(Value.AsString);
-      
+
     tkEnumeration:
+      if RttiType.Handle = TypeInfo(Boolean) then
+        Result := TJSONBool.Create(Value.AsBoolean)
+      else
+        Result := TJSONString.Create(GetEnumName(RttiType.Handle, Integer(Value.AsOrdinal)));
+
+    tkSet:
       begin
-{$IF COMPILERVERSION <= 29}
-        if Value.AsBoolean then
-          Result := TJSONTrue.Create
-        else
-          Result := TJSONFalse.Create;
-{$ELSE}
-        Result := TJSONBool.Create(Value.AsBoolean);
-{$ENDIF}
+        const Names = TJSONArray.Create;
+        const ElementType = TRttiEnumerationType(TRttiSetType(RttiType).ElementType);
+        const Bytes = PByte(Value.GetReferenceToRawData);
+        const FirstBit = ElementType.MinValue and not 7;
+        for var Ordinal := ElementType.MinValue to ElementType.MaxValue do
+        begin
+          const BitIndex = Ordinal - FirstBit;
+          const ByteIndex = BitIndex div 8;
+          const IsMember = ((ByteIndex < Value.DataSize) and ((Bytes[ByteIndex] and (1 shl (BitIndex mod 8))) <> 0));
+          if IsMember then
+            Names.Add(GetEnumName(ElementType.Handle, Ordinal));
+        end;
+        Result := Names;
+      end;
+
+    tkDynArray:
+      begin
+        var Items := TJSONArray.Create;
+        var ElementType := TRttiDynamicArrayType(RttiType).ElementType;
+        for var I := 0 to Value.GetArrayLength - 1 do
+        begin
+          var Item := ConvertValueToJson(Value.GetArrayElement(I), ElementType);
+          if Assigned(Item) then
+            Items.AddElement(Item)
+          else
+            Items.AddElement(TJSONNull.Create);
+        end;
+        Result := Items;
       end;
 
     tkClass:
@@ -364,23 +707,110 @@ begin
         begin
           Result := TJSONValue(Obj).Clone as TJSONValue;
         end
-        else
+        else if not TrySerializeList(Obj, Result) then
         begin
           ChildJson := TJSONObject.Create;
           Serialize(Obj, ChildJson);
           Result := ChildJson;
         end;
-      end;
+      end
+      else
+        Result := TJSONNull.Create;
+
+    tkRecord, tkMRecord:
+      Result := ConvertRecordToJson(Value, RttiType);
   end;
+end;
+
+class function TMCPSerializer.ConvertRecordToJson(const Value: TValue;
+  const RttiType: TRttiType): TJSONValue;
+begin
+  if IsGuid(RttiType) then
+    Exit(ConvertGuidToJson(Value));
+
+  if not HasWireFields(RttiType) then
+    Exit(nil);
+
+  const Json = TJSONObject.Create;
+  try
+    const Data = Value.GetReferenceToRawData;
+    for var RttiField in RttiType.GetFields do
+    begin
+      if not IsWireField(RttiField) then
+        Continue;
+
+      GuardFieldHasType(RttiType, RttiField);
+
+      const Member = ConvertValueToJson(RttiField.GetValue(Data), RttiField.FieldType);
+      if Assigned(Member) then
+        Json.AddPair(GetWireName(RttiField), Member);
+    end;
+  except
+    Json.Free;
+    raise;
+  end;
+
+  Result := Json;
+end;
+
+class function TMCPSerializer.ConvertGuidToJson(const Value: TValue): TJSONValue;
+begin
+  const Braced = GUIDToString(Value.AsType<TGUID>);
+  const Bare = Braced.Trim(['{', '}']);
+  Result := TJSONString.Create(LowerCase(Bare));
+end;
+
+class function TMCPSerializer.TrySerializeList(Obj: TObject; out Json: TJSONValue): Boolean;
+var
+  ListType: TRttiType;
+  CountProp: TRttiProperty;
+  ItemsProp: TRttiIndexedProperty;
+  IndexParams: TArray<TRttiParameter>;
+  Items: TJSONArray;
+  Item: TJSONValue;
+  Count: Integer;
+  I: Integer;
+begin
+  Result := False;
+  Json := nil;
+
+  ListType := FContext.GetType(Obj.ClassType);
+  CountProp := ListType.GetProperty('Count');
+  ItemsProp := ListType.GetIndexedProperty('Items');
+  if not Assigned(CountProp) or not Assigned(ItemsProp) or not ItemsProp.IsReadable or
+    not Assigned(ItemsProp.ReadMethod) then
+    Exit;
+
+  IndexParams := ItemsProp.ReadMethod.GetParameters;
+  if (Length(IndexParams) <> 1) or not (IndexParams[0].ParamType.TypeKind in [tkInteger, tkInt64]) then
+    Exit;
+
+  {$WARN UNSAFE_CAST OFF}
+  Count := Integer(CountProp.GetValue(Obj).AsInt64);
+  {$WARN UNSAFE_CAST ON}
+  Items := TJSONArray.Create;
+  for I := 0 to Count - 1 do
+  begin
+    {$WARN UNSAFE_CAST OFF}
+    Item := ConvertValueToJson(ItemsProp.GetValue(Obj, [I]), ItemsProp.PropertyType);
+    {$WARN UNSAFE_CAST ON}
+    if Assigned(Item) then
+      Items.AddElement(Item)
+    else
+      Items.AddElement(TJSONNull.Create);
+  end;
+
+  Json := Items;
+  Result := True;
 end;
 
 class function TMCPSerializer.DeserializeArray(RttiType: TRttiType; const JsonArray: TJSONArray): TValue;
 begin
   Result := TValue.Empty;
-  
+
   if RttiType is TRttiDynamicArrayType then
     Result := DeserializeDynamicArray(TRttiDynamicArrayType(RttiType), JsonArray)
-  else if (RttiType is TRttiInstanceType) and 
+  else if (RttiType is TRttiInstanceType) and
           (TRttiInstanceType(RttiType).MetaclassType.InheritsFrom(TList)) then
     Result := DeserializeGenericList(TRttiInstanceType(RttiType), JsonArray);
 end;
@@ -399,12 +829,12 @@ begin
   Result := TValue.Empty;
   TValue.Make(nil, DynArrayType.Handle, Result);
   DynArraySetLength(PPointer(Result.GetReferenceToRawData)^, Result.TypeInfo, 1, @ArrayLength);
-  
+
   for I := 0 to ArrayLength - 1 do
   begin
     JsonElement := JsonArray.Items[Integer(I)];
     ElementValue := ConvertJsonToValue(JsonElement, ElementType);
-    
+
     if not ElementValue.IsEmpty then
       Result.SetArrayElement(I, ElementValue);
   end;
@@ -420,25 +850,25 @@ var
   ParamType: TRttiType;
 begin
   ListInstance := ListType.MetaclassType.Create;
-  
+
   AddMethod := FindAddMethod(ListType);
   if not Assigned(AddMethod) then
   begin
     ListInstance.Free;
     Exit(TValue.Empty);
   end;
-  
+
   ParamType := AddMethod.GetParameters[0].ParamType;
-  
+
   for I := 0 to JsonArray.Count - 1 do
   begin
     JsonElement := JsonArray.Items[I];
     ElementValue := ConvertJsonToValue(JsonElement, ParamType);
-    
+
     if not ElementValue.IsEmpty then
       AddMethod.Invoke(ListInstance, [ElementValue]);
   end;
-  
+
   Result := ListInstance;
 end;
 
@@ -447,7 +877,7 @@ var
   Method: TRttiMethod;
 begin
   Result := nil;
-  
+
   for Method in ListType.GetMethods do
   begin
     if SameText(Method.Name, 'Add') and (Length(Method.GetParameters) = 1) then

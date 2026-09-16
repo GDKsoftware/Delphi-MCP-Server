@@ -1,0 +1,23 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 15,
+    "method": "resources/read",
+    "params": {
+      "uri": "project://readme"
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 15,
+    "result": {
+      "contents": [
+        {
+          "uri": "project://readme",
+          "mimeType": "text/markdown",
+          "text": "\r\n# Delphi MCP Server\r\n\r\nA Model Context Protocol (MCP) server implementation in Delphi using Indy HTTP Server.\r\n\r\n## Features\r\n- Tools capability with automatic schema generation\r\n- Resources capability for read-only data access\r\n- JSON-RPC 2.0 protocol support\r\n- CORS support for cross-origin requests\r\n\r\n## Building\r\n```bash\r\nbuild.bat\r\n```\r\n\r\n## Running\r\n```bash\r\nWin32\\Debug\\MCPServer.exe\r\n```\r\n\r\n## Testing\r\n```bash\r\nnpx @wong2/mcp-cli --url http://localhost:8080/mcp\r\n```\r\n'"
+        }
+      ]
+    }
+  }
+}

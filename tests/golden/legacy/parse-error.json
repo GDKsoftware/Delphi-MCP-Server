@@ -1,0 +1,11 @@
+{
+  "requestText": "{\"jsonrpc\":\"2.0\",\"id\":22,\"method\":",
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": null,
+    "error": {
+      "code": -32700,
+      "message": "Invalid JSON"
+    }
+  }
+}

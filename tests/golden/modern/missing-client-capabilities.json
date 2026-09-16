@@ -1,0 +1,20 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 10,
+    "method": "tools/list",
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28"
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 10,
+    "error": {
+      "code": -32602,
+      "message": "params._meta.io.modelcontextprotocol/clientCapabilities is required and must be an object"
+    }
+  }
+}

@@ -17,12 +17,16 @@ type
 
 implementation
 
+
+const
+  KEY_SUCCESS = 'success';
+
 function TJsonResponseParser.ParseSuccess(const Response: IHttpResponse): TJSONObject;
 begin
   if Response.StatusCode = 204 then
   begin
     Result := TJSONObject.Create;
-    Result.AddPair('success', TJSONBool.Create(True));
+    Result.AddPair(KEY_SUCCESS, TJSONBool.Create(True));
     Exit;
   end;
 
@@ -40,14 +44,14 @@ begin
     else
     begin
       Result := TJSONObject.Create;
-      Result.AddPair('success', TJSONBool.Create(True));
+      Result.AddPair(KEY_SUCCESS, TJSONBool.Create(True));
       ParsedValue.Free;
     end;
   end
   else
   begin
     Result := TJSONObject.Create;
-    Result.AddPair('success', TJSONBool.Create(True));
+    Result.AddPair(KEY_SUCCESS, TJSONBool.Create(True));
   end;
 end;
 

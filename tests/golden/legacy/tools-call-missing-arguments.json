@@ -1,0 +1,23 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 8,
+    "method": "tools/call",
+    "params": {
+      "name": "echo"
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 8,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Invalid arguments: Missing required parameter \"message\""
+        }
+      ],
+      "isError": true
+    }
+  }
+}

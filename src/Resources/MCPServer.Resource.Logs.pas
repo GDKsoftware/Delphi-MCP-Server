@@ -7,6 +7,7 @@ uses
   System.Classes,
   System.Generics.Collections,
   System.SyncObjs,
+  MCPServer.Types,
   MCPServer.Resource.Base;
 
 type
@@ -33,7 +34,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    
+
     property Entries: TObjectList<TLogEntry> read FEntries write FEntries;
     property TotalCount: NativeInt read FTotalCount write FTotalCount;
     property FilteredCount: NativeInt read FFilteredCount write FFilteredCount;
@@ -48,10 +49,10 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    
+
     class function Instance: TLogBuffer;
     class procedure Finalize;
-    
+
     procedure AddLog(const ALevel, AMessage, ACategory: string);
     function GetLogs(AMaxCount: NativeInt = 100; const ALevel: string = ''): TObjectList<TLogEntry>;
   end;
@@ -63,6 +64,22 @@ type
     constructor Create; override;
   end;
 
+  TLogsByLevelResource = class(TMCPResourceBase<TLogEntries>)
+  private
+    FLevel: string;
+  protected
+    function GetResourceData: TLogEntries; override;
+  public
+    constructor CreateForLevel(const AUri, ALevel: string); reintroduce;
+  end;
+
+  TLogsByLevelTemplate = class(TMCPResourceTemplateBase, IMCPCompletable)
+  public
+    constructor Create; override;
+    function CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource; override;
+    function Complete(const ArgumentName, Value: string;
+      const Context: TArray<TPair<string, string>>): TMCPCompletion;
+  end;
 
 implementation
 
@@ -73,6 +90,15 @@ uses
   System.DateUtils,
   System.Math,
   MCPServer.Registration;
+
+const
+  MIME_TYPE_JSON = 'application/json';
+  LEVEL_INFO = 'INFO';
+  CATEGORY_SYSTEM = 'SYSTEM';
+  URI_RECENT = 'logs://recent';
+  URI_TEMPLATE_BY_LEVEL = 'logs://{level}';
+  TEMPLATE_VARIABLE_LEVEL = 'level';
+  MAX_RECENT_LOG_ENTRIES = 100;
 
 { TLogEntries }
 
@@ -102,7 +128,9 @@ var
   Entry: TLogEntry;
 begin
   for Entry in FLogs do
+  begin
     Entry.Free;
+  end;
   FLogs.Free;
   inherited;
 end;
@@ -143,10 +171,9 @@ begin
     {$ELSE}
     Entry.ThreadID := TThread.CurrentThread.ThreadID;
     {$ENDIF}
-    
+
     FLogs.Add(Entry);
-    
-    // Remove earliest entries if buffer exceeds maximum capacity
+
     while FLogs.Count > FMaxEntries do
     begin
       FLogs[0].Free;
@@ -164,11 +191,11 @@ var
   StartIndex: NativeInt;
 begin
   Result := TObjectList<TLogEntry>.Create(True);
-  
+
   FLock.Acquire;
   try
     StartIndex := Max(0, FLogs.Count - AMaxCount);
-    
+
     for i := StartIndex to FLogs.Count - 1 do
     begin
       Entry := FLogs[i];
@@ -193,50 +220,136 @@ end;
 constructor TLogsRecentResource.Create;
 begin
   inherited;
-  FURI := 'logs://recent';
+  FURI := URI_RECENT;
   FName := 'Recent Logs';
   FDescription := 'Recent log entries from all categories';
-  FMimeType := 'application/json';
+  FMimeType := MIME_TYPE_JSON;
+  FTtlMs := 0;
+  FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
 end;
 
 function TLogsRecentResource.GetResourceData: TLogEntries;
-var
-  Logs: TObjectList<TLogEntry>;
 begin
-  Result := TLogEntries.Create;
-  
-  // Add access log entry
-  TLogBuffer.Instance.AddLog('INFO', 'Resource accessed: logs://recent', 'ACCESS');
-  
-  Logs := TLogBuffer.Instance.GetLogs(100);
+  const Logs = TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES);
   try
-    Result.Entries.AddRange(Logs.ToArray);
-    Result.TotalCount := Logs.Count;
-    Result.FilteredCount := Logs.Count;
+    const Entries = TLogEntries.Create;
+    try
+      Entries.Entries.AddRange(Logs);
+      Entries.TotalCount := Logs.Count;
+      Entries.FilteredCount := Logs.Count;
+      Logs.OwnsObjects := False;
+    except
+      Entries.Entries.OwnsObjects := False;
+      Entries.Free;
+      raise;
+    end;
+    Result := Entries;
   finally
     Logs.Free;
   end;
 end;
 
+{ TLogsByLevelResource }
+
+constructor TLogsByLevelResource.CreateForLevel(const AUri, ALevel: string);
+begin
+  inherited Create;
+  FLevel := ALevel;
+  FURI := AUri;
+  FName := 'Recent logs (' + ALevel + ')';
+  FDescription := 'Recent log entries at level ' + ALevel;
+  FMimeType := MIME_TYPE_JSON;
+  FTtlMs := 0;
+  FCacheScope := MCP_CACHE_SCOPE_PRIVATE;
+end;
+
+function TLogsByLevelResource.GetResourceData: TLogEntries;
+begin
+  const Logs = TLogBuffer.Instance.GetLogs(MAX_RECENT_LOG_ENTRIES, FLevel);
+  try
+    const Entries = TLogEntries.Create;
+    try
+      Entries.Entries.AddRange(Logs);
+      Entries.TotalCount := Logs.Count;
+      Entries.FilteredCount := Logs.Count;
+      Logs.OwnsObjects := False;
+    except
+      Entries.Entries.OwnsObjects := False;
+      Entries.Free;
+      raise;
+    end;
+    Result := Entries;
+  finally
+    Logs.Free;
+  end;
+end;
+
+{ TLogsByLevelTemplate }
+
+constructor TLogsByLevelTemplate.Create;
+begin
+  inherited;
+  FUriTemplate := URI_TEMPLATE_BY_LEVEL;
+  FName := 'Recent logs by level';
+  FDescription := 'Recent log entries at the given level, e.g. logs://INFO';
+  FMimeType := MIME_TYPE_JSON;
+end;
+
+function TLogsByLevelTemplate.CreateResource(const URI: string; Vars: TMCPTemplateVars): IMCPResource;
+begin
+  Result := TLogsByLevelResource.CreateForLevel(URI, Vars[TEMPLATE_VARIABLE_LEVEL]);
+end;
+
+function TLogsByLevelTemplate.Complete(const ArgumentName, Value: string;
+  const Context: TArray<TPair<string, string>>): TMCPCompletion;
+begin
+  if ArgumentName <> TEMPLATE_VARIABLE_LEVEL then
+    begin
+      Result := TMCPCompletion.Create(nil);
+      Exit;
+    end;
+
+  var Levels := TStringList.Create;
+  try
+    Levels.Sorted := True;
+    Levels.Duplicates := dupIgnore;
+    var Entries := TLogBuffer.Instance.GetLogs(1000);
+    try
+      for var Entry in Entries do
+        if Entry.Level.StartsWith(Value, True) then
+          Levels.Add(Entry.Level);
+    finally
+      Entries.Free;
+    end;
+    Result := TMCPCompletion.Create(Levels.ToStringArray, Levels.Count);
+  finally
+    Levels.Free;
+  end;
+end;
 
 initialization
   TLogBuffer.FLock := TCriticalSection.Create;
-  
-  // Example initialization logs
-  TLogBuffer.Instance.AddLog('INFO', 'MCP Server started', 'SYSTEM');
-  TLogBuffer.Instance.AddLog('INFO', 'Resources manager initialized', 'SYSTEM');
-  TLogBuffer.Instance.AddLog('INFO', 'Tools manager initialized', 'SYSTEM');
+
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'MCP Server started', CATEGORY_SYSTEM);
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'Resources manager initialized', CATEGORY_SYSTEM);
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'Tools manager initialized', CATEGORY_SYSTEM);
   TLogBuffer.Instance.AddLog('WARNING', 'Debug mode is enabled', 'CONFIG');
-  TLogBuffer.Instance.AddLog('INFO', 'Server listening on port 8080', 'SERVER');
-  
-  // Register Logs resources
-  TMCPRegistry.RegisterResource('logs://recent',
+  TLogBuffer.Instance.AddLog(LEVEL_INFO, 'Server listening on port 8080', 'SERVER');
+
+  TMCPRegistry.RegisterResource(URI_RECENT,
     function: IMCPResource
     begin
       Result := TLogsRecentResource.Create;
     end
   );
-  
+
+  TMCPRegistry.RegisterResourceTemplate(URI_TEMPLATE_BY_LEVEL,
+    function: IMCPResourceTemplate
+    begin
+      Result := TLogsByLevelTemplate.Create;
+    end
+  );
+
 
 finalization
   TLogBuffer.Finalize;

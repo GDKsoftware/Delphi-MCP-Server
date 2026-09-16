@@ -1,0 +1,123 @@
+unit MCPServer.Prompt.SummarizeLogs;
+
+interface
+
+uses
+  System.SysUtils,
+  System.Generics.Collections,
+  MCPServer.Types,
+  MCPServer.Prompt.Base;
+
+type
+  TSummarizeLogsParams = class
+  private
+    FLevel: string;
+  public
+    [Optional]
+    [SchemaDescription('Only include entries at this level (e.g. INFO, WARNING); all levels when omitted')]
+    property Level: string read FLevel write FLevel;
+  end;
+
+  TSummarizeLogsPrompt = class(TMCPPromptBase<TSummarizeLogsParams>, IMCPCompletable)
+  protected
+    function ExecuteWithParams(const Params: TSummarizeLogsParams; Messages: TMCPPromptMessages): string; override;
+  public
+    constructor Create; override;
+    function Complete(const ArgumentName, Value: string;
+      const Context: TArray<TPair<string, string>>): TMCPCompletion;
+  end;
+
+implementation
+
+uses
+  System.Classes,
+  MCPServer.Registration,
+  MCPServer.Resource.Logs,
+  System.NetEncoding;
+
+const
+  ROLE_USER = 'user';
+  PROMPT_NAME = 'summarize_logs';
+
+
+{ TSummarizeLogsPrompt }
+
+constructor TSummarizeLogsPrompt.Create;
+begin
+  inherited;
+  FName := PROMPT_NAME;
+  FDescription := 'Summarizes the server''s recent log entries, optionally filtered by level';
+end;
+
+function TSummarizeLogsPrompt.ExecuteWithParams(const Params: TSummarizeLogsParams;
+  Messages: TMCPPromptMessages): string;
+var
+  Entries: TObjectList<TLogEntry>;
+  ResourceUri, ResourceText: string;
+begin
+  if Params.Level = '' then
+  begin
+    Messages.AddText(ROLE_USER, 'Summarize the server''s recent log entries, calling out anything unusual.');
+    ResourceUri := 'logs://recent';
+  end
+  else
+  begin
+    Messages.AddText(ROLE_USER, Format(
+      'Summarize the server''s recent "%s" log entries, calling out anything unusual.', [Params.Level]));
+    ResourceUri := Format('logs://%s', [TNetEncoding.URL.Encode(Params.Level)]);
+  end;
+
+  Entries := TLogBuffer.Instance.GetLogs(100, Params.Level);
+  try
+    var Lines := TStringList.Create;
+    try
+      for var Entry in Entries do
+        Lines.Add(Format('[%s] [%s] %s: %s', [FormatDateTime('yyyy-mm-dd hh:nn:ss', Entry.Timestamp),
+          Entry.Level, Entry.Category, Entry.Message]));
+      ResourceText := Lines.Text;
+    finally
+      Lines.Free;
+    end;
+  finally
+    Entries.Free;
+  end;
+
+  Messages.AddEmbeddedText(ROLE_USER, ResourceUri, 'text/plain', ResourceText);
+  Result := 'Log summary request';
+end;
+
+function TSummarizeLogsPrompt.Complete(const ArgumentName, Value: string;
+  const Context: TArray<TPair<string, string>>): TMCPCompletion;
+begin
+  if ArgumentName <> 'level' then
+    begin
+      Result := TMCPCompletion.Create(nil);
+      Exit;
+    end;
+
+  var Levels := TStringList.Create;
+  try
+    Levels.Sorted := True;
+    Levels.Duplicates := dupIgnore;
+    var Entries := TLogBuffer.Instance.GetLogs(1000);
+    try
+      for var Entry in Entries do
+        if Entry.Level.StartsWith(Value, True) then
+          Levels.Add(Entry.Level);
+    finally
+      Entries.Free;
+    end;
+    Result := TMCPCompletion.Create(Levels.ToStringArray, Levels.Count);
+  finally
+    Levels.Free;
+  end;
+end;
+
+initialization
+  TMCPRegistry.RegisterPrompt(PROMPT_NAME,
+    function: IMCPPrompt
+    begin
+      Result := TSummarizeLogsPrompt.Create;
+    end);
+
+end.

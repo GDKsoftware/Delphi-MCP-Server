@@ -1,0 +1,34 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 28,
+    "method": "resources/read",
+    "params": {
+      "uri": "server://status"
+    }
+  },
+  "shape": [
+    "result.contents[0].text"
+  ],
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 28,
+    "result": {
+      "contents": [
+        {
+          "uri": "server://status",
+          "mimeType": "application/json",
+          "text": {
+            "status": "string",
+            "uptime": "number",
+            "starttime": "string",
+            "currenttime": "string",
+            "memoryused": "number",
+            "requestcount": "number",
+            "activeconnections": "number"
+          }
+        }
+      ]
+    }
+  }
+}

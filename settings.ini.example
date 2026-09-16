@@ -8,15 +8,82 @@ Host=localhost
 Name=delphi-mcp-server
 Version=1.0.0
 Endpoint=/mcp
+; Optional identity reported to clients (initialize and server/discover)
+Title=
+Description=
+WebsiteUrl=
+; Optional guidance for LLM clients on how to use this server
+Instructions=
+; Interface to listen on. Empty = derived from Host: a loopback Host binds
+; 127.0.0.1 and ::1, any other Host binds every interface. Set 0.0.0.0 to
+; listen on every interface explicitly.
+BindAddress=
+; Optional GET path that answers a JSON document with the endpoint URL and
+; the protocol versions (the MCP endpoint itself only accepts POST)
+EndpointInfoPath=
+; Larger POST bodies are refused with 413
+MaxRequestBodyBytes=4194304
+; Deeper JSON nesting is refused with 400
+MaxJsonDepth=64
+; Indy connection limit; 0 = unlimited
+MaxConnections=0
+; Serve logs://recent, logs://{level} and server://status; set 0 on a server
+; that strangers can reach, the log buffer and status counters are diagnostics
+ExposeDiagnosticsResources=1
+; Worker threads of the stdio transport; 1 answers requests in arrival order
+MaxConcurrentRequests=1
+
+[Security]
+; Origins allowed next to the loopback origins (localhost, 127.0.0.1, [::1] on
+; any port), for DNS-rebinding protection. Comma-separated scheme://host[:port];
+; ":*" allows any port. Empty = the [CORS] AllowedOrigins list below.
+AllowedOrigins=
+; Host header values the server answers, comma-separated host[:port]; an
+; entry without a port matches any port, * matches everything. Empty = any
+; host. Set it when the server is reachable through a public name so that a
+; rebinding DNS name cannot reach it.
+AllowedHosts=
+; Secret that signs the requestState tokens of multi round-trip requests.
+; Empty = a random key per process: tokens stop verifying after a restart
+; and on other instances. Set the same value on every instance.
+RequestStateKey=
+; Seconds a requestState token stays valid
+RequestStateTtlSeconds=600
+
+[Auth]
+; Pre-shared bearer tokens for the HTTP endpoint, comma-separated. Empty = no
+; authentication (the default for a loopback-only server). With tokens set,
+; every request except OPTIONS and the protected resource metadata must carry
+; "Authorization: Bearer <token>"; otherwise it gets 401.
+BearerTokens=
+; OAuth 2.1 authorization server issuer URLs, comma-separated, published in
+; /.well-known/oauth-protected-resource so clients can discover where to get a
+; token. Leave empty for pre-shared tokens only.
+AuthorizationServers=
+; Canonical URI of this server as bound into token audiences (RFC 8707).
+; Empty = <Protocol>://<Host>:<Port><Endpoint>
+ResourceUri=
+; Scopes clients may ask for, comma-separated, published in the metadata
+ScopesSupported=
+
+[Protocol]
+; Boolean values: use 1 (true) or 0 (false)
+; Answer ping for MCP 2026-07-28 requests although that revision removed it
+LenientModernPing=0
+; Also list the initialize-based revisions (2025-06-18, 2025-11-25) in
+; server/discover and in unsupported-version errors
+DiscoverListsLegacyVersions=0
+; Cache hint (milliseconds) on server/discover results; 0 = immediately stale
+DiscoverTtlMs=0
 
 [CORS]
-; Cross-Origin Resource Sharing configuration
+; Cross-Origin Resource Sharing response headers for browser clients
 ; Boolean values: use 1 (true) or 0 (false)
 Enabled=1
-; Comma-separated list of allowed origins
+; Comma-separated list of allowed origins; also the Origin allow-list when
+; [Security] AllowedOrigins is empty. Loopback origins are always allowed.
 ; Use * to allow all origins (not recommended for production)
-; Default: localhost and 127.0.0.1 with http and https
-AllowedOrigins=http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1,http://localhost:3000,http://127.0.0.1:3000
+AllowedOrigins=http://localhost,http://127.0.0.1,https://localhost,https://127.0.0.1
 
 [SSL]
 ; SSL/TLS configuration (optional)

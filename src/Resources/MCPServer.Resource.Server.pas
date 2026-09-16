@@ -28,13 +28,13 @@ type
     property ActiveConnections: Integer read FActiveConnections write FActiveConnections;
   end;
 
-
   TServerStatusResource = class(TMCPResourceBase<TServerStatus>)
   private
     class var FServerStartTime: TDateTime;
     class var FRequestCount: Int64;
     class var FActiveConnections: Integer;
     class var FNamePrefix: string;
+    class function StatusURI: string;
   protected
     function GetResourceData: TServerStatus; override;
   public
@@ -47,7 +47,6 @@ type
     class procedure ConnectionClosed;
   end;
 
-
 implementation
 
 uses
@@ -57,7 +56,6 @@ uses
   {$ENDIF}
   System.Classes,
   MCPServer.Registration;
-
 
 { TServerStatusResource }
 
@@ -69,22 +67,24 @@ begin
   FNamePrefix := '';
 end;
 
+class function TServerStatusResource.StatusURI: string;
+begin
+  Result := 'server://' + FNamePrefix + 'status';
+end;
+
 class procedure TServerStatusResource.SetNamePrefix(const Prefix: string);
 begin
+  const PreviousUri = StatusURI;
   FNamePrefix := Prefix;
   RegisterServerStatusResource;
+  const UriChanged = (PreviousUri <> StatusURI);
+  if UriChanged then
+    TMCPRegistry.UnregisterResource(PreviousUri);
 end;
 
 class procedure TServerStatusResource.RegisterServerStatusResource;
-var
-  URI: string;
 begin
-  if FNamePrefix <> '' then
-    URI := 'server://' + FNamePrefix + 'status'
-  else
-    URI := 'server://status';
-
-  TMCPRegistry.RegisterResource(URI,
+  TMCPRegistry.RegisterResource(StatusURI,
     function: IMCPResource
     begin
       Result := TServerStatusResource.Create;
@@ -94,33 +94,32 @@ end;
 
 class procedure TServerStatusResource.IncrementRequestCount;
 begin
-  Inc(FRequestCount);
+  AtomicIncrement(FRequestCount);
 end;
 
 class procedure TServerStatusResource.ConnectionOpened;
 begin
-  Inc(FActiveConnections);
+  AtomicIncrement(FActiveConnections);
 end;
 
 class procedure TServerStatusResource.ConnectionClosed;
 begin
-  if FActiveConnections > 0 then
-    Dec(FActiveConnections);
+  var Current := AtomicCmpExchange(FActiveConnections, 0, 0);
+  while Current > 0 do
+  begin
+    var Previous := AtomicCmpExchange(FActiveConnections, Current - 1, Current);
+    const IsCurrent = (Previous = Current);
+    if IsCurrent then
+      Exit;
+    Current := Previous;
+  end;
 end;
 
 constructor TServerStatusResource.Create;
 begin
   inherited;
-  if FNamePrefix <> '' then
-  begin
-    FURI := 'server://' + FNamePrefix + 'status';
-    FName := FNamePrefix + 'server_status';
-  end
-  else
-  begin
-    FURI := 'server://status';
-    FName := 'server_status';
-  end;
+  FURI := StatusURI;
+  FName := FNamePrefix + 'server_status';
   FDescription := 'Current server status and health information';
   FMimeType := 'application/json';
 end;
@@ -136,9 +135,9 @@ begin
   Result.StartTime := FServerStartTime;
   Result.CurrentTime := Now;
   Result.Uptime := SecondsBetween(Now, FServerStartTime);
-  Result.RequestCount := FRequestCount;
-  Result.ActiveConnections := FActiveConnections;
-  
+  Result.RequestCount := AtomicCmpExchange(FRequestCount, 0, 0);
+  Result.ActiveConnections := AtomicCmpExchange(FActiveConnections, 0, 0);
+
   {$IFDEF MSWINDOWS}
   ProcessMemoryCounters.cb := SizeOf(ProcessMemoryCounters);
   if GetProcessMemoryInfo(GetCurrentProcess, @ProcessMemoryCounters, SizeOf(ProcessMemoryCounters)) then
@@ -146,12 +145,12 @@ begin
   else
     Result.MemoryUsed := 0;
   {$ELSE}
-  Result.MemoryUsed := 0; // Not implemented for other platforms
+  Result.MemoryUsed := 0;
   {$ENDIF}
 end;
 
-
 initialization
   TServerStatusResource.Initialize;
+  TServerStatusResource.RegisterServerStatusResource;
 
 end.

@@ -1,0 +1,23 @@
+{
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "tools/list",
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {
+        },
+        "io.modelcontextprotocol/logLevel": "loud"
+      }
+    }
+  },
+  "expected": {
+    "jsonrpc": "2.0",
+    "id": 11,
+    "error": {
+      "code": -32602,
+      "message": "params._meta.io.modelcontextprotocol/logLevel must be one of debug, info, notice, warning, error, critical, alert, emergency"
+    }
+  }
+}
