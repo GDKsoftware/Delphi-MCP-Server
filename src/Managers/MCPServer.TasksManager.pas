@@ -99,7 +99,7 @@ const
   MESSAGE_NEEDS_CONTEXT = 'The tasks manager needs a request context';
   MESSAGE_POOL_LIMIT_REFUSED = 'The task thread pool did not accept MaxRunningTasks = %d';
   MESSAGE_TASK_WORK_FAILED = 'Task %s failed: %s';
-  MESSAGE_SHUTDOWN_TIMEOUT = 'Tasks still running %d ms after they were cancelled';
+  MESSAGE_SHUTDOWN_TIMEOUT = 'Tasks still running %d ms after they were told to stop';
   MESSAGE_UNSUPPORTED_STATUS = 'Unsupported task status: %d';
 
 { TMCPTasksManager }
@@ -238,7 +238,7 @@ begin
 
   for var Control in Controls do
   begin
-    Control.Cancel;
+    Control.Release;
   end;
 
   const IsIdle = (FIdle.WaitFor(GraceMs) = TWaitResult.wrSignaled);
@@ -449,7 +449,7 @@ begin
 
   for var Control in Finished do
   begin
-    Control.Cancel;
+    Control.Release;
   end;
 end;
 

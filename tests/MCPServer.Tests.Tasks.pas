@@ -27,6 +27,16 @@ type
   end;
 
   [TaskExecution(TMCPTaskExecution.Optional)]
+  TContextStarterTool = class(TMCPToolBase<TNoParams>, IMCPContextTaskStarter)
+  protected
+    function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
+
+  public
+    constructor Create; override;
+    procedure StartTask(const Arguments: TJSONObject; const Task: IMCPTaskHandle; const Context: IMCPRequestContext);
+  end;
+
+  [TaskExecution(TMCPTaskExecution.Optional)]
   TTaskIdEchoTool = class(TMCPToolBase<TNoParams>)
   protected
     function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
@@ -47,6 +57,7 @@ type
     function Send(const Method, ParamsJson, Capabilities: string; const Principal: string = ''): TJSONObject; overload;
     function CallTool(const Name, ArgumentsJson, Capabilities: string): TJSONObject;
     function CreateTask(const Name, ArgumentsJson: string): string;
+    function CreateTaskAs(const Name, ArgumentsJson, Principal: string): string;
     function GetTask(const TaskId: string; const Principal: string = ''): TJSONObject;
     function TaskStatus(const TaskId: string): string;
     function WaitForStatus(const TaskId, Status: string): Boolean;
@@ -92,6 +103,12 @@ type
 
     [Test]
     procedure HostReference_SetByTheStarter_IsKeptByTheStoreOnly;
+
+    [Test]
+    procedure ContextStarter_ReceivesTheRequestContext;
+
+    [Test]
+    procedure Shutdown_RunningTask_KeepsItsStoredStatus;
 
     [Test]
     procedure TaskRun_Context_CarriesTheTaskId;
@@ -222,9 +239,11 @@ const
   ISO_TIMESTAMP_PATTERN = '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}';
   RESULT_TYPE_COMPLETE = 'complete';
   TASK_ID_PARAM = '"taskId":"%s"';
+  TOOL_CALL_PARAMS = '"name":"%s","arguments":%s';
   TOOL_FAILING_JOB = 'failing_job';
   TOOL_OPTIONAL_STARTER = 'test_optional_starter';
   TOOL_TASK_ID_ECHO = 'test_task_id_echo';
+  TOOL_CONTEXT_STARTER = 'test_context_starter';
   TEXT_RAN_WITHOUT_TASK = 'ran without a task';
   TEXT_STARTED_AS_TASK = 'started as a task';
   HOST_REFERENCE = 'job-7';
@@ -248,6 +267,31 @@ procedure TOptionalStarterTool.StartTask(const Arguments: TJSONObject; const Tas
 begin
   Task.HostReference := HOST_REFERENCE;
   const Started = TMCPToolResult.Text(TEXT_STARTED_AS_TASK);
+  try
+    Task.Complete(Started);
+  finally
+    Started.Free;
+  end;
+end;
+
+{ TContextStarterTool }
+
+constructor TContextStarterTool.Create;
+begin
+  inherited;
+  FName := TOOL_CONTEXT_STARTER;
+  FDescription := 'Starts its own work as a task and answers with the principal of the request';
+end;
+
+function TContextStarterTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
+begin
+  Result := TMCPToolResult.Text(TEXT_RAN_WITHOUT_TASK);
+end;
+
+procedure TContextStarterTool.StartTask(const Arguments: TJSONObject; const Task: IMCPTaskHandle;
+  const Context: IMCPRequestContext);
+begin
+  const Started = TMCPToolResult.Text(Context.Principal);
   try
     Task.Complete(Started);
   finally
@@ -290,6 +334,7 @@ begin
   FHarness.ToolsManager.TaskService := FTasksService;
   FHarness.ToolsManager.AddTool(TOptionalStarterTool.Create);
   FHarness.ToolsManager.AddTool(TTaskIdEchoTool.Create);
+  FHarness.ToolsManager.AddTool(TContextStarterTool.Create);
   FHarness.ManagerRegistry.RegisterManager(FTasks);
   FProcessor := TMCPJsonRpcProcessor.Create(FHarness.ManagerRegistry);
 end;
@@ -328,7 +373,7 @@ end;
 
 function TTasksTests.CallTool(const Name, ArgumentsJson, Capabilities: string): TJSONObject;
 begin
-  const Params = Format('"name":"%s","arguments":%s', [Name, ArgumentsJson]);
+  const Params = Format(TOOL_CALL_PARAMS, [Name, ArgumentsJson]);
   Result := Send(MCP_METHOD_TOOLS_CALL, Params, Capabilities);
 end;
 
@@ -337,6 +382,17 @@ begin
   const Response = CallTool(Name, ArgumentsJson, CAPABILITIES_TASKS);
   try
     Assert.AreEqual(RESULT_TYPE_TASK, Response.GetValue<string>(PATH_RESULT_TYPE, ''), Response.ToJSON);
+    Result := Response.GetValue<string>(PATH_TASK_ID);
+  finally
+    Response.Free;
+  end;
+end;
+
+function TTasksTests.CreateTaskAs(const Name, ArgumentsJson, Principal: string): string;
+begin
+  const Params = Format(TOOL_CALL_PARAMS, [Name, ArgumentsJson]);
+  const Response = Send(MCP_METHOD_TOOLS_CALL, Params, CAPABILITIES_TASKS, Principal);
+  try
     Result := Response.GetValue<string>(PATH_TASK_ID);
   finally
     Response.Free;
@@ -518,6 +574,29 @@ begin
   finally
     Response.Free;
   end;
+end;
+
+procedure TTasksTests.ContextStarter_ReceivesTheRequestContext;
+begin
+  const TaskId = CreateTaskAs(TOOL_CONTEXT_STARTER, ARGUMENTS_NONE, OWNER);
+
+  const Response = GetTask(TaskId, OWNER);
+  try
+    Assert.AreEqual(OWNER, Response.GetValue<string>(PATH_FIRST_TEXT), Response.ToJSON);
+  finally
+    Response.Free;
+  end;
+end;
+
+procedure TTasksTests.Shutdown_RunningTask_KeepsItsStoredStatus;
+begin
+  const TaskId = CreateTask(TOOL_SLOW_COMPUTE, ARGUMENTS_LONG_RUN);
+
+  FTasks.Shutdown;
+
+  var Stored: TMCPTaskSnapshot;
+  Assert.IsTrue(FStore.TryGet(TaskId, Stored));
+  Assert.AreEqual(Ord(TMCPTaskStatus.Working), Ord(Stored.Status));
 end;
 
 procedure TTasksTests.TaskRun_Context_CarriesTheTaskId;
@@ -751,14 +830,7 @@ end;
 
 procedure TTasksTests.TasksGet_OtherPrincipal_IsInvalidParams;
 begin
-  const Params = Format('"name":"%s","arguments":%s', [TOOL_SLOW_COMPUTE, ARGUMENTS_LONG_RUN]);
-  const Created = Send(MCP_METHOD_TOOLS_CALL, Params, CAPABILITIES_TASKS, OWNER);
-  var TaskId := '';
-  try
-    TaskId := Created.GetValue<string>(PATH_TASK_ID);
-  finally
-    Created.Free;
-  end;
+  const TaskId = CreateTaskAs(TOOL_SLOW_COMPUTE, ARGUMENTS_LONG_RUN, OWNER);
 
   const AsOwner = GetTask(TaskId, OWNER);
   const AsStranger = GetTask(TaskId, 'mallory');

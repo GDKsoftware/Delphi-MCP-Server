@@ -77,6 +77,11 @@ type
     procedure StartTask(const Arguments: TJSONObject; const Task: IMCPTaskHandle);
   end;
 
+  IMCPContextTaskStarter = interface
+    ['{FE28983D-356D-4C39-BE6A-18C30769E99E}']
+    procedure StartTask(const Arguments: TJSONObject; const Task: IMCPTaskHandle; const Context: IMCPRequestContext);
+  end;
+
   IMCPTaskService = interface
     ['{4E8A2C6D-7F9B-4D1C-8A2E-5C7E9B1D3F46}']
     function StartTask(const Context: IMCPRequestContext; const Starter: TProc<IMCPTaskHandle>): TJSONObject;

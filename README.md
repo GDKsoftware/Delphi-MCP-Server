@@ -960,6 +960,11 @@ extension as well: they get the result of the tool's normal `Execute`, as the
 specification forbids a `CreateTaskResult` for a client that did not declare
 the extension.
 
+A starter that needs the request, such as the principal or the client's
+declared capabilities, implements `IMCPContextTaskStarter` instead; its
+`StartTask` also gets the `IMCPRequestContext` of the `tools/call`. A tool
+implements one of the two interfaces.
+
 `StartTask` runs on the request thread once the task exists; `Arguments` is
 only valid during the call. Raise `EMCPInputRequired` there for input that is
 needed before the task is created: the client then gets a normal
@@ -984,7 +989,11 @@ must refuse to change a task that is already completed, failed or cancelled.
 The store holds the result, the error and the input requests as JSON text,
 and keeps `HostReference` as given.
 After a restart nothing runs for a task that was still `working`; the host
-decides what happens to it through `Host.Tasks.TryGetTask`.
+decides what happens to it through `Host.Tasks.TryGetTask`. Stopping the
+server tells the work it runs to stop (`IsCancelled` becomes true and the
+request context of a running tool is cancelled), but leaves every task in the
+store as it was: only a client's `tasks/cancel` makes a task `cancelled`, as
+the specification reserves cancellation for the client.
 
 A task is bound to the principal that created it: `tasks/get`, `tasks/update`
 and `tasks/cancel` from any other caller answer `-32602`, the same as for an
