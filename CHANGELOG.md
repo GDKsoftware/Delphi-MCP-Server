@@ -25,7 +25,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tool runs again once `tasks/update` answered every request; a waiting task
   holds no thread. A tool that
   implements `IMCPTaskStarter` hands an `IMCPTaskHandle` to the host, which
-  completes, fails or asks for input from its own threads. `IMCPTaskStore`
+  completes, fails or asks for input from its own threads. A starter is
+  `Required` unless it carries `[TaskExecution(Optional)]`; then a client
+  without the extension gets the result of its `Execute`.
+  `IMCPTaskHandle.HostReference` ties a task to a job of the host; the store
+  keeps it and it is never sent to the client. `IMCPRequestContext.TaskId`
+  holds the id of the task a tool runs for. `IMCPTaskStore`
   with `TMCPInMemoryTaskStore` as the default; `TMCPServerHost.TaskStore`
   plugs in a durable one and `TMCPServerHost.Tasks` gives the host the
   handles. `MCPServer.Tool.TaskSamples` holds the conformance fixtures

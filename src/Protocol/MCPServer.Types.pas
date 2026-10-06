@@ -358,6 +358,7 @@ type
     function GetSink: IMCPMessageSink;
     function GetPrincipal: string;
     function GetScopes: TArray<string>;
+    function GetTaskId: string;
 
     function HasClientCapability(const Path: string): Boolean;
     function HasClientExtension(const ExtensionId: string): Boolean;
@@ -389,6 +390,7 @@ type
     property Sink: IMCPMessageSink read GetSink;
     property Principal: string read GetPrincipal;
     property Scopes: TArray<string> read GetScopes;
+    property TaskId: string read GetTaskId;
   end;
 
   IMCPRequestTracker = interface

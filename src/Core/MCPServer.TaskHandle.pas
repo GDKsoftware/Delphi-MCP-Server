@@ -50,6 +50,8 @@ type
     function GetHandle: IMCPTaskHandle;
     function IsCancelled: Boolean;
     function IsFinished: Boolean;
+    function GetHostReference: string;
+    procedure SetHostReference(const HostReference: string);
     procedure SetStatusMessage(const StatusMessage: string);
     procedure RequestInput(const InputRequests: TJSONObject); overload;
     procedure RequestInput(const InputRequests: TJSONObject; const OnAnswered: TProc<TJSONObject>); overload;
@@ -108,6 +110,31 @@ end;
 function TMCPTaskHandle.IsFinished: Boolean;
 begin
   Result := (AtomicCmpExchange(FFinished, 0, 0) <> 0);
+end;
+
+function TMCPTaskHandle.GetHostReference: string;
+begin
+  var Task: TMCPTaskSnapshot;
+  const IsKnown = FStore.TryGet(FTaskId, Task);
+  if IsKnown then
+    Result := Task.HostReference
+  else
+    Result := '';
+end;
+
+procedure TMCPTaskHandle.SetHostReference(const HostReference: string);
+begin
+  FLock.Enter;
+  try
+    var Task: TMCPTaskSnapshot;
+    if not TryLoad(Task) then
+      Exit;
+
+    Task.HostReference := HostReference;
+    Save(Task);
+  finally
+    FLock.Leave;
+  end;
 end;
 
 procedure TMCPTaskHandle.SetStatusMessage(const StatusMessage: string);

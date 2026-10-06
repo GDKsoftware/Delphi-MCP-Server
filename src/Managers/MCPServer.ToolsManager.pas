@@ -39,6 +39,7 @@ type
     {$ENDIF}
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
     function TaskExecutionOf(const Tool: IMCPTool): TMCPTaskExecution;
+    function TryGetDeclaredTaskExecution(const Tool: IMCPTool; out Execution: TMCPTaskExecution): Boolean;
     function ShouldRunAsTask(const Tool: IMCPTool; const Context: IMCPRequestContext): Boolean;
     procedure CheckRunsWithoutTask(const Tool: IMCPTool; const Context: IMCPRequestContext);
     function CallToolAsTask(const Tool: IMCPTool; const Arguments: TJSONObject;
@@ -528,10 +529,20 @@ end;
 
 function TMCPToolsManager.TaskExecutionOf(const Tool: IMCPTool): TMCPTaskExecution;
 begin
-  if Supports(Tool, IMCPTaskStarter) then
-    Exit(TMCPTaskExecution.Required);
+  if TryGetDeclaredTaskExecution(Tool, Result) then
+    Exit;
 
-  Result := TMCPTaskExecution.Synchronous;
+  const IsStarter = Supports(Tool, IMCPTaskStarter);
+  if IsStarter then
+    Result := TMCPTaskExecution.Required
+  else
+    Result := TMCPTaskExecution.Synchronous;
+end;
+
+function TMCPToolsManager.TryGetDeclaredTaskExecution(const Tool: IMCPTool; out Execution: TMCPTaskExecution): Boolean;
+begin
+  Result := False;
+  Execution := TMCPTaskExecution.Synchronous;
   var RttiContext := TRttiContext.Create;
   try
     const ToolType = RttiContext.GetType((Tool as TObject).ClassType);
@@ -540,8 +551,8 @@ begin
       const IsTaskExecution = (Attribute is TaskExecutionAttribute);
       if IsTaskExecution then
       begin
-        const Execution = TaskExecutionAttribute(Attribute).Execution;
-        Exit(Execution);
+        Execution := TaskExecutionAttribute(Attribute).Execution;
+        Exit(True);
       end;
     end;
   finally

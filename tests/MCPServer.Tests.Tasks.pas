@@ -4,19 +4,42 @@ interface
 
 uses
   DUnitX.TestFramework,
+  System.Rtti,
   System.JSON,
   MCPServer.Types,
   MCPServer.RequestContext,
   MCPServer.JsonRpcProcessor,
   MCPServer.Task.Types,
   MCPServer.TasksManager,
+  MCPServer.Tool.Base,
+  MCPServer.Tool.ContentSamples,
   MCPServer.Tests.Harness;
 
 type
+  [TaskExecution(TMCPTaskExecution.Optional)]
+  TOptionalStarterTool = class(TMCPToolBase<TNoParams>, IMCPTaskStarter)
+  protected
+    function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
+
+  public
+    constructor Create; override;
+    procedure StartTask(const Arguments: TJSONObject; const Task: IMCPTaskHandle);
+  end;
+
+  [TaskExecution(TMCPTaskExecution.Optional)]
+  TTaskIdEchoTool = class(TMCPToolBase<TNoParams>)
+  protected
+    function ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue; override;
+
+  public
+    constructor Create; override;
+  end;
+
   [TestFixture]
   TTasksTests = class
   private
     FHarness: TMCPTestHarness;
+    FStore: IMCPTaskStore;
     FTasks: TMCPTasksManager;
     FTasksService: IMCPTaskService;
     FProcessor: TMCPJsonRpcProcessor;
@@ -57,6 +80,24 @@ type
 
     [Test]
     procedure OptionalTool_ClientWithExtension_ReturnsCreateTaskResult;
+
+    [Test]
+    procedure OptionalStarter_ClientWithoutExtension_RunsSynchronously;
+
+    [Test]
+    procedure OptionalStarter_TasksNotOffered_RunsSynchronously;
+
+    [Test]
+    procedure OptionalStarter_ClientWithExtension_ReturnsCreateTaskResult;
+
+    [Test]
+    procedure HostReference_SetByTheStarter_IsKeptByTheStoreOnly;
+
+    [Test]
+    procedure TaskRun_Context_CarriesTheTaskId;
+
+    [Test]
+    procedure SynchronousRun_Context_HasNoTaskId;
 
     [Test]
     procedure CreatedTask_IsRetrievableAtOnce;
@@ -149,6 +190,7 @@ uses
   MCPServer.Capabilities,
   MCPServer.Host,
   MCPServer.TaskStore.Memory,
+  MCPServer.Tool.Result,
   MCPServer.Tests.Support;
 
 const
@@ -168,6 +210,7 @@ const
   PATH_STATUS = 'result.status';
   PATH_TASK_ID = 'result.taskId';
   PATH_FIRST_TEXT = 'result.result.content[0].text';
+  PATH_TEXT = 'result.content[0].text';
   TOOL_SLOW_COMPUTE = 'slow_compute';
   TOOL_CONFIRM_DELETE = 'confirm_delete';
   ARGUMENTS_ONE_SECOND = '{"seconds":1}';
@@ -180,7 +223,51 @@ const
   RESULT_TYPE_COMPLETE = 'complete';
   TASK_ID_PARAM = '"taskId":"%s"';
   TOOL_FAILING_JOB = 'failing_job';
+  TOOL_OPTIONAL_STARTER = 'test_optional_starter';
+  TOOL_TASK_ID_ECHO = 'test_task_id_echo';
+  TEXT_RAN_WITHOUT_TASK = 'ran without a task';
+  TEXT_STARTED_AS_TASK = 'started as a task';
+  HOST_REFERENCE = 'job-7';
   ANSWER_CONFIRM = '"inputResponses":{"confirm":{"action":"accept","content":{"confirm":true}}}';
+
+{ TOptionalStarterTool }
+
+constructor TOptionalStarterTool.Create;
+begin
+  inherited;
+  FName := TOOL_OPTIONAL_STARTER;
+  FDescription := 'Starts its own work as a task, or answers at once without one';
+end;
+
+function TOptionalStarterTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
+begin
+  Result := TMCPToolResult.Text(TEXT_RAN_WITHOUT_TASK);
+end;
+
+procedure TOptionalStarterTool.StartTask(const Arguments: TJSONObject; const Task: IMCPTaskHandle);
+begin
+  Task.HostReference := HOST_REFERENCE;
+  const Started = TMCPToolResult.Text(TEXT_STARTED_AS_TASK);
+  try
+    Task.Complete(Started);
+  finally
+    Started.Free;
+  end;
+end;
+
+{ TTaskIdEchoTool }
+
+constructor TTaskIdEchoTool.Create;
+begin
+  inherited;
+  FName := TOOL_TASK_ID_ECHO;
+  FDescription := 'Answers with the task id of its request context';
+end;
+
+function TTaskIdEchoTool.ExecuteWithContext(const Params: TNoParams; const Context: IMCPRequestContext): TValue;
+begin
+  Result := TMCPToolResult.Text(Context.TaskId);
+end;
 
 { TTasksTests }
 
@@ -197,10 +284,12 @@ end;
 procedure TTasksTests.StartServer(const MaxRunningTasks: Integer);
 begin
   FHarness := TMCPTestHarness.Create;
-  FTasks := TMCPTasksManager.Create(TMCPInMemoryTaskStore.Create, TASK_TTL_MS, TASK_POLL_INTERVAL_MS,
-                                    MaxRunningTasks);
+  FStore := TMCPInMemoryTaskStore.Create;
+  FTasks := TMCPTasksManager.Create(FStore, TASK_TTL_MS, TASK_POLL_INTERVAL_MS, MaxRunningTasks);
   FTasksService := FTasks;
   FHarness.ToolsManager.TaskService := FTasksService;
+  FHarness.ToolsManager.AddTool(TOptionalStarterTool.Create);
+  FHarness.ToolsManager.AddTool(TTaskIdEchoTool.Create);
   FHarness.ManagerRegistry.RegisterManager(FTasks);
   FProcessor := TMCPJsonRpcProcessor.Create(FHarness.ManagerRegistry);
 end;
@@ -211,6 +300,7 @@ begin
   FProcessor.Free;
   FHarness.ToolsManager.TaskService := nil;
   FTasksService := nil;
+  FStore := nil;
   FHarness.Free;
 end;
 
@@ -347,7 +437,7 @@ begin
 
     Assert.AreEqual(RESULT_TYPE_COMPLETE, ResultType);
     Assert.AreEqual('', TaskId);
-    Assert.Contains(Response.GetValue<string>('result.content[0].text'), 'now');
+    Assert.Contains(Response.GetValue<string>(PATH_TEXT), 'now');
   finally
     Response.Free;
   end;
@@ -371,6 +461,84 @@ begin
     Assert.AreEqual(TASK_POLL_INTERVAL_MS, Created.GetValue<Integer>('pollIntervalMs'));
     Assert.IsNull(Created.GetValue(MCP_KEY_RESULT));
     Assert.IsNull(Created.GetValue('requestState'));
+  finally
+    Response.Free;
+  end;
+end;
+
+procedure TTasksTests.OptionalStarter_ClientWithoutExtension_RunsSynchronously;
+begin
+  const Response = CallTool(TOOL_OPTIONAL_STARTER, ARGUMENTS_NONE, CAPABILITIES_NONE);
+  try
+    Assert.AreEqual(RESULT_TYPE_COMPLETE, Response.GetValue<string>(PATH_RESULT_TYPE), Response.ToJSON);
+    Assert.AreEqual(TEXT_RAN_WITHOUT_TASK, Response.GetValue<string>(PATH_TEXT));
+  finally
+    Response.Free;
+  end;
+end;
+
+procedure TTasksTests.OptionalStarter_TasksNotOffered_RunsSynchronously;
+begin
+  FHarness.ToolsManager.TaskService := nil;
+
+  const Response = CallTool(TOOL_OPTIONAL_STARTER, ARGUMENTS_NONE, CAPABILITIES_TASKS);
+  try
+    Assert.AreEqual(RESULT_TYPE_COMPLETE, Response.GetValue<string>(PATH_RESULT_TYPE), Response.ToJSON);
+    Assert.AreEqual(TEXT_RAN_WITHOUT_TASK, Response.GetValue<string>(PATH_TEXT));
+  finally
+    Response.Free;
+  end;
+end;
+
+procedure TTasksTests.OptionalStarter_ClientWithExtension_ReturnsCreateTaskResult;
+begin
+  const TaskId = CreateTask(TOOL_OPTIONAL_STARTER, ARGUMENTS_NONE);
+
+  Assert.IsTrue(WaitForStatus(TaskId, STATUS_COMPLETED));
+  const Response = GetTask(TaskId);
+  try
+    Assert.AreEqual(TEXT_STARTED_AS_TASK, Response.GetValue<string>(PATH_FIRST_TEXT));
+  finally
+    Response.Free;
+  end;
+end;
+
+procedure TTasksTests.HostReference_SetByTheStarter_IsKeptByTheStoreOnly;
+begin
+  const TaskId = CreateTask(TOOL_OPTIONAL_STARTER, ARGUMENTS_NONE);
+
+  var Stored: TMCPTaskSnapshot;
+  Assert.IsTrue(FStore.TryGet(TaskId, Stored));
+  Assert.AreEqual(HOST_REFERENCE, Stored.HostReference);
+  Assert.AreNotEqual(HOST_REFERENCE, TaskId);
+
+  const Response = GetTask(TaskId);
+  try
+    Assert.DoesNotContain(Response.ToJSON, HOST_REFERENCE);
+  finally
+    Response.Free;
+  end;
+end;
+
+procedure TTasksTests.TaskRun_Context_CarriesTheTaskId;
+begin
+  const TaskId = CreateTask(TOOL_TASK_ID_ECHO, ARGUMENTS_NONE);
+
+  Assert.IsTrue(WaitForStatus(TaskId, STATUS_COMPLETED));
+  const Response = GetTask(TaskId);
+  try
+    Assert.AreEqual(TaskId, Response.GetValue<string>(PATH_FIRST_TEXT));
+  finally
+    Response.Free;
+  end;
+end;
+
+procedure TTasksTests.SynchronousRun_Context_HasNoTaskId;
+begin
+  const Response = CallTool(TOOL_TASK_ID_ECHO, ARGUMENTS_NONE, CAPABILITIES_NONE);
+  try
+    Assert.AreEqual(RESULT_TYPE_COMPLETE, Response.GetValue<string>(PATH_RESULT_TYPE), Response.ToJSON);
+    Assert.AreEqual('', Response.GetValue<string>(PATH_TEXT, ''));
   finally
     Response.Free;
   end;

@@ -30,6 +30,7 @@ type
   TMCPTaskSnapshot = record
     TaskId: string;
     Owner: string;
+    HostReference: string;
     Status: TMCPTaskStatus;
     StatusMessage: string;
     CreatedAt: TDateTime;
@@ -57,6 +58,8 @@ type
     ['{8A4C1E6B-3D5F-4B7A-8C9E-1F3A5C7E9B24}']
     function GetTaskId: string;
     function IsCancelled: Boolean;
+    function GetHostReference: string;
+    procedure SetHostReference(const HostReference: string);
     procedure SetStatusMessage(const StatusMessage: string);
     procedure RequestInput(const InputRequests: TJSONObject); overload;
     procedure RequestInput(const InputRequests: TJSONObject; const OnAnswered: TProc<TJSONObject>); overload;
@@ -66,6 +69,7 @@ type
     procedure Fail(const Code: Integer; const Message: string; const Data: TJSONValue = nil);
     procedure BindCancellation(const Context: IMCPRequestContext);
     property TaskId: string read GetTaskId;
+    property HostReference: string read GetHostReference write SetHostReference;
   end;
 
   IMCPTaskStarter = interface
