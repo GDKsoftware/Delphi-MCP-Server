@@ -132,6 +132,7 @@
         <DCCReference Include="Protocol\MCPServer.Errors.pas"/>
         <DCCReference Include="Protocol\MCPServer.RequestContext.pas"/>
         <DCCReference Include="Protocol\MCPServer.Capabilities.pas"/>
+        <DCCReference Include="Protocol\MCPServer.Extensions.pas"/>
         <DCCReference Include="Server\MCPServer.HttpHeaders.pas"/>
         <DCCReference Include="Server\MCPServer.HttpStream.pas"/>
         <DCCReference Include="Protocol\MCPServer.Serializer.pas"/>

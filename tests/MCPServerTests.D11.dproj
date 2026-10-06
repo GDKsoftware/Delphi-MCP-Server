@@ -76,6 +76,7 @@
         <DCCReference Include="..\src\Protocol\MCPServer.Errors.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.RequestContext.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.Capabilities.pas"/>
+        <DCCReference Include="..\src\Protocol\MCPServer.Extensions.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.HttpHeaders.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.HttpStream.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.IdHTTPServer.pas"/>
@@ -134,6 +135,7 @@
         <DCCReference Include="MCPServer.Tests.RequestContext.pas"/>
         <DCCReference Include="MCPServer.Tests.Processor.pas"/>
         <DCCReference Include="MCPServer.Tests.Capabilities.pas"/>
+        <DCCReference Include="MCPServer.Tests.Extensions.pas"/>
         <DCCReference Include="MCPServer.Tests.Golden.Modern.pas"/>
         <DCCReference Include="MCPServer.Tests.HttpHeaders.pas"/>
         <DCCReference Include="MCPServer.Tests.HeaderEncoding.pas"/>

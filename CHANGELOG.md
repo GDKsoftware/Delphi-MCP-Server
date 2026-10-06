@@ -7,6 +7,18 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Protocol extensions: a capability manager that also implements
+  `IMCPExtensionProvider` (extension id, settings object, the result types it
+  owns) is advertised in `server/discover` under `capabilities.extensions`;
+  the legacy `initialize` result never lists extensions. An id that is not a
+  valid `{vendor-prefix}/{extension-name}` identifier, or one provided twice,
+  is an `EMCPConfigurationError`. `IMCPRequestContext.HasClientExtension` and
+  `RequireClientExtension` (`-32021` with
+  `requiredCapabilities.extensions`) read the extensions a client declares in
+  the request's `_meta`. A modern result whose `resultType` is not `complete`
+  or `input_required` is only sent when an advertised extension owns that
+  type and the client declared it on the request; otherwise the request
+  fails with `-32603`.
 - Prompts: `MCPServer.Prompt.Base` (`IMCPPrompt`, `TMCPPromptBase`,
   `TMCPPromptBase<T>` with RTTI-derived arguments, `TMCPPromptMessages` for
   text/image/audio/resource-link/embedded-resource content) and
@@ -296,6 +308,9 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `IMCPRequestContext` has two new methods, `HasClientExtension` and
+  `RequireClientExtension`; a class of your own that implements the
+  interface needs them too.
 - `build.bat` and `build-tests.bat` keep a `DELPHI_PATH` set in the
   environment instead of overwriting it, so another Delphi installation can be
   used without editing the scripts.

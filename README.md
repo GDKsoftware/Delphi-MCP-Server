@@ -878,6 +878,29 @@ that does not implement it answers `completion/complete` with an empty
 `values` array rather than an error, since not offering completion is a
 valid choice.
 
+### Protocol extensions
+
+Protocol version 2026-07-28 lets a server offer extensions next to the core
+protocol, such as `io.modelcontextprotocol/tasks`. An extension is a capability
+manager that also implements `IMCPExtensionProvider`:
+
+```pascal
+function GetExtensionId: string;          // 'com.example/my-extension'
+function GetExtensionSettings: TJSONObject; // caller owns it; empty object for no settings
+function GetResultTypes: TArray<string>;  // result types beyond complete/input_required
+```
+
+Register the manager like any other (`ManagerRegistry.RegisterManager`) and
+`server/discover` lists it under `capabilities.extensions`. A client declares
+the extensions it supports per request in
+`_meta["io.modelcontextprotocol/clientCapabilities"].extensions`; check that
+with `Context.HasClientExtension(Id)` and fall back to core behaviour when it
+is missing, or call `Context.RequireClientExtension(Id)` to answer `-32021`
+when the request cannot be served without it. A result with a `resultType`
+the extension owns is only sent to a client that declared the extension on
+that request; the processor turns anything else into `-32603`, so a client
+never receives a result type it did not ask for.
+
 ## Integration with Claude Code
 
 Configure using the Streamable HTTP transport:

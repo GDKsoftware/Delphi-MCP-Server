@@ -8,6 +8,8 @@ uses
 
 type
   TMCPCapabilityBuilder = class
+  private
+    class procedure AddExtensions(const Capabilities: TJSONObject; const Registry: IMCPManagerRegistry); static;
   public
     class function Build(const Registry: IMCPManagerRegistry; Era: TMCPProtocolEra): TJSONObject;
     class procedure AddDefaultCapabilities(const Capabilities: TJSONObject);
@@ -16,7 +18,8 @@ type
 implementation
 
 uses
-  System.SysUtils;
+  System.SysUtils,
+  MCPServer.Extensions;
 
 { TMCPCapabilityBuilder }
 
@@ -48,10 +51,22 @@ begin
     for var Manager in Enumerator.GetManagers do
       if Supports(Manager, IMCPCapabilityProvider, Provider) then
         Provider.DescribeCapabilities(Result, Era);
+
+    const IsModern = (Era = TMCPProtocolEra.Modern);
+    if IsModern then
+      AddExtensions(Result, Registry);
   except
     Result.Free;
     raise;
   end;
+end;
+
+class procedure TMCPCapabilityBuilder.AddExtensions(const Capabilities: TJSONObject;
+  const Registry: IMCPManagerRegistry);
+begin
+  const Extensions = TMCPExtensions.Describe(Registry);
+  if Assigned(Extensions) then
+    Capabilities.AddPair(MCP_KEY_EXTENSIONS, Extensions);
 end;
 
 end.

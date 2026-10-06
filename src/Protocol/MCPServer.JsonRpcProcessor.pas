@@ -73,6 +73,7 @@ type
     function DispatchRequest(const Context: IMCPRequestContext; const Params: TJSONObject): TValue;
     function ResultToJson(const Value: TValue; const Context: IMCPRequestContext): TJSONValue;
     procedure ApplyModernEnvelope(const ResultObject: TJSONObject; const Method: string);
+    procedure CheckResultTypeDeclared(const ResultObject: TJSONObject; const Context: IMCPRequestContext);
     function StatusForError(Era: TMCPProtocolEra; const Error: EMCPError): Integer;
     function ErrorResult(Era: TMCPProtocolEra; const RequestId: TMCPRequestId; const Error: EMCPError): TMCPProcessResult;
     function ExceptionToError(Era: TMCPProtocolEra; const E: Exception): EMCPError;
@@ -102,6 +103,8 @@ const
 
 implementation
 
+uses
+  MCPServer.Extensions;
 
 const
   MESSAGE_NOT_A_JSON_RESULT = '%s answered with a %s instead of a JSON object';
@@ -111,6 +114,7 @@ const
   MESSAGE_HEADER_MISSING_SUFFIX = ' header is missing';
   MESSAGE_HEADER_INVALID_SUFFIX = ' header value is not a valid header value';
   RESULT_TYPE_COMPLETE = 'complete';
+  MESSAGE_UNDECLARED_RESULT_TYPE = '%s answered with result type ''%s'', which needs an extension the client did not declare';
 
   LEGACY_ONLY_METHODS: array[0..4] of string = (
     MCP_METHOD_PING, MCP_METHOD_INITIALIZE, MCP_METHOD_LOGGING_SET_LEVEL, MCP_METHOD_RESOURCES_SUBSCRIBE, MCP_METHOD_RESOURCES_UNSUBSCRIBE);
@@ -658,8 +662,38 @@ begin
       ResultObject.AddPair('value', Value.ToString);
   end;
 
+  try
+    CheckResultTypeDeclared(ResultObject, Context);
+  except
+    ResultObject.Free;
+    raise;
+  end;
   ApplyModernEnvelope(ResultObject, Context.Method);
   Result := ResultObject;
+end;
+
+procedure TMCPJsonRpcProcessor.CheckResultTypeDeclared(const ResultObject: TJSONObject;
+  const Context: IMCPRequestContext);
+begin
+  const ResultTypeValue = ResultObject.GetValue(MCP_KEY_RESULT_TYPE);
+  const HasResultType = (ResultTypeValue is TJSONString);
+  if not HasResultType then
+    Exit;
+
+  const ResultType = TJSONString(ResultTypeValue).Value;
+  const IsCoreResultType = ((ResultType = RESULT_TYPE_COMPLETE) or (ResultType = RESULT_TYPE_INPUT_REQUIRED));
+  if IsCoreResultType then
+    Exit;
+
+  var Provider: IMCPExtensionProvider;
+  if TMCPExtensions.TryFindByResultType(FManagerRegistry, ResultType, Provider) then
+  begin
+    const ExtensionId = Provider.ExtensionId;
+    if Context.HasClientExtension(ExtensionId) then
+      Exit;
+  end;
+
+  raise EMCPError.InternalError(Format(MESSAGE_UNDECLARED_RESULT_TYPE, [Context.Method, ResultType]));
 end;
 
 function TMCPJsonRpcProcessor.StatusForError(Era: TMCPProtocolEra; const Error: EMCPError): Integer;

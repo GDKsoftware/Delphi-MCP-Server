@@ -81,8 +81,10 @@ type
     function GetPrincipal: string;
     function GetScopes: TArray<string>;
     function HasClientCapability(const Path: string): Boolean;
+    function HasClientExtension(const ExtensionId: string): Boolean;
     function HasScope(const Scope: string): Boolean;
     procedure RequireClientCapability(const Path: string);
+    procedure RequireClientExtension(const ExtensionId: string);
     function IsCancelled: Boolean;
     procedure CheckCancelled;
     procedure Cancel;
@@ -320,6 +322,34 @@ begin
     Node := Child;
   end;
   raise EMCPError.MissingRequiredClientCapability(Required);
+end;
+
+procedure TMCPRequestContext.RequireClientExtension(const ExtensionId: string);
+begin
+  if HasClientExtension(ExtensionId) then
+    Exit;
+
+  const Settings = TJSONObject.Create;
+  const Extensions = TJSONObject.Create;
+  Extensions.AddPair(ExtensionId, Settings);
+  const Required = TJSONObject.Create;
+  Required.AddPair(MCP_KEY_EXTENSIONS, Extensions);
+  raise EMCPError.MissingRequiredClientCapability(Required);
+end;
+
+function TMCPRequestContext.HasClientExtension(const ExtensionId: string): Boolean;
+begin
+  const Capabilities = GetClientCapabilities;
+  if not Assigned(Capabilities) then
+    Exit(False);
+
+  const Extensions = Capabilities.GetValue(MCP_KEY_EXTENSIONS);
+  const HasExtensions = (Extensions is TJSONObject);
+  if not HasExtensions then
+    Exit(False);
+
+  const Settings = TJSONObject(Extensions).GetValue(ExtensionId);
+  Result := (Settings is TJSONObject);
 end;
 
 function TMCPRequestContext.TryClaimProgress(const Progress: Double; const Completes: Boolean): Boolean;
