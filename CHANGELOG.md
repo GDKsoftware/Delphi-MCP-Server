@@ -7,6 +7,23 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Tasks extension (`io.modelcontextprotocol/tasks`) for long-running tool
+  calls, off by default (`[Tasks] Enabled`, `MaxRunningTasks`, `TtlMs`,
+  `PollIntervalMs`). `MCPServer.TasksManager` advertises the extension and
+  serves `tasks/get`, `tasks/update` and `tasks/cancel` (`-32021` without the
+  extension, `-32602` for an unknown task or one created by another
+  principal, `Mcp-Name` must equal the task id). A tool marked
+  `[TaskExecution(Optional|Required)]` answers a declaring client with a
+  `CreateTaskResult` and runs on a thread pool limited to `MaxRunningTasks`;
+  `EMCPInputRequired` inside it moves the task to `input_required` and the
+  tool runs again once `tasks/update` answered every request. A tool that
+  implements `IMCPTaskStarter` hands an `IMCPTaskHandle` to the host, which
+  completes, fails or asks for input from its own threads. `IMCPTaskStore`
+  with `TMCPInMemoryTaskStore` as the default; `TMCPServerHost.TaskStore`
+  plugs in a durable one and `TMCPServerHost.Tasks` gives the host the
+  handles. `MCPServer.Tool.TaskSamples` holds the conformance fixtures
+  (`greet`, `slow_compute`, `failing_job`, `protocol_error_job`,
+  `confirm_delete`, `multi_input`, `test_tool_with_task`).
 - Protocol extensions: a capability manager that also implements
   `IMCPExtensionProvider` (extension id, settings object, the result types it
   owns) is advertised in `server/discover` under `capabilities.extensions`;
@@ -308,6 +325,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `tests\golden\legacy\tools-list.json` and `tests\golden\modern\tools-list.json`
+  list the seven task example tools.
+- The random bytes and base64url helpers that sign `requestState` live in
+  `MCPServer.SecureRandom` and `MCPServer.Base64Url`; when the operating
+  system provides no random bytes the error is `EMCPSecureRandom` instead of
+  `EMCPRequestStateKey`, which is gone.
 - `IMCPRequestContext` has two new methods, `HasClientExtension` and
   `RequireClientExtension`; a class of your own that implements the
   interface needs them too.

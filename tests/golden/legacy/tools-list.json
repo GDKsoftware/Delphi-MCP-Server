@@ -359,6 +359,98 @@
           }
         },
         {
+          "name": "greet",
+          "description": "Greets someone by name; always answers synchronously",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name to greet"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        {
+          "name": "slow_compute",
+          "description": "Takes the given number of seconds; runs as a task when the client supports tasks",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "seconds": {
+                "type": "integer",
+                "description": "How long the computation takes, in seconds"
+              },
+              "label": {
+                "type": "string",
+                "description": "Label echoed in the result"
+              }
+            },
+            "required": [
+              "seconds"
+            ]
+          }
+        },
+        {
+          "name": "failing_job",
+          "description": "Always runs as a task and ends with a tool error after a second",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "protocol_error_job",
+          "description": "Ends with a JSON-RPC error, so its task ends as failed",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "confirm_delete",
+          "description": "Always runs as a task and asks the user to confirm before it deletes the file",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "filename": {
+                "type": "string",
+                "description": "File to delete after the user confirms"
+              }
+            },
+            "required": [
+              "filename"
+            ]
+          }
+        },
+        {
+          "name": "multi_input",
+          "description": "Always runs as a task and asks for two inputs at once",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "name": "test_tool_with_task",
+          "description": "Asks for a name before it creates a task, then greets it from a thread of its own",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+            },
+            "additionalProperties": false
+          }
+        },
+        {
           "name": "test_trigger_tool_change",
           "description": "Adds or removes test_dynamic_tool, which notifies subscribed clients that the tool list changed",
           "inputSchema": {

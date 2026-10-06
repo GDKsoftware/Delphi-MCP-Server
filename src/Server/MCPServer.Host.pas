@@ -14,6 +14,8 @@ uses
   MCPServer.ResourcesManager,
   MCPServer.PromptsManager,
   MCPServer.SubscriptionsManager,
+  MCPServer.Task.Types,
+  MCPServer.TasksManager,
   MCPServer.IdHTTPServer;
 
 type
@@ -27,16 +29,21 @@ type
     FResourcesManager: TMCPResourcesManager;
     FPromptsManager: TMCPPromptsManager;
     FSubscriptionsManager: TMCPSubscriptionsManager;
+    FTasksManager: TMCPTasksManager;
+    FTaskStore: IMCPTaskStore;
     FServer: TMCPIdHTTPServer;
     FAuthorizer: IMCPAuthorizer;
     FSeedFromGlobalRegistry: Boolean;
     FActive: Boolean;
     procedure BuildManagers;
+    procedure BuildTasksManager;
     procedure HideDiagnosticsResources;
     procedure EnsureManagers;
     function GetManagerRegistry: IMCPManagerRegistry;
     function GetCoreManager: IMCPCapabilityManager;
     procedure SetSeedFromGlobalRegistry(const Value: Boolean);
+    procedure SetTaskStore(const Value: IMCPTaskStore);
+    function GetTasks: TMCPTasksManager;
   public
     constructor Create; overload;
     constructor Create(const SettingsFile: string); overload;
@@ -62,6 +69,8 @@ type
     property ManagerRegistry: IMCPManagerRegistry read GetManagerRegistry;
     property CoreManager: IMCPCapabilityManager read GetCoreManager;
     property SeedFromGlobalRegistry: Boolean read FSeedFromGlobalRegistry write SetSeedFromGlobalRegistry;
+    property TaskStore: IMCPTaskStore read FTaskStore write SetTaskStore;
+    property Tasks: TMCPTasksManager read GetTasks;
   end;
 
 implementation
@@ -72,6 +81,7 @@ uses
   MCPServer.ManagerRegistry,
   MCPServer.CoreManager,
   MCPServer.CompletionManager,
+  MCPServer.TaskStore.Memory,
   MCPServer.StdioTransport;
 
 const
@@ -115,6 +125,8 @@ end;
 destructor TMCPServerHost.Destroy;
 begin
   Stop;
+  if Assigned(FTasksManager) then
+    FTasksManager.Shutdown;
   FServer.Free;
   FCoreManager := nil;
   FManagerRegistry := nil;
@@ -145,6 +157,20 @@ begin
   FManagerRegistry.RegisterManager(FPromptsManager);
   FManagerRegistry.RegisterManager(TMCPCompletionManager.Create(FPromptsManager, FResourcesManager));
   FManagerRegistry.RegisterManager(FSubscriptionsManager);
+
+  if FSettings.TasksEnabled then
+    BuildTasksManager;
+end;
+
+procedure TMCPServerHost.BuildTasksManager;
+begin
+  if not Assigned(FTaskStore) then
+    FTaskStore := TMCPInMemoryTaskStore.Create;
+
+  FTasksManager := TMCPTasksManager.Create(FTaskStore, FSettings.TaskTtlMs, FSettings.TaskPollIntervalMs,
+                                           FSettings.MaxRunningTasks);
+  FToolsManager.TaskService := FTasksManager;
+  FManagerRegistry.RegisterManager(FTasksManager);
 end;
 
 procedure TMCPServerHost.HideDiagnosticsResources;
@@ -181,6 +207,20 @@ begin
     raise EMCPConfigurationError.Create('SeedFromGlobalRegistry must be set before the host builds its managers');
 
   FSeedFromGlobalRegistry := Value;
+end;
+
+procedure TMCPServerHost.SetTaskStore(const Value: IMCPTaskStore);
+begin
+  if Assigned(FManagerRegistry) then
+    raise EMCPConfigurationError.Create('TaskStore must be set before the host builds its managers');
+
+  FTaskStore := Value;
+end;
+
+function TMCPServerHost.GetTasks: TMCPTasksManager;
+begin
+  EnsureManagers;
+  Result := FTasksManager;
 end;
 
 procedure TMCPServerHost.AddTool(const Tool: IMCPTool);

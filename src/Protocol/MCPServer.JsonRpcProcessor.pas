@@ -104,7 +104,8 @@ const
 implementation
 
 uses
-  MCPServer.Extensions;
+  MCPServer.Extensions,
+  MCPServer.Task.Types;
 
 const
   MESSAGE_NOT_A_JSON_RESULT = '%s answered with a %s instead of a JSON object';
@@ -118,7 +119,8 @@ const
 
   LEGACY_ONLY_METHODS: array[0..4] of string = (
     MCP_METHOD_PING, MCP_METHOD_INITIALIZE, MCP_METHOD_LOGGING_SET_LEVEL, MCP_METHOD_RESOURCES_SUBSCRIBE, MCP_METHOD_RESOURCES_UNSUBSCRIBE);
-  MODERN_ONLY_METHODS: array[0..1] of string = (MCP_METHOD_SERVER_DISCOVER, 'subscriptions/listen');
+  MODERN_ONLY_METHODS: array[0..4] of string = (MCP_METHOD_SERVER_DISCOVER, 'subscriptions/listen',
+    MCP_METHOD_TASKS_GET, MCP_METHOD_TASKS_UPDATE, MCP_METHOD_TASKS_CANCEL);
   INPUT_REQUIRED_METHODS: array[0..2] of string = (MCP_METHOD_TOOLS_CALL, MCP_METHOD_RESOURCES_READ, MCP_METHOD_PROMPTS_GET);
   PARAM_INPUT_RESPONSES = 'inputResponses';
   PARAM_REQUEST_STATE = 'requestState';
@@ -322,7 +324,9 @@ begin
   if (Method = MCP_METHOD_TOOLS_CALL) or (Method = MCP_METHOD_PROMPTS_GET) then
     SourceField := 'name'
   else if Method = MCP_METHOD_RESOURCES_READ then
-    SourceField := 'uri';
+    SourceField := 'uri'
+  else if TMCPStrings.Contains(Method, [MCP_METHOD_TASKS_GET, MCP_METHOD_TASKS_UPDATE, MCP_METHOD_TASKS_CANCEL]) then
+    SourceField := MCP_KEY_TASK_ID;
   const SourceFieldIsEmpty = (SourceField = '');
   if SourceFieldIsEmpty then
     Exit;
@@ -536,14 +540,7 @@ begin
   if (Required.Requests.Count = 0) and not Assigned(Required.State) then
     raise EMCPError.InternalError('An InputRequiredResult needs inputRequests or requestState');
 
-  for var Method in Required.Requests.Methods do
-  begin
-    var Capability := TMCPInputRequests.RequiredCapability(Method);
-    const CapabilityIsEmpty = (Capability = '');
-    if CapabilityIsEmpty then
-      raise EMCPError.InternalError(Format('%s is not a request a client can answer', [Method]));
-    Context.RequireClientCapability(Capability);
-  end;
+  Required.Requests.RequireClientCapabilities(Context);
 
   var ResultObject := TJSONObject.Create;
   try
