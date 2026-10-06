@@ -28,6 +28,10 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   completes, fails or asks for input from its own threads. A starter is
   `Required` unless it carries `[TaskExecution(Optional)]`; then a client
   without the extension gets the result of its `Execute`.
+  `IMCPContextTaskStarter` is the same with the `IMCPRequestContext` of the
+  `tools/call` passed to `StartTask`. Shutting the tasks manager down stops
+  the work it runs but leaves the stored tasks as they are; only
+  `tasks/cancel` makes a task `cancelled`.
   `IMCPTaskHandle.HostReference` ties a task to a job of the host; the store
   keeps it and it is never sent to the client. `IMCPRequestContext.TaskId`
   holds the id of the task a tool runs for. `IMCPTaskStore`

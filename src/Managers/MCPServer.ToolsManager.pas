@@ -44,6 +44,8 @@ type
     procedure CheckRunsWithoutTask(const Tool: IMCPTool; const Context: IMCPRequestContext);
     function CallToolAsTask(const Tool: IMCPTool; const Arguments: TJSONObject;
       const Context: IMCPRequestContext): TJSONObject;
+    function StartWorkOf(const Tool: IMCPTool; const Arguments: TJSONObject;
+      const Context: IMCPRequestContext): TProc<IMCPTaskHandle>;
     function CallToolWith(const Params: TJSONObject; Era: TMCPProtocolEra; const Context: IMCPRequestContext): TValue;
     class function CopyOfArguments(const Arguments: TJSONObject): TJSONObject; static;
   private
@@ -532,7 +534,7 @@ begin
   if TryGetDeclaredTaskExecution(Tool, Result) then
     Exit;
 
-  const IsStarter = Supports(Tool, IMCPTaskStarter);
+  const IsStarter = (Supports(Tool, IMCPTaskStarter) or Supports(Tool, IMCPContextTaskStarter));
   if IsStarter then
     Result := TMCPTaskExecution.Required
   else
@@ -564,15 +566,11 @@ function TMCPToolsManager.CallToolAsTask(const Tool: IMCPTool; const Arguments: 
   const Context: IMCPRequestContext): TJSONObject;
 begin
   const TaskArguments = CopyOfArguments(Arguments);
-  var Starter: IMCPTaskStarter;
-  if Supports(Tool, IMCPTaskStarter, Starter) then
+  const StartWork = StartWorkOf(Tool, TaskArguments, Context);
+  if Assigned(StartWork) then
   begin
     try
-      Result := FTaskService.StartTask(Context,
-        procedure(Task: IMCPTaskHandle)
-        begin
-          Starter.StartTask(TaskArguments, Task);
-        end);
+      Result := FTaskService.StartTask(Context, StartWork);
     finally
       TaskArguments.Free;
     end;
@@ -589,6 +587,30 @@ begin
     begin
       Run.Execute(Task);
     end);
+end;
+
+function TMCPToolsManager.StartWorkOf(const Tool: IMCPTool; const Arguments: TJSONObject;
+  const Context: IMCPRequestContext): TProc<IMCPTaskHandle>;
+begin
+  Result := nil;
+  var ContextStarter: IMCPContextTaskStarter;
+  var Starter: IMCPTaskStarter;
+  if Supports(Tool, IMCPContextTaskStarter, ContextStarter) then
+  begin
+    Result :=
+      procedure(Task: IMCPTaskHandle)
+      begin
+        ContextStarter.StartTask(Arguments, Task, Context);
+      end;
+  end
+  else if Supports(Tool, IMCPTaskStarter, Starter) then
+  begin
+    Result :=
+      procedure(Task: IMCPTaskHandle)
+      begin
+        Starter.StartTask(Arguments, Task);
+      end;
+  end;
 end;
 
 class function TMCPToolsManager.CopyOfArguments(const Arguments: TJSONObject): TJSONObject;

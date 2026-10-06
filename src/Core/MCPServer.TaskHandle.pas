@@ -15,6 +15,7 @@ type
     ['{9B5D3F7A-2E4C-4A6B-8D0F-6E8A0C2E4A57}']
     function GetHandle: IMCPTaskHandle;
     procedure Cancel;
+    procedure Release;
     procedure DeliverInput(const InputResponses: TJSONObject);
     function IsFinished: Boolean;
     property Handle: IMCPTaskHandle read GetHandle;
@@ -61,6 +62,7 @@ type
     procedure Complete(const ToolResult: TMCPToolResult); overload;
     procedure Fail(const Code: Integer; const Message: string; const Data: TJSONValue = nil);
     procedure Cancel;
+    procedure Release;
     procedure BindCancellation(const Context: IMCPRequestContext);
   end;
 
@@ -291,6 +293,16 @@ begin
       Task.Status := TMCPTaskStatus.Cancelled;
       Finish(Task);
     end;
+    SignalCancelled;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TMCPTaskHandle.Release;
+begin
+  FLock.Enter;
+  try
     SignalCancelled;
   finally
     FLock.Leave;
