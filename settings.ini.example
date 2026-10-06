@@ -76,6 +76,18 @@ DiscoverListsLegacyVersions=0
 ; Cache hint (milliseconds) on server/discover results; 0 = immediately stale
 DiscoverTtlMs=0
 
+[Tasks]
+; Tasks extension (io.modelcontextprotocol/tasks): long-running tool calls
+; answer with a task the client polls with tasks/get
+; Boolean values: use 1 (true) or 0 (false)
+Enabled=0
+; Tool calls the server runs in the background at the same time
+MaxRunningTasks=8
+; How long a task stays retrievable after it was created (milliseconds); 0 = unlimited
+TtlMs=3600000
+; Polling interval the server suggests to clients (milliseconds)
+PollIntervalMs=1000
+
 [CORS]
 ; Cross-Origin Resource Sharing response headers for browser clients
 ; Boolean values: use 1 (true) or 0 (false)

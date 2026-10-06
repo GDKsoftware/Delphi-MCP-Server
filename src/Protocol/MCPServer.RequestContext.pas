@@ -94,6 +94,8 @@ type
     procedure Log(const Level, Text: string; const Logger: string = '');
     procedure LogJson(const Level: string; const Data: TJSONValue; const Logger: string = '');
 
+    class function ForTask(const Origin: IMCPRequestContext; const InputResponses,
+      RequestState: TJSONObject): IMCPRequestContext;
     class function Current: IMCPRequestContext;
     class function SetCurrent(const Value: IMCPRequestContext): IMCPRequestContext;
   end;
@@ -461,6 +463,19 @@ begin
   finally
     Notification.Free;
   end;
+end;
+
+class function TMCPRequestContext.ForTask(const Origin: IMCPRequestContext; const InputResponses,
+  RequestState: TJSONObject): IMCPRequestContext;
+begin
+  var OwnedRequestState: TJSONObject := nil;
+  if Assigned(RequestState) then
+    OwnedRequestState := TJSONObject(RequestState.Clone);
+
+  const NoRequestId = Default(TMCPRequestId);
+  Result := TMCPRequestContext.Create(Origin.Era, Origin.ProtocolVersion, Origin.Method, NoRequestId, Origin.Meta,
+                                      nil, Origin.ManagerRegistry, nil, InputResponses, OwnedRequestState,
+                                      Origin.Principal, Origin.Scopes);
 end;
 
 class function TMCPRequestContext.Current: IMCPRequestContext;

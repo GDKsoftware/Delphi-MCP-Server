@@ -32,6 +32,7 @@ type
     function Count: Integer;
     function Methods: TArray<string>;
     class function RequiredCapability(const Method: string): string; static;
+    procedure RequireClientCapabilities(const Context: IMCPRequestContext);
     class function FieldSchema(const Field: string; const FieldType: string = 'string'): TJSONObject; static;
     function ToJson: TJSONObject;
   end;
@@ -56,6 +57,8 @@ type
 
 implementation
 
+uses
+  MCPServer.Errors;
 
 const
   KEY_ROOTS = 'roots';
@@ -143,6 +146,18 @@ begin
   for var Pair in FRequests do
   begin
     Result := Result + [TJSONObject(Pair.JsonValue).GetValue<string>(MCP_KEY_METHOD)];
+  end;
+end;
+
+procedure TMCPInputRequests.RequireClientCapabilities(const Context: IMCPRequestContext);
+begin
+  for var Method in Methods do
+  begin
+    const Capability = RequiredCapability(Method);
+    const CapabilityIsEmpty = (Capability = '');
+    if CapabilityIsEmpty then
+      raise EMCPError.InternalError(Format('%s is not a request a client can answer', [Method]));
+    Context.RequireClientCapability(Capability);
   end;
 end;
 

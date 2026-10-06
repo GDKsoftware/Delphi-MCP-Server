@@ -7,9 +7,6 @@ uses
   System.JSON;
 
 type
-  EMCPRequestStateKey = class(Exception)
-  end;
-
   TMCPRequestStateSealer = class
   public
     const DEFAULT_TTL_SECONDS = 600;
@@ -19,11 +16,9 @@ type
     FTtlSeconds: Integer;
     FKeyIsEphemeral: Boolean;
     function Signature(const Payload: TBytes): TBytes;
-    class function NewRandomKey: TBytes; static;
     class function QuotedName(const Value: string): string; static;
-    class function Base64Url(const Bytes: TBytes): string; static;
-    class function TryFromBase64Url(const Text: string; out Bytes: TBytes): Boolean; static;
     class function CanonicalJson(const Value: TJSONValue): string; static;
+    class function TryDecodeBase64Url(const Text: string; out Bytes: TBytes): Boolean; static;
   public
     constructor Create(const Key: string; TtlSeconds: Integer = DEFAULT_TTL_SECONDS);
 
@@ -39,18 +34,15 @@ type
 implementation
 
 uses
-{$IFDEF MSWINDOWS}
-  Winapi.Windows,
-{$ENDIF}
-  System.Classes,
   System.Hash,
   System.DateUtils,
-  System.NetEncoding,
   System.Generics.Collections,
   System.Generics.Defaults,
   MCPServer.Types,
   MCPServer.Errors,
-  MCPServer.Logger;
+  MCPServer.Logger,
+  MCPServer.SecureRandom,
+  System.NetEncoding;
 
 const
   MESSAGE_INTEGRITY_FAILED = 'requestState failed integrity verification';
@@ -58,7 +50,6 @@ const
 
 const
   KEY_BYTES = 32;
-  URANDOM_DEVICE = '/dev/urandom';
   TOKEN_SEPARATOR = '.';
   PAYLOAD_VERSION = 'v';
   PAYLOAD_METHOD = 'm';
@@ -68,35 +59,7 @@ const
   PAYLOAD_STATE = 's';
   EXCLUDED_MEMBERS: array[0..2] of string = ('_meta', 'inputResponses', 'requestState');
 
-{$IFDEF MSWINDOWS}
-const
-  BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
-  STATUS_SUCCESS = 0;
-
-function BCryptGenRandom(Algorithm: Pointer; Buffer: PByte; BufferLength: ULONG;
-  Flags: ULONG): Integer; stdcall; external 'bcrypt.dll' name 'BCryptGenRandom';
-{$ENDIF}
-
 { TMCPRequestStateSealer }
-
-class function TMCPRequestStateSealer.NewRandomKey: TBytes;
-var
-  Generated: Boolean;
-begin
-  SetLength(Result, KEY_BYTES);
-{$IFDEF MSWINDOWS}
-  Generated := BCryptGenRandom(nil, PByte(Result), KEY_BYTES, BCRYPT_USE_SYSTEM_PREFERRED_RNG) = STATUS_SUCCESS;
-{$ELSE}
-  const Device = TFileStream.Create(URANDOM_DEVICE, fmOpenRead or fmShareDenyNone);
-  try
-    Generated := Device.Read(Result[0], KEY_BYTES) = KEY_BYTES;
-  finally
-    Device.Free;
-  end;
-{$ENDIF}
-  if not Generated then
-    raise EMCPRequestStateKey.Create('The operating system did not provide a random key for requestState');
-end;
 
 class function TMCPRequestStateSealer.QuotedName(const Value: string): string;
 begin
@@ -117,7 +80,7 @@ begin
     FKey := TEncoding.UTF8.GetBytes(Key)
   else
   begin
-    FKey := NewRandomKey;
+    FKey := TMCPSecureRandom.Bytes(KEY_BYTES);
     FKeyIsEphemeral := True;
     TLogger.Warning('[Security] RequestStateKey is not set: requestState tokens are sealed with a random key ' +
       'and stop verifying after a restart or on another instance');
@@ -129,37 +92,22 @@ begin
   Result := THashSHA2.GetHMACAsBytes(Payload, FKey, THashSHA2.TSHA2Version.SHA256);
 end;
 
-class function TMCPRequestStateSealer.Base64Url(const Bytes: TBytes): string;
-begin
-  var Encoding := TBase64Encoding.Create(0);
-  try
-    Result := Encoding.EncodeBytesToString(Bytes).Replace('+', '-').Replace('/', '_').TrimRight(['=']);
-  finally
-    Encoding.Free;
-  end;
-end;
-
-class function TMCPRequestStateSealer.TryFromBase64Url(const Text: string; out Bytes: TBytes): Boolean;
+class function TMCPRequestStateSealer.TryDecodeBase64Url(const Text: string; out Bytes: TBytes): Boolean;
 begin
   Bytes := nil;
   const TextIsEmpty = (Text = '');
   if TextIsEmpty then
     Exit(False);
-  for var C in Text do
-    if not (CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '-', '_'])) then
-      Exit(False);
 
-  var Standard := Text.Replace('-', '+').Replace('_', '/');
-  while Length(Standard) mod 4 <> 0 do
+  for var C in Text do
   begin
-    Standard := Standard + '=';
+    const IsUrlSafe = CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '-', '_']);
+    if not IsUrlSafe then
+      Exit(False);
   end;
-  try
-    Bytes := TNetEncoding.Base64.DecodeStringToBytes(Standard);
-    Result := Length(Bytes) > 0;
-  except
-    Result := False;
-  end;
+
+  Bytes := TNetEncoding.Base64URL.DecodeStringToBytes(Text);
+  Result := (Length(Bytes) > 0);
 end;
 
 class function TMCPRequestStateSealer.CanonicalJson(const Value: TJSONValue): string;
@@ -257,7 +205,9 @@ begin
       Payload.AddPair(PAYLOAD_STATE, TJSONObject.Create);
 
     var PayloadBytes := TEncoding.UTF8.GetBytes(Payload.ToJSON);
-    Result := Base64Url(PayloadBytes) + TOKEN_SEPARATOR + Base64Url(Signature(PayloadBytes));
+    const EncodedPayload = TNetEncoding.Base64URL.EncodeBytesToString(PayloadBytes);
+    const EncodedSignature = TNetEncoding.Base64URL.EncodeBytesToString(Signature(PayloadBytes));
+    Result := EncodedPayload + TOKEN_SEPARATOR + EncodedSignature;
   finally
     Payload.Free;
   end;
@@ -268,8 +218,8 @@ var
   PayloadBytes, SignatureBytes: TBytes;
 begin
   var Separator := Token.LastIndexOf(TOKEN_SEPARATOR);
-  if (Separator <= 0) or not TryFromBase64Url(Token.Substring(0, Separator), PayloadBytes) or
-    not TryFromBase64Url(Token.Substring(Separator + 1), SignatureBytes) or
+  if (Separator <= 0) or not TryDecodeBase64Url(Token.Substring(0, Separator), PayloadBytes) or
+    not TryDecodeBase64Url(Token.Substring(Separator + 1), SignatureBytes) or
     not TMCPConstantTime.SameBytes(SignatureBytes, Signature(PayloadBytes)) then
     raise EMCPError.InvalidParams(MESSAGE_INTEGRITY_FAILED);
 

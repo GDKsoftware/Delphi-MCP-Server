@@ -133,6 +133,7 @@
         <DCCReference Include="Protocol\MCPServer.RequestContext.pas"/>
         <DCCReference Include="Protocol\MCPServer.Capabilities.pas"/>
         <DCCReference Include="Protocol\MCPServer.Extensions.pas"/>
+        <DCCReference Include="Protocol\MCPServer.SecureRandom.pas"/>
         <DCCReference Include="Server\MCPServer.HttpHeaders.pas"/>
         <DCCReference Include="Server\MCPServer.HttpStream.pas"/>
         <DCCReference Include="Protocol\MCPServer.Serializer.pas"/>
@@ -142,6 +143,9 @@
         <DCCReference Include="Core\MCPServer.Logger.pas"/>
         <DCCReference Include="Core\MCPServer.PathBoundary.pas"/>
         <DCCReference Include="Core\MCPServer.Settings.pas"/>
+        <DCCReference Include="Core\MCPServer.Task.Types.pas"/>
+        <DCCReference Include="Core\MCPServer.TaskHandle.pas"/>
+        <DCCReference Include="Core\MCPServer.TaskStore.Memory.pas"/>
         <DCCReference Include="Core\MCPServer.Application.pas"/>
         <DCCReference Include="Core\MCPServer.Authorization.pas"/>
         <DCCReference Include="Core\MCPServer.Registration.pas"/>
@@ -152,6 +156,8 @@
         <DCCReference Include="Server\MCPServer.IdHTTPServer.pas"/>
         <DCCReference Include="Managers\MCPServer.CoreManager.pas"/>
         <DCCReference Include="Managers\MCPServer.ToolsManager.pas"/>
+        <DCCReference Include="Managers\MCPServer.TasksManager.pas"/>
+        <DCCReference Include="Managers\MCPServer.ToolTaskRun.pas"/>
         <DCCReference Include="Managers\MCPServer.ResourcesManager.pas"/>
         <DCCReference Include="Managers\MCPServer.PromptsManager.pas"/>
         <DCCReference Include="Managers\MCPServer.CompletionManager.pas"/>
@@ -168,6 +174,7 @@
         <DCCReference Include="Server\MCPServer.Host.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.ContentSamples.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.InputRequiredSamples.pas"/>
+        <DCCReference Include="Tools\MCPServer.Tool.TaskSamples.pas"/>
         <DCCReference Include="Tools\MCPServer.Tool.SubscriptionSamples.pas"/>
         <DCCReference Include="Resources\MCPServer.Resource.Samples.pas"/>
         <DCCReference Include="Prompts\MCPServer.Prompt.SummarizeLogs.pas"/>

@@ -901,6 +901,80 @@ the extension owns is only sent to a client that declared the extension on
 that request; the processor turns anything else into `-32603`, so a client
 never receives a result type it did not ask for.
 
+### Long-running tool calls (tasks)
+
+A tool call normally has to finish within the client's request timeout. With
+the Tasks extension (`io.modelcontextprotocol/tasks`) a tool answers with a
+task instead; the client polls it with `tasks/get`, answers questions with
+`tasks/update` and stops it with `tasks/cancel`. The extension is off by
+default; switch it on in `settings.ini`:
+
+```ini
+[Tasks]
+Enabled=1
+MaxRunningTasks=8      ; tool calls the server runs in the background at once
+TtlMs=3600000          ; how long a task stays retrievable; 0 = unlimited
+PollIntervalMs=1000    ; polling interval suggested to clients
+```
+
+or set `Host.Settings.TasksEnabled := True` before the host builds its
+managers. A task only exists for a client that declares the extension on the
+request; every other client keeps getting the synchronous result.
+
+**A tool the server runs in the background.** Mark the tool class with
+`[TaskExecution]` (`MCPServer.Task.Types`):
+
+```pascal
+[TaskExecution(TMCPTaskExecution.Optional)]
+TBuildTool = class(TMCPToolBase<TBuildParams>)
+```
+
+`Optional` runs the tool as a task when the client supports tasks and
+synchronously otherwise; `Required` answers `-32021` to a client without the
+extension, and `-32603` while tasks are switched off. The server runs the tool on a thread pool of its own, limited to
+`MaxRunningTasks`, so long calls do not occupy `TThreadPool.Default`. Inside
+the tool nothing changes: `Context.CheckCancelled` raises once the client
+cancels the task, and `EMCPInputRequired` puts the task in `input_required`
+with the tool's input requests. When the client has answered all of them
+with `tasks/update`, the server runs the tool again with every answer so
+far, the same way a multi round-trip request is retried. A task that waits
+for input holds no thread, so it does not count against `MaxRunningTasks`. Progress and log
+notifications are not sent for a task.
+
+**Work that runs outside the request.** A tool that hands the work to the
+host, such as a build queue, implements `IMCPTaskStarter`:
+
+```pascal
+procedure TBuildTool.StartTask(const Arguments: TJSONObject; const Task: IMCPTaskHandle);
+begin
+  FBuildQueue.Enqueue(Arguments.GetValue<string>('project'), Task);
+end;
+```
+
+`StartTask` runs on the request thread once the task exists; `Arguments` is
+only valid during the call. Raise `EMCPInputRequired` there for input that is
+needed before the task is created: the client then gets a normal
+`input_required` result and no task is left behind. The host reports
+progress from any thread through the handle: `SetStatusMessage`,
+`RequestInput` and `WaitForInput`, `Complete` (a `TMCPToolResult` or its
+JSON), `Fail` (a JSON-RPC error, which makes the task `failed`) and
+`IsCancelled`. A task that is completed, failed or cancelled keeps that
+status; later calls on its handle change nothing. `Host.Tasks.TryGetTask`
+returns the handle of a task by id.
+
+**Keeping tasks across restarts.** Tasks live in an `IMCPTaskStore`; the
+default keeps them in memory. Implement the interface on your own database
+and set `Host.TaskStore` before the host builds its managers. `TryUpdate`
+must refuse to change a task that is already completed, failed or cancelled.
+The store holds the result, the error and the input requests as JSON text.
+After a restart nothing runs for a task that was still `working`; the host
+decides what happens to it through `Host.Tasks.TryGetTask`.
+
+A task is bound to the principal that created it: `tasks/get`, `tasks/update`
+and `tasks/cancel` from any other caller answer `-32602`, the same as for an
+unknown task id. Status notifications (`notifications/tasks`) are not sent
+yet; clients poll.
+
 ## Integration with Claude Code
 
 Configure using the Streamable HTTP transport:
@@ -1024,6 +1098,11 @@ The Inspector provides a web interface to interact with your MCP server, making 
   `test_dynamic_prompt`, or report `test://static-text` as updated, so that
   clients on `subscriptions/listen` receive the change notifications, from
   `MCPServer.Tool.SubscriptionSamples`
+- **greet**, **slow_compute**, **failing_job**, **protocol_error_job**,
+  **confirm_delete**, **multi_input**, **test_tool_with_task**: the fixtures
+  of the conformance suite's tasks scenarios, from
+  `MCPServer.Tool.TaskSamples`; they run as tasks when `[Tasks] Enabled=1`
+  and the client supports the extension
 
 ## Available Example Prompts
 

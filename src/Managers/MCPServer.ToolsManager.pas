@@ -11,7 +11,8 @@ uses
   System.Generics.Collections,
   MCPServer.Types,
   MCPServer.Logger,
-  MCPServer.Tool.Base;
+  MCPServer.Tool.Base,
+  MCPServer.Task.Types;
 
 type
   TMCPToolsManager = class(TInterfacedObject, IMCPCapabilityManager, IMCPCapabilityManagerEx, IMCPCapabilityProvider)
@@ -22,6 +23,7 @@ type
     FListTtlMs: Integer;
     FListCacheScope: string;
     FChangeNotifier: IMCPSubscriptionHub;
+    FTaskService: IMCPTaskService;
     function TryGetTool(const Name: string; out Tool: IMCPTool): Boolean;
     procedure NotifyListChanged;
     function ErrorResult(const Message: string; Era: TMCPProtocolEra): TJSONObject;
@@ -36,6 +38,13 @@ type
     procedure WarnIfStructuredContentMismatchesSchema(const Tool: IMCPTool; const Result: TJSONObject);
     {$ENDIF}
     function EraOf(const Context: IMCPRequestContext): TMCPProtocolEra;
+    function TaskExecutionOf(const Tool: IMCPTool): TMCPTaskExecution;
+    function ShouldRunAsTask(const Tool: IMCPTool; const Context: IMCPRequestContext): Boolean;
+    procedure CheckRunsWithoutTask(const Tool: IMCPTool; const Context: IMCPRequestContext);
+    function CallToolAsTask(const Tool: IMCPTool; const Arguments: TJSONObject;
+      const Context: IMCPRequestContext): TJSONObject;
+    function CallToolWith(const Params: TJSONObject; Era: TMCPProtocolEra; const Context: IMCPRequestContext): TValue;
+    class function CopyOfArguments(const Arguments: TJSONObject): TJSONObject; static;
   private
     procedure RegisterTool(const Tool: IMCPTool);
     procedure RegisterBuiltInTools;
@@ -59,10 +68,12 @@ type
     function ListTools(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
     function CallTool(const Params: System.JSON.TJSONObject): TValue; overload;
     function CallTool(const Params: TJSONObject; Era: TMCPProtocolEra): TValue; overload;
+    function CallTool(const Params: TJSONObject; const Context: IMCPRequestContext): TValue; overload;
 
     property ListTtlMs: Integer read FListTtlMs write FListTtlMs;
     property ListCacheScope: string read FListCacheScope write FListCacheScope;
     property ChangeNotifier: IMCPSubscriptionHub read FChangeNotifier write FChangeNotifier;
+    property TaskService: IMCPTaskService read FTaskService write FTaskService;
   end;
 
 implementation
@@ -75,6 +86,7 @@ uses
   MCPServer.Errors,
   MCPServer.Mrtr,
   MCPServer.Tool.Result,
+  MCPServer.ToolTaskRun,
   MCPServer.Schema.Validator;
 
 const
@@ -83,6 +95,8 @@ const
 
 const
   TOOL_NAME_PATTERN = '^[A-Za-z0-9_.\-]{1,128}$';
+  MESSAGE_TASKS_NOT_OFFERED = 'Tool "%s" runs as a task, but this server does not offer the tasks extension';
+  MESSAGE_TASK_NEEDS_CONTEXT = 'Tool "%s" runs as a task and needs a request context';
 
 {$IFDEF DEBUG}
 procedure TMCPToolsManager.WarnIfStructuredContentMismatchesSchema(const Tool: IMCPTool; const Result: TJSONObject);
@@ -167,7 +181,7 @@ begin
   if Method = MCP_METHOD_TOOLS_LIST then
     Result := ListTools(Params, EraOf(Context))
   else if Method = MCP_METHOD_TOOLS_CALL then
-    Result := CallTool(Params, EraOf(Context))
+    Result := CallTool(Params, Context)
   else
     raise EMCPError.MethodNotFound(Method);
 end;
@@ -442,6 +456,17 @@ begin
 end;
 
 function TMCPToolsManager.CallTool(const Params: TJSONObject; Era: TMCPProtocolEra): TValue;
+begin
+  Result := CallToolWith(Params, Era, nil);
+end;
+
+function TMCPToolsManager.CallTool(const Params: TJSONObject; const Context: IMCPRequestContext): TValue;
+begin
+  Result := CallToolWith(Params, EraOf(Context), Context);
+end;
+
+function TMCPToolsManager.CallToolWith(const Params: TJSONObject; Era: TMCPProtocolEra;
+  const Context: IMCPRequestContext): TValue;
 var
   Tool: IMCPTool;
 begin
@@ -465,7 +490,102 @@ begin
   CheckRequiredScopes(Tool);
 
   TLogger.Info('MCP CallTool called for tool: ' + ToolName);
+  if ShouldRunAsTask(Tool, Context) then
+  begin
+    const CreatedTask = CallToolAsTask(Tool, Arguments, Context);
+    Result := TValue.From<TJSONObject>(CreatedTask);
+    Exit;
+  end;
+
+  CheckRunsWithoutTask(Tool, Context);
   Result := TValue.From<TJSONObject>(ExecuteTool(Tool, Arguments, Era));
+end;
+
+function TMCPToolsManager.ShouldRunAsTask(const Tool: IMCPTool; const Context: IMCPRequestContext): Boolean;
+begin
+  const Execution = TaskExecutionOf(Tool);
+  const IsSynchronous = (Execution = TMCPTaskExecution.Synchronous);
+  if IsSynchronous then
+    Exit(False);
+
+  const IsOffered = Assigned(FTaskService);
+  const IsDeclared = (Assigned(Context) and Context.HasClientExtension(MCP_EXTENSION_TASKS));
+  Result := (IsOffered and IsDeclared);
+end;
+
+procedure TMCPToolsManager.CheckRunsWithoutTask(const Tool: IMCPTool; const Context: IMCPRequestContext);
+begin
+  const IsRequired = (TaskExecutionOf(Tool) = TMCPTaskExecution.Required);
+  if not IsRequired then
+    Exit;
+  if not Assigned(FTaskService) then
+    raise EMCPError.InternalError(Format(MESSAGE_TASKS_NOT_OFFERED, [Tool.Name]));
+  if not Assigned(Context) then
+    raise EMCPError.InternalError(Format(MESSAGE_TASK_NEEDS_CONTEXT, [Tool.Name]));
+
+  Context.RequireClientExtension(MCP_EXTENSION_TASKS);
+end;
+
+function TMCPToolsManager.TaskExecutionOf(const Tool: IMCPTool): TMCPTaskExecution;
+begin
+  if Supports(Tool, IMCPTaskStarter) then
+    Exit(TMCPTaskExecution.Required);
+
+  Result := TMCPTaskExecution.Synchronous;
+  var RttiContext := TRttiContext.Create;
+  try
+    const ToolType = RttiContext.GetType((Tool as TObject).ClassType);
+    for var Attribute in ToolType.GetAttributes do
+    begin
+      const IsTaskExecution = (Attribute is TaskExecutionAttribute);
+      if IsTaskExecution then
+      begin
+        const Execution = TaskExecutionAttribute(Attribute).Execution;
+        Exit(Execution);
+      end;
+    end;
+  finally
+    RttiContext.Free;
+  end;
+end;
+
+function TMCPToolsManager.CallToolAsTask(const Tool: IMCPTool; const Arguments: TJSONObject;
+  const Context: IMCPRequestContext): TJSONObject;
+begin
+  const TaskArguments = CopyOfArguments(Arguments);
+  var Starter: IMCPTaskStarter;
+  if Supports(Tool, IMCPTaskStarter, Starter) then
+  begin
+    try
+      Result := FTaskService.StartTask(Context,
+        procedure(Task: IMCPTaskHandle)
+        begin
+          Starter.StartTask(TaskArguments, Task);
+        end);
+    finally
+      TaskArguments.Free;
+    end;
+    Exit;
+  end;
+
+  const Run: IMCPToolTaskRun = TMCPToolTaskRun.Create(FTaskService, Context, TaskArguments,
+    function(const RunArguments: TJSONObject): TJSONObject
+    begin
+      Result := ExecuteTool(Tool, RunArguments, TMCPProtocolEra.Modern);
+    end);
+  Result := FTaskService.RunTask(Context,
+    procedure(Task: IMCPTaskHandle)
+    begin
+      Run.Execute(Task);
+    end);
+end;
+
+class function TMCPToolsManager.CopyOfArguments(const Arguments: TJSONObject): TJSONObject;
+begin
+  if Assigned(Arguments) then
+    Result := TJSONObject(Arguments.Clone)
+  else
+    Result := TJSONObject.Create;
 end;
 
 end.

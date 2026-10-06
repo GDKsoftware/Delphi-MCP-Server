@@ -44,6 +44,10 @@ type
     FAuthorizationServers: string;
     FResourceUri: string;
     FScopesSupported: string;
+    FTasksEnabled: Boolean;
+    FMaxRunningTasks: Integer;
+    FTaskTtlMs: Integer;
+    FTaskPollIntervalMs: Integer;
     function GetProtocol: string;
     function SplitList(const Value: string): TArray<string>;
     function GetAllowedOrigins: string;
@@ -102,10 +106,18 @@ type
     function AuthorizationServerList: TArray<string>;
     function ScopesSupportedList: TArray<string>;
 
+    property TasksEnabled: Boolean read FTasksEnabled write FTasksEnabled;
+    property MaxRunningTasks: Integer read FMaxRunningTasks write FMaxRunningTasks;
+    property TaskTtlMs: Integer read FTaskTtlMs write FTaskTtlMs;
+    property TaskPollIntervalMs: Integer read FTaskPollIntervalMs write FTaskPollIntervalMs;
+
     const DEFAULT_MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
     const DEFAULT_MAX_JSON_DEPTH = 64;
     const DEFAULT_MAX_CONCURRENT_REQUESTS = 1;
     const DEFAULT_REQUEST_STATE_TTL_SECONDS = 600;
+    const DEFAULT_MAX_RUNNING_TASKS = 8;
+    const DEFAULT_TASK_TTL_MS = 60 * 60 * 1000;
+    const DEFAULT_TASK_POLL_INTERVAL_MS = 1000;
   end;
 
 implementation
@@ -120,6 +132,11 @@ const
   SECTION_SSL = 'SSL';
   SECTION_PROTOCOL = 'Protocol';
   SECTION_CORS = 'CORS';
+  SECTION_TASKS = 'Tasks';
+  KEY_TASKS_ENABLED = 'Enabled';
+  KEY_MAX_RUNNING_TASKS = 'MaxRunningTasks';
+  KEY_TASK_TTL_MS = 'TtlMs';
+  KEY_TASK_POLL_INTERVAL_MS = 'PollIntervalMs';
 
 
 { TMCPSettings }
@@ -191,6 +208,10 @@ begin
   FAuthorizationServers := '';
   FResourceUri := '';
   FScopesSupported := '';
+  FTasksEnabled := False;
+  FMaxRunningTasks := DEFAULT_MAX_RUNNING_TASKS;
+  FTaskTtlMs := DEFAULT_TASK_TTL_MS;
+  FTaskPollIntervalMs := DEFAULT_TASK_POLL_INTERVAL_MS;
 end;
 
 function TMCPSettings.SplitList(const Value: string): TArray<string>;
@@ -286,6 +307,12 @@ begin
     IniFile.WriteBool(SECTION_PROTOCOL, 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
     IniFile.WriteInteger(SECTION_PROTOCOL, 'DiscoverTtlMs', FDiscoverTtlMs);
 
+    IniFile.WriteString(SECTION_TASKS, '; Tasks extension for long-running tool calls (1 = on, 0 = off; TtlMs 0 = unlimited)', '');
+    IniFile.WriteBool(SECTION_TASKS, KEY_TASKS_ENABLED, FTasksEnabled);
+    IniFile.WriteInteger(SECTION_TASKS, KEY_MAX_RUNNING_TASKS, FMaxRunningTasks);
+    IniFile.WriteInteger(SECTION_TASKS, KEY_TASK_TTL_MS, FTaskTtlMs);
+    IniFile.WriteInteger(SECTION_TASKS, KEY_TASK_POLL_INTERVAL_MS, FTaskPollIntervalMs);
+
     IniFile.WriteString(SECTION_CORS, '; Cross-Origin Resource Sharing configuration', '');
     IniFile.WriteBool(SECTION_CORS, 'Enabled', FCorsEnabled);
     IniFile.WriteString(SECTION_CORS, '; Comma-separated list of allowed origins', '');
@@ -340,6 +367,11 @@ begin
     FLenientModernPing := IniFile.ReadBool(SECTION_PROTOCOL, 'LenientModernPing', FLenientModernPing);
     FDiscoverListsLegacyVersions := IniFile.ReadBool(SECTION_PROTOCOL, 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
     FDiscoverTtlMs := IniFile.ReadInteger(SECTION_PROTOCOL, 'DiscoverTtlMs', FDiscoverTtlMs);
+
+    FTasksEnabled := IniFile.ReadBool(SECTION_TASKS, KEY_TASKS_ENABLED, FTasksEnabled);
+    FMaxRunningTasks := IniFile.ReadInteger(SECTION_TASKS, KEY_MAX_RUNNING_TASKS, FMaxRunningTasks);
+    FTaskTtlMs := IniFile.ReadInteger(SECTION_TASKS, KEY_TASK_TTL_MS, FTaskTtlMs);
+    FTaskPollIntervalMs := IniFile.ReadInteger(SECTION_TASKS, KEY_TASK_POLL_INTERVAL_MS, FTaskPollIntervalMs);
 
     FCorsEnabled := IniFile.ReadBool(SECTION_CORS, 'Enabled', FCorsEnabled);
     FCorsAllowedOrigins := IniFile.ReadString(SECTION_CORS, 'AllowedOrigins', FCorsAllowedOrigins);
@@ -406,6 +438,11 @@ begin
     IniFile.WriteBool(SECTION_PROTOCOL, 'LenientModernPing', FLenientModernPing);
     IniFile.WriteBool(SECTION_PROTOCOL, 'DiscoverListsLegacyVersions', FDiscoverListsLegacyVersions);
     IniFile.WriteInteger(SECTION_PROTOCOL, 'DiscoverTtlMs', FDiscoverTtlMs);
+
+    IniFile.WriteBool(SECTION_TASKS, KEY_TASKS_ENABLED, FTasksEnabled);
+    IniFile.WriteInteger(SECTION_TASKS, KEY_MAX_RUNNING_TASKS, FMaxRunningTasks);
+    IniFile.WriteInteger(SECTION_TASKS, KEY_TASK_TTL_MS, FTaskTtlMs);
+    IniFile.WriteInteger(SECTION_TASKS, KEY_TASK_POLL_INTERVAL_MS, FTaskPollIntervalMs);
 
     IniFile.WriteBool(SECTION_CORS, 'Enabled', FCorsEnabled);
     IniFile.WriteString(SECTION_CORS, 'AllowedOrigins', FCorsAllowedOrigins);

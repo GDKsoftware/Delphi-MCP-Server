@@ -179,6 +179,17 @@ at startup. `RequestStateTtlSeconds` bounds the replay window (600 s).
 nine new example tools plus one example prompt ship with the executable;
 they are only registered when their units are in the project.
 
+## Tasks
+
+**Nothing changes until you switch tasks on.** The `[Tasks]` section is new
+and `Enabled` defaults to 0; without it no tool runs as a task and `tasks/*`
+answers `-32601`. Seven example tools from `MCPServer.Tool.TaskSamples` ship
+with the executable and appear in `tools/list` whether tasks are on or not;
+they are only registered when their unit is in the project.
+
+**`EMCPRequestStateKey` is gone.** Code that caught it to detect a missing
+random source catches `EMCPSecureRandom` (`MCPServer.SecureRandom`) instead.
+
 ## Host allow-list and diagnostics resources
 
 **`[Security] AllowedHosts` is empty by default**, so nothing changes until it
