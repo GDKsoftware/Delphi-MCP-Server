@@ -119,6 +119,7 @@ const
   MCP_KEY_VERSION = 'version';
   MCP_KEY_LIST_CHANGED = 'listChanged';
   MCP_KEY_SUBSCRIBE = 'subscribe';
+  MCP_KEY_EXTENSIONS = 'extensions';
 
   MCP_CACHEABLE_METHODS: array[0..5] of string = (
     MCP_METHOD_SERVER_DISCOVER,
@@ -359,8 +360,10 @@ type
     function GetScopes: TArray<string>;
 
     function HasClientCapability(const Path: string): Boolean;
+    function HasClientExtension(const ExtensionId: string): Boolean;
     function HasScope(const Scope: string): Boolean;
     procedure RequireClientCapability(const Path: string);
+    procedure RequireClientExtension(const ExtensionId: string);
     function IsCancelled: Boolean;
     procedure CheckCancelled;
     procedure Cancel;
@@ -404,6 +407,15 @@ type
   IMCPCapabilityProvider = interface
     ['{C5D7E9F1-2A4B-4C6D-8E0F-1A2B3C4D5E6F}']
     procedure DescribeCapabilities(const Capabilities: TJSONObject; Era: TMCPProtocolEra);
+  end;
+
+  IMCPExtensionProvider = interface
+    ['{4A8C2E6F-9B1D-4F3A-8E5C-7D0B2A4C6E81}']
+    function GetExtensionId: string;
+    function GetExtensionSettings: TJSONObject;
+    function GetResultTypes: TArray<string>;
+    property ExtensionId: string read GetExtensionId;
+    property ResultTypes: TArray<string> read GetResultTypes;
   end;
 
   IMCPToolMetadata = interface
