@@ -12,7 +12,6 @@ uses
   MCPServer.Types,
   MCPServer.Logger,
   MCPServer.Tool.Base,
-  MCPServer.Mrtr,
   MCPServer.Task.Types;
 
 type
@@ -44,16 +43,8 @@ type
     procedure CheckRunsWithoutTask(const Tool: IMCPTool; const Context: IMCPRequestContext);
     function CallToolAsTask(const Tool: IMCPTool; const Arguments: TJSONObject;
       const Context: IMCPRequestContext): TJSONObject;
-    procedure RunToolTask(const Tool: IMCPTool; const Arguments: TJSONObject; const Origin: IMCPRequestContext;
-      const Task: IMCPTaskHandle);
-    procedure CompleteToolTask(const Tool: IMCPTool; const Arguments: TJSONObject; const RunContext: IMCPRequestContext;
-      const Task: IMCPTaskHandle);
-    function TryCollectTaskInput(const Required: EMCPInputRequired; const Origin: IMCPRequestContext;
-      const Task: IMCPTaskHandle; const InputResponses, RequestState: TJSONObject): Boolean;
     function CallToolWith(const Params: TJSONObject; Era: TMCPProtocolEra; const Context: IMCPRequestContext): TValue;
     class function CopyOfArguments(const Arguments: TJSONObject): TJSONObject; static;
-    class function RequestStateOrNil(const RequestState: TJSONObject): TJSONObject; static;
-    class procedure ReplaceContents(const Target, Source: TJSONObject); static;
   private
     procedure RegisterTool(const Tool: IMCPTool);
     procedure RegisterBuiltInTools;
@@ -93,7 +84,9 @@ uses
   MCPServer.RequestContext,
   MCPServer.Authorization,
   MCPServer.Errors,
+  MCPServer.Mrtr,
   MCPServer.Tool.Result,
+  MCPServer.ToolTaskRun,
   MCPServer.Schema.Validator;
 
 const
@@ -498,7 +491,11 @@ begin
 
   TLogger.Info('MCP CallTool called for tool: ' + ToolName);
   if ShouldRunAsTask(Tool, Context) then
-    Exit(TValue.From<TJSONObject>(CallToolAsTask(Tool, Arguments, Context)));
+  begin
+    const CreatedTask = CallToolAsTask(Tool, Arguments, Context);
+    Result := TValue.From<TJSONObject>(CreatedTask);
+    Exit;
+  end;
 
   CheckRunsWithoutTask(Tool, Context);
   Result := TValue.From<TJSONObject>(ExecuteTool(Tool, Arguments, Era));
@@ -542,7 +539,10 @@ begin
     begin
       const IsTaskExecution = (Attribute is TaskExecutionAttribute);
       if IsTaskExecution then
-        Exit(TaskExecutionAttribute(Attribute).Execution);
+      begin
+        const Execution = TaskExecutionAttribute(Attribute).Execution;
+        Exit(Execution);
+      end;
     end;
   finally
     RttiContext.Free;
@@ -568,89 +568,16 @@ begin
     Exit;
   end;
 
-  try
-    Result := FTaskService.RunTask(Context,
-      procedure(Task: IMCPTaskHandle)
-      begin
-        RunToolTask(Tool, TaskArguments, Context, Task);
-      end);
-  except
-    TaskArguments.Free;
-    raise;
-  end;
-end;
-
-procedure TMCPToolsManager.RunToolTask(const Tool: IMCPTool; const Arguments: TJSONObject;
-  const Origin: IMCPRequestContext; const Task: IMCPTaskHandle);
-begin
-  const InputResponses = TJSONObject.Create;
-  const RequestState = TJSONObject.Create;
-  try
-    while not Task.IsCancelled do
+  const Run: IMCPToolTaskRun = TMCPToolTaskRun.Create(FTaskService, Context, TaskArguments,
+    function(const RunArguments: TJSONObject): TJSONObject
     begin
-      const State = RequestStateOrNil(RequestState);
-      const RunContext = TMCPRequestContext.ForTask(Origin, InputResponses, State);
-      Task.BindCancellation(RunContext);
-      try
-        CompleteToolTask(Tool, Arguments, RunContext, Task);
-        Exit;
-      except
-        on E: EMCPInputRequired do
-        begin
-          if not TryCollectTaskInput(E, Origin, Task, InputResponses, RequestState) then
-            Exit;
-        end;
-      end;
-    end;
-  finally
-    InputResponses.Free;
-    RequestState.Free;
-    Arguments.Free;
-  end;
-end;
-
-procedure TMCPToolsManager.CompleteToolTask(const Tool: IMCPTool; const Arguments: TJSONObject;
-  const RunContext: IMCPRequestContext; const Task: IMCPTaskHandle);
-begin
-  const Previous = TMCPRequestContext.SetCurrent(RunContext);
-  try
-    const ToolResult = ExecuteTool(Tool, Arguments, TMCPProtocolEra.Modern);
-    try
-      Task.Complete(ToolResult);
-    finally
-      ToolResult.Free;
-    end;
-  finally
-    TMCPRequestContext.SetCurrent(Previous);
-  end;
-end;
-
-function TMCPToolsManager.TryCollectTaskInput(const Required: EMCPInputRequired; const Origin: IMCPRequestContext;
-  const Task: IMCPTaskHandle; const InputResponses, RequestState: TJSONObject): Boolean;
-begin
-  Required.Requests.RequireClientCapabilities(Origin);
-  ReplaceContents(RequestState, Required.State);
-
-  const Requests = Required.Requests.ToJson;
-  try
-    Task.RequestInput(Requests);
-  finally
-    Requests.Free;
-  end;
-
-  var Answers: TJSONObject;
-  if not Task.WaitForInput(INFINITE, Answers) then
-    Exit(False);
-  try
-    for var Answer in Answers do
+      Result := ExecuteTool(Tool, RunArguments, TMCPProtocolEra.Modern);
+    end);
+  Result := FTaskService.RunTask(Context,
+    procedure(Task: IMCPTaskHandle)
     begin
-      const AnswerCopy = TJSONPair(Answer.Clone);
-      InputResponses.AddPair(AnswerCopy);
-    end;
-  finally
-    Answers.Free;
-  end;
-  Result := True;
+      Run.Execute(Task);
+    end);
 end;
 
 class function TMCPToolsManager.CopyOfArguments(const Arguments: TJSONObject): TJSONObject;
@@ -659,33 +586,6 @@ begin
     Result := TJSONObject(Arguments.Clone)
   else
     Result := TJSONObject.Create;
-end;
-
-class function TMCPToolsManager.RequestStateOrNil(const RequestState: TJSONObject): TJSONObject;
-begin
-  const IsEmpty = (RequestState.Count = 0);
-  if IsEmpty then
-    Result := nil
-  else
-    Result := RequestState;
-end;
-
-class procedure TMCPToolsManager.ReplaceContents(const Target, Source: TJSONObject);
-begin
-  while Target.Count > 0 do
-  begin
-    const Key = Target.Pairs[0].JsonString.Value;
-    Target.RemovePair(Key).Free;
-  end;
-
-  if not Assigned(Source) then
-    Exit;
-
-  for var Pair in Source do
-  begin
-    const PairCopy = TJSONPair(Pair.Clone);
-    Target.AddPair(PairCopy);
-  end;
 end;
 
 end.

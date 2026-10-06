@@ -102,6 +102,7 @@
         <DCCReference Include="..\src\Managers\MCPServer.CoreManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.ToolsManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.TasksManager.pas"/>
+        <DCCReference Include="..\src\Managers\MCPServer.ToolTaskRun.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.ResourcesManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.PromptsManager.pas"/>
         <DCCReference Include="..\src\Managers\MCPServer.CompletionManager.pas"/>

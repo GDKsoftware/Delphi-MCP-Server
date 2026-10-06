@@ -45,6 +45,7 @@ uses
   MCPServer.CoreManager in 'Managers\MCPServer.CoreManager.pas',
   MCPServer.ToolsManager in 'Managers\MCPServer.ToolsManager.pas',
   MCPServer.TasksManager in 'Managers\MCPServer.TasksManager.pas',
+  MCPServer.ToolTaskRun in 'Managers\MCPServer.ToolTaskRun.pas',
   MCPServer.ResourcesManager in 'Managers\MCPServer.ResourcesManager.pas',
   MCPServer.PromptsManager in 'Managers\MCPServer.PromptsManager.pas',
   MCPServer.CompletionManager in 'Managers\MCPServer.CompletionManager.pas',

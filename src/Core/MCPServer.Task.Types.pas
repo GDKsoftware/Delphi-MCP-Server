@@ -58,7 +58,8 @@ type
     function GetTaskId: string;
     function IsCancelled: Boolean;
     procedure SetStatusMessage(const StatusMessage: string);
-    procedure RequestInput(const InputRequests: TJSONObject);
+    procedure RequestInput(const InputRequests: TJSONObject); overload;
+    procedure RequestInput(const InputRequests: TJSONObject; const OnAnswered: TProc<TJSONObject>); overload;
     function WaitForInput(const TimeoutMs: Cardinal; out InputResponses: TJSONObject): Boolean;
     procedure Complete(const ToolResult: TJSONObject); overload;
     procedure Complete(const ToolResult: TMCPToolResult); overload;
@@ -76,6 +77,7 @@ type
     ['{4E8A2C6D-7F9B-4D1C-8A2E-5C7E9B1D3F46}']
     function StartTask(const Context: IMCPRequestContext; const Starter: TProc<IMCPTaskHandle>): TJSONObject;
     function RunTask(const Context: IMCPRequestContext; const Work: TProc<IMCPTaskHandle>): TJSONObject;
+    procedure ResumeTask(const Task: IMCPTaskHandle; const Work: TProc<IMCPTaskHandle>);
   end;
 
   TaskExecutionAttribute = class(TCustomAttribute)

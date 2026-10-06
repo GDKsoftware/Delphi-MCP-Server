@@ -937,7 +937,8 @@ the tool nothing changes: `Context.CheckCancelled` raises once the client
 cancels the task, and `EMCPInputRequired` puts the task in `input_required`
 with the tool's input requests. When the client has answered all of them
 with `tasks/update`, the server runs the tool again with every answer so
-far, the same way a multi round-trip request is retried. Progress and log
+far, the same way a multi round-trip request is retried. A task that waits
+for input holds no thread, so it does not count against `MaxRunningTasks`. Progress and log
 notifications are not sent for a task.
 
 **Work that runs outside the request.** A tool that hands the work to the

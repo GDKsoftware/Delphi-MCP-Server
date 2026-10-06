@@ -16,7 +16,8 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `[TaskExecution(Optional|Required)]` answers a declaring client with a
   `CreateTaskResult` and runs on a thread pool limited to `MaxRunningTasks`;
   `EMCPInputRequired` inside it moves the task to `input_required` and the
-  tool runs again once `tasks/update` answered every request. A tool that
+  tool runs again once `tasks/update` answered every request; a waiting task
+  holds no thread. A tool that
   implements `IMCPTaskStarter` hands an `IMCPTaskHandle` to the host, which
   completes, fails or asks for input from its own threads. `IMCPTaskStore`
   with `TMCPInMemoryTaskStore` as the default; `TMCPServerHost.TaskStore`

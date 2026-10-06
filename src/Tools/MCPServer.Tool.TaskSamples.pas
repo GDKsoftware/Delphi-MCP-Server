@@ -151,12 +151,11 @@ type
 
 class procedure TTaskSamplePause.Wait(const Context: IMCPRequestContext; const Milliseconds: Integer);
 begin
-  var Remaining := Milliseconds;
-  while Remaining > 0 do
+  const Deadline = TThread.GetTickCount64 + UInt64(Milliseconds);
+  while TThread.GetTickCount64 < Deadline do
   begin
     Context.CheckCancelled;
     TThread.Sleep(PAUSE_SLICE_MS);
-    Dec(Remaining, PAUSE_SLICE_MS);
   end;
   Context.CheckCancelled;
 end;

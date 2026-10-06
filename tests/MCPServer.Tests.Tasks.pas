@@ -29,6 +29,8 @@ type
     function WaitForStatus(const TaskId, Status: string): Boolean;
     function SendTaskMethod(const Method, TaskId: string; const ExtraParams: string = ''): TJSONObject;
     function ErrorCode(const Response: TJSONObject): Integer;
+    procedure StartServer(const MaxRunningTasks: Integer);
+    procedure StopServer;
     procedure AnswerTask(const TaskId, InputResponses: string);
 
   public
@@ -100,6 +102,12 @@ type
 
     [Test]
     procedure TasksGet_NameHeaderDiffersFromTaskId_IsHeaderMismatch;
+
+    [Test]
+    procedure MaxRunningTasks_QueuesTheTasksBeyondTheLimit;
+
+    [Test]
+    procedure InputRequired_WaitingTask_LeavesItsThreadFree;
   end;
 
   [TestFixture]
@@ -172,21 +180,32 @@ const
   RESULT_TYPE_COMPLETE = 'complete';
   TASK_ID_PARAM = '"taskId":"%s"';
   TOOL_FAILING_JOB = 'failing_job';
+  ANSWER_CONFIRM = '"inputResponses":{"confirm":{"action":"accept","content":{"confirm":true}}}';
 
 { TTasksTests }
 
 procedure TTasksTests.Setup;
 begin
+  StartServer(MAX_RUNNING_TASKS);
+end;
+
+procedure TTasksTests.TearDown;
+begin
+  StopServer;
+end;
+
+procedure TTasksTests.StartServer(const MaxRunningTasks: Integer);
+begin
   FHarness := TMCPTestHarness.Create;
   FTasks := TMCPTasksManager.Create(TMCPInMemoryTaskStore.Create, TASK_TTL_MS, TASK_POLL_INTERVAL_MS,
-                                    MAX_RUNNING_TASKS);
+                                    MaxRunningTasks);
   FTasksService := FTasks;
   FHarness.ToolsManager.TaskService := FTasksService;
   FHarness.ManagerRegistry.RegisterManager(FTasks);
   FProcessor := TMCPJsonRpcProcessor.Create(FHarness.ManagerRegistry);
 end;
 
-procedure TTasksTests.TearDown;
+procedure TTasksTests.StopServer;
 begin
   FTasks.Shutdown;
   FProcessor.Free;
@@ -472,8 +491,7 @@ begin
     Waiting.Free;
   end;
 
-  const Answer = '"inputResponses":{"confirm":{"action":"accept","content":{"confirm":true}}}';
-  AnswerTask(TaskId, Answer);
+  AnswerTask(TaskId, ANSWER_CONFIRM);
 
   Assert.IsTrue(WaitForStatus(TaskId, STATUS_COMPLETED));
   const Response = GetTask(TaskId);
@@ -613,6 +631,34 @@ begin
   finally
     Response.Free;
   end;
+end;
+
+procedure TTasksTests.MaxRunningTasks_QueuesTheTasksBeyondTheLimit;
+begin
+  StopServer;
+  StartServer(1);
+  const FirstTask = CreateTask(TOOL_SLOW_COMPUTE, ARGUMENTS_ONE_SECOND);
+  const SecondTask = CreateTask(TOOL_SLOW_COMPUTE, ARGUMENTS_ONE_SECOND);
+
+  Assert.IsTrue(WaitForStatus(FirstTask, STATUS_COMPLETED));
+  const SecondStatus = TaskStatus(SecondTask);
+
+  Assert.AreEqual(STATUS_WORKING, SecondStatus);
+  Assert.IsTrue(WaitForStatus(SecondTask, STATUS_COMPLETED));
+end;
+
+procedure TTasksTests.InputRequired_WaitingTask_LeavesItsThreadFree;
+begin
+  StopServer;
+  StartServer(1);
+  const WaitingTask = CreateTask(TOOL_CONFIRM_DELETE, ARGUMENTS_FILE);
+  Assert.IsTrue(WaitForStatus(WaitingTask, STATUS_INPUT_REQUIRED));
+
+  const NextTask = CreateTask(TOOL_SLOW_COMPUTE, ARGUMENTS_IMMEDIATE);
+
+  Assert.IsTrue(WaitForStatus(NextTask, STATUS_COMPLETED));
+  AnswerTask(WaitingTask, ANSWER_CONFIRM);
+  Assert.IsTrue(WaitForStatus(WaitingTask, STATUS_COMPLETED));
 end;
 
 { TInMemoryTaskStoreTests }

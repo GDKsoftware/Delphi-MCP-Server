@@ -140,15 +140,21 @@ function TFakeExtensionManager.ExecuteMethodWithContext(const Method: string; co
   const Context: IMCPRequestContext): TValue;
 begin
   const AnswersExtensionResult = (Method = METHOD_EXTENSION_RESULT);
-  if AnswersExtensionResult then
-    Exit(ResultOfType(TEST_RESULT_TYPE));
-
   const AnswersUnownedResult = (Method = METHOD_UNOWNED_RESULT);
-  if AnswersUnownedResult then
-    Exit(ResultOfType(UNOWNED_RESULT_TYPE));
-
-  Context.RequireClientExtension(FExtensionId);
-  Result := TValue.From<TJSONObject>(TJSONObject.Create);
+  if AnswersExtensionResult then
+  begin
+    Result := ResultOfType(TEST_RESULT_TYPE);
+  end
+  else if AnswersUnownedResult then
+  begin
+    Result := ResultOfType(UNOWNED_RESULT_TYPE);
+  end
+  else
+  begin
+    Context.RequireClientExtension(FExtensionId);
+    const EmptyResult = TJSONObject.Create;
+    Result := TValue.From<TJSONObject>(EmptyResult);
+  end;
 end;
 
 function TFakeExtensionManager.ResultOfType(const ResultType: string): TValue;

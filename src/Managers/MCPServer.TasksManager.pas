@@ -69,6 +69,7 @@ type
 
     function StartTask(const Context: IMCPRequestContext; const Starter: TProc<IMCPTaskHandle>): TJSONObject;
     function RunTask(const Context: IMCPRequestContext; const Work: TProc<IMCPTaskHandle>): TJSONObject;
+    procedure ResumeTask(const Task: IMCPTaskHandle; const Work: TProc<IMCPTaskHandle>);
 
     function TryGetTask(const TaskId: string; out Task: IMCPTaskHandle): Boolean;
     procedure Shutdown(const GraceMs: Cardinal = DEFAULT_SHUTDOWN_GRACE_MS);
@@ -151,18 +152,16 @@ begin
   Context.RequireClientExtension(MCP_EXTENSION_TASKS);
 
   const IsGet = (Method = MCP_METHOD_TASKS_GET);
-  if IsGet then
-    Exit(GetTask(Params, Context));
-
   const IsUpdate = (Method = MCP_METHOD_TASKS_UPDATE);
-  if IsUpdate then
-    Exit(UpdateTask(Params, Context));
-
   const IsCancel = (Method = MCP_METHOD_TASKS_CANCEL);
-  if IsCancel then
-    Exit(CancelTask(Params, Context));
-
-  raise EMCPError.MethodNotFound(Method);
+  if IsGet then
+    Result := GetTask(Params, Context)
+  else if IsUpdate then
+    Result := UpdateTask(Params, Context)
+  else if IsCancel then
+    Result := CancelTask(Params, Context)
+  else
+    raise EMCPError.MethodNotFound(Method);
 end;
 
 function TMCPTasksManager.GetExtensionId: string;
@@ -201,6 +200,13 @@ begin
   const Control = NewTask(Context);
   Result := CreateTaskResult(Control.Handle.TaskId);
   Schedule(Control, Work);
+end;
+
+procedure TMCPTasksManager.ResumeTask(const Task: IMCPTaskHandle; const Work: TProc<IMCPTaskHandle>);
+begin
+  const Control = ControlFor(Task.TaskId);
+  if Assigned(Control) then
+    Schedule(Control, Work);
 end;
 
 function TMCPTasksManager.TryGetTask(const TaskId: string; out Task: IMCPTaskHandle): Boolean;
@@ -422,21 +428,28 @@ end;
 
 procedure TMCPTasksManager.ForgetFinished;
 begin
+  var Finished: TArray<IMCPTaskControl> := nil;
   FLock.Enter;
   try
-    var Finished: TArray<string> := nil;
     for var Pair in FControls do
     begin
-      if Pair.Value.IsFinished then
-        Finished := Finished + [Pair.Key];
+      var Snapshot: TMCPTaskSnapshot;
+      const IsGone = (Pair.Value.IsFinished or not FStore.TryGet(Pair.Key, Snapshot));
+      if IsGone then
+        Finished := Finished + [Pair.Value];
     end;
 
-    for var TaskId in Finished do
+    for var Control in Finished do
     begin
-      FControls.Remove(TaskId);
+      FControls.Remove(Control.Handle.TaskId);
     end;
   finally
     FLock.Leave;
+  end;
+
+  for var Control in Finished do
+  begin
+    Control.Cancel;
   end;
 end;
 
@@ -467,7 +480,8 @@ begin
         ReportFailure(Task, E);
     end;
   finally
-    Forget(Task.TaskId);
+    if Control.IsFinished then
+      Forget(Task.TaskId);
     WorkFinished;
   end;
 end;
@@ -521,6 +535,9 @@ begin
     if not Assigned(FPool) then
     begin
       FPool := TThreadPool.Create;
+{$IF RTLVersion >= 36.0}
+      FPool.UnlimitedWorkerThreadsWhenBlocked := False;
+{$IFEND}
       const MinimumAccepted = FPool.SetMinWorkerThreads(0);
       const MaximumAccepted = FPool.SetMaxWorkerThreads(FMaxRunningTasks);
       const IsLimited = (MinimumAccepted and MaximumAccepted and (FPool.MaxWorkerThreads = FMaxRunningTasks));

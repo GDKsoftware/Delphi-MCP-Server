@@ -31,6 +31,7 @@ type
     FOutstanding: TJSONObject;
     FResponses: TJSONObject;
     FBoundContext: IMCPRequestContext;
+    FOnAnswered: TProc<TJSONObject>;
     function TryLoad(out Task: TMCPTaskSnapshot): Boolean;
     procedure Save(const Task: TMCPTaskSnapshot);
     procedure Finish(const Task: TMCPTaskSnapshot);
@@ -50,7 +51,8 @@ type
     function IsCancelled: Boolean;
     function IsFinished: Boolean;
     procedure SetStatusMessage(const StatusMessage: string);
-    procedure RequestInput(const InputRequests: TJSONObject);
+    procedure RequestInput(const InputRequests: TJSONObject); overload;
+    procedure RequestInput(const InputRequests: TJSONObject; const OnAnswered: TProc<TJSONObject>); overload;
     function WaitForInput(const TimeoutMs: Cardinal; out InputResponses: TJSONObject): Boolean;
     procedure DeliverInput(const InputResponses: TJSONObject);
     procedure Complete(const ToolResult: TJSONObject); overload;
@@ -125,12 +127,18 @@ end;
 
 procedure TMCPTaskHandle.RequestInput(const InputRequests: TJSONObject);
 begin
+  RequestInput(InputRequests, nil);
+end;
+
+procedure TMCPTaskHandle.RequestInput(const InputRequests: TJSONObject; const OnAnswered: TProc<TJSONObject>);
+begin
   FLock.Enter;
   try
     var Task: TMCPTaskSnapshot;
     if not TryLoad(Task) then
       Exit;
 
+    FOnAnswered := OnAnswered;
     FOutstanding.Free;
     FOutstanding := TJSONObject(InputRequests.Clone);
     FResponses.Free;
@@ -159,6 +167,8 @@ end;
 
 procedure TMCPTaskHandle.DeliverInput(const InputResponses: TJSONObject);
 begin
+  var OnAnswered: TProc<TJSONObject> := nil;
+  var Answers: TJSONObject := nil;
   FLock.Enter;
   try
     if not Assigned(FOutstanding) then
@@ -171,11 +181,25 @@ begin
 
     SaveOutstanding(Task);
     const IsAnswered = (FOutstanding.Count = 0);
-    if IsAnswered then
+    if not IsAnswered then
+      Exit;
+
+    if Assigned(FOnAnswered) then
+    begin
+      OnAnswered := FOnAnswered;
+      FOnAnswered := nil;
+      Answers := TakeResponses;
+    end
+    else
+    begin
       FInputArrived.SetEvent;
+    end;
   finally
     FLock.Leave;
   end;
+
+  if Assigned(OnAnswered) then
+    OnAnswered(Answers);
 end;
 
 procedure TMCPTaskHandle.Complete(const ToolResult: TJSONObject);
@@ -323,6 +347,7 @@ end;
 procedure TMCPTaskHandle.SignalCancelled;
 begin
   AtomicExchange(FCancelled, 1);
+  FOnAnswered := nil;
   if Assigned(FBoundContext) then
     FBoundContext.Cancel;
   FInputArrived.SetEvent;
@@ -341,7 +366,10 @@ begin
 
     const Signalled = (FInputArrived.WaitFor(Slice) = TWaitResult.wrSignaled);
     if Signalled then
-      Exit(not IsCancelled);
+    begin
+      const IsAnswered = not IsCancelled;
+      Exit(IsAnswered);
+    end;
     if not IsStillKnown then
       Exit(False);
 
