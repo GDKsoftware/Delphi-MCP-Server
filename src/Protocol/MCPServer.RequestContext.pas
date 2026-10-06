@@ -48,6 +48,7 @@ type
     FRequestState: TJSONObject;
     FPrincipal: string;
     FScopes: TArray<string>;
+    FTaskId: string;
     FCancelled: Integer;
     FProgressLock: TObject;
     FProgressSent: Boolean;
@@ -80,6 +81,7 @@ type
     function GetSink: IMCPMessageSink;
     function GetPrincipal: string;
     function GetScopes: TArray<string>;
+    function GetTaskId: string;
     function HasClientCapability(const Path: string): Boolean;
     function HasClientExtension(const ExtensionId: string): Boolean;
     function HasScope(const Scope: string): Boolean;
@@ -94,7 +96,7 @@ type
     procedure Log(const Level, Text: string; const Logger: string = '');
     procedure LogJson(const Level: string; const Data: TJSONValue; const Logger: string = '');
 
-    class function ForTask(const Origin: IMCPRequestContext; const InputResponses,
+    class function ForTask(const Origin: IMCPRequestContext; const TaskId: string; const InputResponses,
       RequestState: TJSONObject): IMCPRequestContext;
     class function Current: IMCPRequestContext;
     class function SetCurrent(const Value: IMCPRequestContext): IMCPRequestContext;
@@ -268,6 +270,11 @@ end;
 function TMCPRequestContext.GetScopes: TArray<string>;
 begin
   Result := FScopes;
+end;
+
+function TMCPRequestContext.GetTaskId: string;
+begin
+  Result := FTaskId;
 end;
 
 function TMCPRequestContext.HasScope(const Scope: string): Boolean;
@@ -465,7 +472,7 @@ begin
   end;
 end;
 
-class function TMCPRequestContext.ForTask(const Origin: IMCPRequestContext; const InputResponses,
+class function TMCPRequestContext.ForTask(const Origin: IMCPRequestContext; const TaskId: string; const InputResponses,
   RequestState: TJSONObject): IMCPRequestContext;
 begin
   var OwnedRequestState: TJSONObject := nil;
@@ -473,9 +480,11 @@ begin
     OwnedRequestState := TJSONObject(RequestState.Clone);
 
   const NoRequestId = Default(TMCPRequestId);
-  Result := TMCPRequestContext.Create(Origin.Era, Origin.ProtocolVersion, Origin.Method, NoRequestId, Origin.Meta,
-                                      nil, Origin.ManagerRegistry, nil, InputResponses, OwnedRequestState,
-                                      Origin.Principal, Origin.Scopes);
+  const TaskContext = TMCPRequestContext.Create(Origin.Era, Origin.ProtocolVersion, Origin.Method, NoRequestId,
+                                                Origin.Meta, nil, Origin.ManagerRegistry, nil, InputResponses,
+                                                OwnedRequestState, Origin.Principal, Origin.Scopes);
+  TaskContext.FTaskId := TaskId;
+  Result := TaskContext;
 end;
 
 class function TMCPRequestContext.Current: IMCPRequestContext;

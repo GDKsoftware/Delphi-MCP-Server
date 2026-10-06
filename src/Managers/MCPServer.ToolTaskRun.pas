@@ -75,7 +75,7 @@ begin
     Exit;
 
   const State = RequestStateOrNil;
-  const RunContext = TMCPRequestContext.ForTask(FOrigin, FInputResponses, State);
+  const RunContext = TMCPRequestContext.ForTask(FOrigin, Task.TaskId, FInputResponses, State);
   Task.BindCancellation(RunContext);
   try
     Complete(RunContext, Task);

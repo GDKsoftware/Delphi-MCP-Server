@@ -941,7 +941,8 @@ with the tool's input requests. When the client has answered all of them
 with `tasks/update`, the server runs the tool again with every answer so
 far, the same way a multi round-trip request is retried. A task that waits
 for input holds no thread, so it does not count against `MaxRunningTasks`. Progress and log
-notifications are not sent for a task.
+notifications are not sent for a task. `Context.TaskId` holds the id of the
+task the tool runs for, and is empty when the tool runs synchronously.
 
 **Work that runs outside the request.** A tool that hands the work to the
 host, such as a build queue, implements `IMCPTaskStarter`:
@@ -952,6 +953,12 @@ begin
   FBuildQueue.Enqueue(Arguments.GetValue<string>('project'), Task);
 end;
 ```
+
+A starter without `[TaskExecution]` is `Required`. Mark it
+`[TaskExecution(TMCPTaskExecution.Optional)]` to serve clients without the
+extension as well: they get the result of the tool's normal `Execute`, as the
+specification forbids a `CreateTaskResult` for a client that did not declare
+the extension.
 
 `StartTask` runs on the request thread once the task exists; `Arguments` is
 only valid during the call. Raise `EMCPInputRequired` there for input that is
@@ -964,11 +971,18 @@ JSON), `Fail` (a JSON-RPC error, which makes the task `failed`) and
 status; later calls on its handle change nothing. `Host.Tasks.TryGetTask`
 returns the handle of a task by id.
 
+The server always generates the task id, with enough entropy that it cannot
+be guessed, as the specification requires. To tie a task to a job of its own,
+the host sets `Task.HostReference` (for example a job id) in `StartTask`. The
+store keeps it with the task, so a durable store can look up the job when the
+task is read, updated or cancelled; it is never sent to the client.
+
 **Keeping tasks across restarts.** Tasks live in an `IMCPTaskStore`; the
 default keeps them in memory. Implement the interface on your own database
 and set `Host.TaskStore` before the host builds its managers. `TryUpdate`
 must refuse to change a task that is already completed, failed or cancelled.
-The store holds the result, the error and the input requests as JSON text.
+The store holds the result, the error and the input requests as JSON text,
+and keeps `HostReference` as given.
 After a restart nothing runs for a task that was still `working`; the host
 decides what happens to it through `Host.Tasks.TryGetTask`.
 
