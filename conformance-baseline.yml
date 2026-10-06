@@ -1,0 +1,29 @@
+# Known failures of the MCP conformance suite (modelcontextprotocol/conformance),
+# passed to it with --expected-failures by conformance.ps1. A run fails on any
+# failure not listed here and on any entry that starts to pass.
+#
+# All entries run on protocol version 2025-11-25 and test features that
+# 2026-07-28 deprecates or removes; this server does not offer them to
+# initialize-based clients. See "Protocol Versions and Dual-Era Behaviour" in
+# the README.
+server:
+  # logging/setLevel answers -32601; modern clients send
+  # _meta["io.modelcontextprotocol/logLevel"] per request instead.
+  - logging-set-level
+  - tools-call-with-logging
+
+  # resources/subscribe and resources/unsubscribe answer -32601; modern clients
+  # use subscriptions/listen.
+  - resources-subscribe
+  - resources-unsubscribe
+
+  # The server sends no requests to the client (sampling/createMessage,
+  # elicitation/create); modern clients get an InputRequiredResult instead.
+  - tools-call-sampling
+  - tools-call-elicitation
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+
+  # A warning, not a failure: the server is stateless in both eras and never
+  # issues an Mcp-Session-Id.
+  - server-sse-multiple-streams:server-sse-multiple-streams-session
