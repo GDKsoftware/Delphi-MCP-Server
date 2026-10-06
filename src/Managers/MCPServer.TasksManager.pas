@@ -80,8 +80,8 @@ uses
   System.DateUtils,
   MCPServer.Errors,
   MCPServer.Logger,
-  MCPServer.SecureRandom,
-  MCPServer.Base64Url;
+  System.NetEncoding,
+  MCPServer.SecureRandom;
 
 const
   CAPABILITY_NAME = 'tasks';
@@ -342,7 +342,7 @@ end;
 function TMCPTasksManager.NewTaskId: string;
 begin
   const Bytes = TMCPSecureRandom.Bytes(TASK_ID_BYTES);
-  Result := TMCPBase64Url.Encode(Bytes);
+  Result := TNetEncoding.Base64URL.EncodeBytesToString(Bytes);
 end;
 
 function TMCPTasksManager.CreateTaskResult(const TaskId: string): TJSONObject;

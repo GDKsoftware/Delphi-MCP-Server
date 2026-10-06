@@ -17,7 +17,6 @@ uses
   MCPServer.Capabilities in 'Protocol\MCPServer.Capabilities.pas',
   MCPServer.Extensions in 'Protocol\MCPServer.Extensions.pas',
   MCPServer.SecureRandom in 'Protocol\MCPServer.SecureRandom.pas',
-  MCPServer.Base64Url in 'Protocol\MCPServer.Base64Url.pas',
   MCPServer.HttpHeaders in 'Server\MCPServer.HttpHeaders.pas',
   MCPServer.HttpStream in 'Server\MCPServer.HttpStream.pas',
   MCPServer.Serializer in 'Protocol\MCPServer.Serializer.pas',

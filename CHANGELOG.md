@@ -327,10 +327,11 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `tests\golden\legacy\tools-list.json` and `tests\golden\modern\tools-list.json`
   list the seven task example tools.
-- The random bytes and base64url helpers that sign `requestState` live in
-  `MCPServer.SecureRandom` and `MCPServer.Base64Url`; when the operating
-  system provides no random bytes the error is `EMCPSecureRandom` instead of
-  `EMCPRequestStateKey`, which is gone.
+- The random bytes that sign `requestState` come from `MCPServer.SecureRandom`,
+  shared with the task ids, and `requestState` uses `TNetEncoding.Base64URL`
+  instead of its own base64url code; when the operating system provides no
+  random bytes the error is `EMCPSecureRandom` instead of `EMCPRequestStateKey`,
+  which is gone.
 - `IMCPRequestContext` has two new methods, `HasClientExtension` and
   `RequireClientExtension`; a class of your own that implements the
   interface needs them too.

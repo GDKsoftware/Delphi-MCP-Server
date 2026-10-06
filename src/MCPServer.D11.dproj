@@ -134,7 +134,6 @@
         <DCCReference Include="Protocol\MCPServer.Capabilities.pas"/>
         <DCCReference Include="Protocol\MCPServer.Extensions.pas"/>
         <DCCReference Include="Protocol\MCPServer.SecureRandom.pas"/>
-        <DCCReference Include="Protocol\MCPServer.Base64Url.pas"/>
         <DCCReference Include="Server\MCPServer.HttpHeaders.pas"/>
         <DCCReference Include="Server\MCPServer.HttpStream.pas"/>
         <DCCReference Include="Protocol\MCPServer.Serializer.pas"/>

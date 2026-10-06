@@ -78,7 +78,6 @@
         <DCCReference Include="..\src\Protocol\MCPServer.Capabilities.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.Extensions.pas"/>
         <DCCReference Include="..\src\Protocol\MCPServer.SecureRandom.pas"/>
-        <DCCReference Include="..\src\Protocol\MCPServer.Base64Url.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.HttpHeaders.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.HttpStream.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.IdHTTPServer.pas"/>

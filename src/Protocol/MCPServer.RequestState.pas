@@ -18,6 +18,7 @@ type
     function Signature(const Payload: TBytes): TBytes;
     class function QuotedName(const Value: string): string; static;
     class function CanonicalJson(const Value: TJSONValue): string; static;
+    class function TryDecodeBase64Url(const Text: string; out Bytes: TBytes): Boolean; static;
   public
     constructor Create(const Key: string; TtlSeconds: Integer = DEFAULT_TTL_SECONDS);
 
@@ -41,7 +42,7 @@ uses
   MCPServer.Errors,
   MCPServer.Logger,
   MCPServer.SecureRandom,
-  MCPServer.Base64Url;
+  System.NetEncoding;
 
 const
   MESSAGE_INTEGRITY_FAILED = 'requestState failed integrity verification';
@@ -89,6 +90,24 @@ end;
 function TMCPRequestStateSealer.Signature(const Payload: TBytes): TBytes;
 begin
   Result := THashSHA2.GetHMACAsBytes(Payload, FKey, THashSHA2.TSHA2Version.SHA256);
+end;
+
+class function TMCPRequestStateSealer.TryDecodeBase64Url(const Text: string; out Bytes: TBytes): Boolean;
+begin
+  Bytes := nil;
+  const TextIsEmpty = (Text = '');
+  if TextIsEmpty then
+    Exit(False);
+
+  for var C in Text do
+  begin
+    const IsUrlSafe = CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '-', '_']);
+    if not IsUrlSafe then
+      Exit(False);
+  end;
+
+  Bytes := TNetEncoding.Base64URL.DecodeStringToBytes(Text);
+  Result := (Length(Bytes) > 0);
 end;
 
 class function TMCPRequestStateSealer.CanonicalJson(const Value: TJSONValue): string;
@@ -186,7 +205,9 @@ begin
       Payload.AddPair(PAYLOAD_STATE, TJSONObject.Create);
 
     var PayloadBytes := TEncoding.UTF8.GetBytes(Payload.ToJSON);
-    Result := TMCPBase64Url.Encode(PayloadBytes) + TOKEN_SEPARATOR + TMCPBase64Url.Encode(Signature(PayloadBytes));
+    const EncodedPayload = TNetEncoding.Base64URL.EncodeBytesToString(PayloadBytes);
+    const EncodedSignature = TNetEncoding.Base64URL.EncodeBytesToString(Signature(PayloadBytes));
+    Result := EncodedPayload + TOKEN_SEPARATOR + EncodedSignature;
   finally
     Payload.Free;
   end;
@@ -197,8 +218,8 @@ var
   PayloadBytes, SignatureBytes: TBytes;
 begin
   var Separator := Token.LastIndexOf(TOKEN_SEPARATOR);
-  if (Separator <= 0) or not TMCPBase64Url.TryDecode(Token.Substring(0, Separator), PayloadBytes) or
-    not TMCPBase64Url.TryDecode(Token.Substring(Separator + 1), SignatureBytes) or
+  if (Separator <= 0) or not TryDecodeBase64Url(Token.Substring(0, Separator), PayloadBytes) or
+    not TryDecodeBase64Url(Token.Substring(Separator + 1), SignatureBytes) or
     not TMCPConstantTime.SameBytes(SignatureBytes, Signature(PayloadBytes)) then
     raise EMCPError.InvalidParams(MESSAGE_INTEGRITY_FAILED);
 
