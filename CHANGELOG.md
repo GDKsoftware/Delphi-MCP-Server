@@ -7,6 +7,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `conformance.bat` / `conformance.ps1` run the MCP conformance suite against
+  a build of the server (active suite plus the tasks scenarios), with
+  `conformance-baseline.yml` listing the known failures: `logging/setLevel`,
+  `resources/subscribe` and server-to-client requests for 2025-11-25 clients,
+  which the server does not offer, and the missing `Mcp-Session-Id` of a
+  stateless server. The README states what legacy clients do not get.
 - Tasks extension (`io.modelcontextprotocol/tasks`) for long-running tool
   calls, off by default (`[Tasks] Enabled`, `MaxRunningTasks`, `TtlMs`,
   `PollIntervalMs`). `MCPServer.TasksManager` advertises the extension and

@@ -219,7 +219,9 @@ The server decides per request which protocol era it is speaking; nothing is neg
 
 Modern results carry `resultType`, `_meta.io.modelcontextprotocol/serverInfo` and, on `server/discover`, `tools/list`, `resources/list`, `resources/templates/list` and `resources/read`, the cache hints `ttlMs` and `cacheScope`. Legacy results are unchanged. Client responses (`result` or `error` without `method`) are ignored.
 
-Over HTTP, modern requests must carry `MCP-Protocol-Version`, `Mcp-Method` and, for `tools/call`, `resources/read` and `prompts/get`, `Mcp-Name` (Base64 sentinel encoding accepted); a missing or different header is `400` with `-32020`. Modern protocol errors get `400`, an unknown method `404`; legacy requests get `200` for every JSON-RPC error, except `400` for an unknown `MCP-Protocol-Version` header. Notifications get `202` with an empty body. Every 4xx to a modern request carries a JSON-RPC error body, so dual-era clients can tell a modern server from a legacy one.
+Legacy clients do not get the features that 2026-07-28 deprecates or removes. `logging/setLevel`, `resources/subscribe` and `resources/unsubscribe` answer `-32601`, and the `initialize` result does not announce `logging` or `resources.subscribe`. The server sends no requests to the client (`sampling/createMessage`, `elicitation/create`, `roots/list`), so a request whose tool, resource or prompt needs input from the client answers `-32603`. Modern clients get these through `_meta["io.modelcontextprotocol/logLevel"]`, `subscriptions/listen` and the multi round-trip requests described under [Asking the client for input](#asking-the-client-for-input-multi-round-trip-requests).
+
+Over HTTP, modern requests must carry `MCP-Protocol-Version`, `Mcp-Method` and, for `tools/call`, `resources/read`, `prompts/get` and `tasks/*`, `Mcp-Name` (the tool or prompt name, the resource URI or the task id; Base64 sentinel encoding accepted); a missing or different header is `400` with `-32020`. Modern protocol errors get `400`, an unknown method `404`; legacy requests get `200` for every JSON-RPC error, except `400` for an unknown `MCP-Protocol-Version` header. Notifications get `202` with an empty body. Every 4xx to a modern request carries a JSON-RPC error body, so dual-era clients can tell a modern server from a legacy one.
 
 Handlers can read the era, the negotiated revision and the client's declared capabilities through `TMCPRequestContext.Current` (`MCPServer.RequestContext`) or by implementing `IMCPCapabilityManagerEx`, and can raise `EMCPError` (`MCPServer.Errors`) to send a specific JSON-RPC error code.
 
@@ -1308,6 +1310,17 @@ tests\Win64\Debug\MCPServerTests.exe
 ```
 
 `build-tests.bat [Config] [Platform]` compiles `tests\MCPServerTests.dpr` for Win32 or Win64; the program takes the usual DUnitX switches (`-xml:<file>` for an NUnit report, `-run:<test>` for a selection). Set the environment variable `MCP_GOLDEN_RECORD=1` for one run to re-record the golden expectations, then review the diff.
+
+### Conformance suite
+
+`conformance.bat` runs the [MCP conformance suite](https://github.com/modelcontextprotocol/conformance) against a build of the server: it starts `MCPServer.exe` from a temporary folder with tasks enabled on a free port, runs the active server suite and the tasks scenarios, and stops the server again.
+
+```bat
+build.bat Release Win64
+conformance.bat -ConformancePath C:\dev\conformance
+```
+
+`-Platform` and `-Config` pick the build (default `Win64` `Release`). `-ConformancePath` (or the environment variable `MCP_CONFORMANCE_PATH`) points to a clone of the conformance repository with `npm install` run in it; without it the published npm package runs, which may not know the newest scenarios yet. `conformance-baseline.yml` lists the failures the server is known to have, with the reason for each; the script fails on any other failure and on a baseline entry that starts to pass. Note that `build.bat` stops every running `MCPServer.exe`, so do not build while the suite runs.
 
 ## About GDK Software
 
