@@ -63,6 +63,9 @@ type
     procedure Metadata_Build_DropsOfflineAccess;
 
     [Test]
+    procedure Metadata_UrlFor_InsertsWellKnownBeforeResourcePath;
+
+    [Test]
     procedure Introspection_PostsTokenWithClientCredentials;
   end;
 
@@ -253,6 +256,21 @@ begin
   finally
     Bare.Free;
   end;
+end;
+
+procedure TAuthorizationTests.Metadata_UrlFor_InsertsWellKnownBeforeResourcePath;
+begin
+  Assert.AreEqual('https://catalog.example/.well-known/oauth-protected-resource/mcp',
+    TMCPProtectedResourceMetadata.UrlFor('https://catalog.example/mcp'));
+  Assert.AreEqual('https://catalog.example:8443/.well-known/oauth-protected-resource/tenant/mcp',
+    TMCPProtectedResourceMetadata.UrlFor('https://catalog.example:8443/tenant/mcp'));
+  Assert.AreEqual('https://catalog.example/.well-known/oauth-protected-resource',
+    TMCPProtectedResourceMetadata.UrlFor('https://catalog.example'));
+  Assert.AreEqual('https://catalog.example/.well-known/oauth-protected-resource',
+    TMCPProtectedResourceMetadata.UrlFor('https://catalog.example/'));
+  Assert.AreEqual('https://catalog.example/.well-known/oauth-protected-resource/mcp',
+    TMCPProtectedResourceMetadata.UrlFor('https://catalog.example/mcp?x=1#f'));
+  Assert.AreEqual('', TMCPProtectedResourceMetadata.UrlFor('not a url'));
 end;
 
 procedure TAuthorizationTests.HandleIntrospection(Context: TIdContext; Request: TIdHTTPRequestInfo;

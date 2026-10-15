@@ -1170,14 +1170,7 @@ server. A server that other machines can reach should require a token:
   `WWW-Authenticate: Bearer` challenge, an unknown token `401` with
   `error="invalid_token"`, another scheme `400` with `error="invalid_request"`.
   Tokens are compared in constant time and never logged.
-- `[Auth] AuthorizationServers`: issuer URLs of the OAuth 2.1 authorization
-  servers, published in `GET /.well-known/oauth-protected-resource` and
-  `/.well-known/oauth-protected-resource<Endpoint>` (RFC 9728) and referenced
-  by the `resource_metadata` parameter of every challenge, so clients can
-  discover where to obtain a token. `ResourceUri` is the canonical URI of this
-  server that the tokens must name as their audience (default
-  `<Protocol>://<Host>:<Port><Endpoint>`); `ScopesSupported` lists the scopes
-  clients may request (`offline_access` is never advertised).
+- `[Auth] AuthorizationServers`: issuer URLs of the OAuth 2.1 authorization servers, published in `GET /.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource<Endpoint>` (RFC 9728) and referenced by the `resource_metadata` parameter of every challenge, so clients can discover where to obtain a token. `ResourceUri` is the canonical URI of this server that the tokens must name as their audience (default `<Protocol>://<Host>:<Port><Endpoint>`); when it is set, the `resource_metadata` URL is derived from it (`https://host/mcp` gives `https://host/.well-known/oauth-protected-resource/mcp`), so a server behind a reverse proxy points clients at its public address. `ScopesSupported` lists the scopes clients may request (`offline_access` is never advertised).
 
 A library that hosts `TMCPIdHTTPServer` assigns its own `Authorizer`
 (`MCPServer.Authorization`):
