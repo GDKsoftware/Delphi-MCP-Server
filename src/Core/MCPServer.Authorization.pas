@@ -546,7 +546,9 @@ begin
       const HasClientId = (FClientId <> '');
       if HasClientId then
       begin
-        const Credentials = TNetEncoding.Base64String.Encode(Format('%s:%s', [FClientId, FClientSecret]));
+        const ClientCredentials = Format('%s:%s', [FClientId, FClientSecret]);
+        const Encoding = TNetEncoding.Base64String;
+        const Credentials = Encoding.Encode(ClientCredentials);
         Headers := Headers + [TNetHeader.Create('Authorization', Format('Basic %s', [Credentials]))];
       end;
 
