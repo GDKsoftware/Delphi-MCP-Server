@@ -31,6 +31,7 @@ type
     FSeenBody: string;
     procedure HandleIntrospection(Context: TIdContext; Request: TIdHTTPRequestInfo; Response: TIdHTTPResponseInfo);
     function Decide(const Authorizer: IMCPAuthorizer; const Token: string): TMCPAuthResult;
+    function StartIntrospection: string;
   public
     [TearDown]
     procedure TearDown;
@@ -92,8 +93,10 @@ uses
 
 const
   AUDIENCE = 'https://mcp.example/mcp';
-  LONG_SECRET_LENGTH = 64;
-  LONG_SECRET_AUTHORIZATION =
+  IntrospectionClientId = 'mcp';
+  ActiveToken = 'good';
+  LongSecretLength = 64;
+  LongSecretAuthorization =
     'Basic bWNwOnh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=';
 
 { TClaimsAuthorizer }
@@ -306,17 +309,24 @@ begin
     Response.ContentText := '{"active":false}';
 end;
 
-procedure TAuthorizationTests.Introspection_PostsTokenWithClientCredentials;
+function TAuthorizationTests.StartIntrospection: string;
 begin
   FIntrospection := TIdHTTPServer.Create(nil);
-  FIntrospection.Bindings.Add.IP := '127.0.0.1';
-  FIntrospection.Bindings[0].Port := 0;
+  const Binding = FIntrospection.Bindings.Add;
+  Binding.IP := '127.0.0.1';
+  Binding.Port := 0;
   FIntrospection.OnCommandGet := HandleIntrospection;
   FIntrospection.Active := True;
-  var Url := Format('http://127.0.0.1:%d/introspect', [FIntrospection.Bindings[0].Port]);
 
-  var Authorizer: IMCPAuthorizer := TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, 'mcp', 's3cret');
-  var Active := Decide(Authorizer, 'good');
+  Result := Format('http://127.0.0.1:%d/introspect', [Binding.Port]);
+end;
+
+procedure TAuthorizationTests.Introspection_PostsTokenWithClientCredentials;
+begin
+  const Url = StartIntrospection;
+
+  const Authorizer: IMCPAuthorizer = TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, IntrospectionClientId, 's3cret');
+  const Active = Decide(Authorizer, ActiveToken);
   Assert.AreEqual(TMCPAuthDecision.Allow, Active.Decision);
   Assert.AreEqual('alice', Active.Principal.Subject);
   Assert.IsTrue(Active.Principal.HasScope('read'));
@@ -331,17 +341,13 @@ end;
 procedure TAuthorizationTests.Introspection_LongClientSecret_SendsBasicHeaderOnOneLine;
 begin
   FSeenAuthorization := '';
-  FIntrospection := TIdHTTPServer.Create(nil);
-  FIntrospection.Bindings.Add.IP := '127.0.0.1';
-  FIntrospection.Bindings[0].Port := 0;
-  FIntrospection.OnCommandGet := HandleIntrospection;
-  FIntrospection.Active := True;
-  var Url := Format('http://127.0.0.1:%d/introspect', [FIntrospection.Bindings[0].Port]);
+  const Url = StartIntrospection;
+  const LongSecret = StringOfChar('x', LongSecretLength);
+  const Authorizer: IMCPAuthorizer = TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, IntrospectionClientId, LongSecret);
 
-  var Authorizer: IMCPAuthorizer := TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, 'mcp',
-    StringOfChar('x', LONG_SECRET_LENGTH));
-  var Active := Decide(Authorizer, 'good');
-  Assert.AreEqual(LONG_SECRET_AUTHORIZATION, FSeenAuthorization, False);
+  const Active = Decide(Authorizer, ActiveToken);
+
+  Assert.AreEqual(LongSecretAuthorization, FSeenAuthorization, False);
   Assert.AreEqual(TMCPAuthDecision.Allow, Active.Decision);
 end;
 
