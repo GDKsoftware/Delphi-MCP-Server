@@ -618,6 +618,9 @@ begin
   Result := '';
   if not Assigned(FSettings) or (Length(FSettings.AuthorizationServerList) = 0) then
     Exit;
+  Result := TMCPProtectedResourceMetadata.UrlFor(FSettings.ResourceUri.Trim);
+  if Result <> '' then
+    Exit;
   Result := Format('%s://%s:%d%s%s', [FSettings.Protocol.ToLower, FSettings.Host.ToLower, FPort,
     TMCPProtectedResourceMetadata.WELL_KNOWN_PATH, FSettings.Endpoint]);
 end;

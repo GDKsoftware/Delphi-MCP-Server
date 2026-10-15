@@ -157,6 +157,9 @@ type
     procedure Auth_MissingToken_Is401WithChallenge;
 
     [Test]
+    procedure Auth_MissingToken_WithResourceUri_ChallengePointsAtPublicMetadata;
+
+    [Test]
     procedure Auth_WrongToken_Is401_InvalidToken;
 
     [Test]
@@ -727,6 +730,17 @@ begin
     Reply.Header('WWW-Authenticate'));
   Assert.IsTrue(Reply.Body.Contains('-32600'), Reply.Body);
   Assert.IsFalse(Reply.Body.Contains('"id"'), 'the challenge body carries no id');
+end;
+
+procedure THttpTransportTests.Auth_MissingToken_WithResourceUri_ChallengePointsAtPublicMetadata;
+begin
+  FSettings.AuthorizationServers := 'https://auth.example';
+  FSettings.ResourceUri := 'https://catalog.example/mcp';
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  var Reply := Post(LEGACY_PING, []);
+  Assert.AreEqual(401, Reply.Status);
+  Assert.AreEqual('Bearer resource_metadata="https://catalog.example/.well-known/oauth-protected-resource/mcp"',
+    Reply.Header('WWW-Authenticate'));
 end;
 
 procedure THttpTransportTests.Auth_WrongToken_Is401_InvalidToken;

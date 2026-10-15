@@ -62,6 +62,7 @@ type
     class function Build(const ResourceUri, ResourceName: string;
       const AuthorizationServers, ScopesSupported: TArray<string>): TJSONObject; static;
     class function WithoutOfflineAccess(const Scopes: TArray<string>): TArray<string>; static;
+    class function UrlFor(const ResourceUri: string): string; static;
   end;
 
   TMCPStaticBearerAuthorizer = class(TInterfacedObject, IMCPAuthorizer)
@@ -233,6 +234,32 @@ begin
 end;
 
 { TMCPProtectedResourceMetadata }
+
+class function TMCPProtectedResourceMetadata.UrlFor(const ResourceUri: string): string;
+begin
+  Result := '';
+  const SchemeEnd = ResourceUri.IndexOf('://');
+  if SchemeEnd <= 0 then
+    Exit;
+
+  var Remainder := ResourceUri.Substring(SchemeEnd + 3);
+  const QueryOrFragment = Remainder.IndexOfAny(['?', '#']);
+  if QueryOrFragment >= 0 then
+    Remainder := Remainder.Substring(0, QueryOrFragment);
+
+  var Authority := Remainder;
+  var Path := '';
+  const PathStart = Remainder.IndexOf('/');
+  if PathStart >= 0 then
+  begin
+    Authority := Remainder.Substring(0, PathStart);
+    Path := Remainder.Substring(PathStart).TrimRight(['/']);
+  end;
+  if Authority = '' then
+    Exit;
+
+  Result := Format('%s://%s%s%s', [ResourceUri.Substring(0, SchemeEnd), Authority, WELL_KNOWN_PATH, Path]);
+end;
 
 class function TMCPProtectedResourceMetadata.WithoutOfflineAccess(const Scopes: TArray<string>): TArray<string>;
 begin
