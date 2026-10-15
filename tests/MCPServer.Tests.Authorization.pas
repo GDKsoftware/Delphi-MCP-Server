@@ -341,7 +341,7 @@ begin
   var Authorizer: IMCPAuthorizer := TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, 'mcp',
     StringOfChar('x', LONG_SECRET_LENGTH));
   var Active := Decide(Authorizer, 'good');
-  Assert.AreEqual(LONG_SECRET_AUTHORIZATION, FSeenAuthorization);
+  Assert.AreEqual(LONG_SECRET_AUTHORIZATION, FSeenAuthorization, False);
   Assert.AreEqual(TMCPAuthDecision.Allow, Active.Decision);
 end;
 
