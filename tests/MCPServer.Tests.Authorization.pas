@@ -31,7 +31,8 @@ type
     FSeenBody: string;
     procedure HandleIntrospection(Context: TIdContext; Request: TIdHTTPRequestInfo; Response: TIdHTTPResponseInfo);
     function Decide(const Authorizer: IMCPAuthorizer; const Token: string): TMCPAuthResult;
-    function StartIntrospection: string;
+    procedure StartIntrospectionServer;
+    function IntrospectionUrl: string;
   public
     [TearDown]
     procedure TearDown;
@@ -92,7 +93,7 @@ uses
   System.DateUtils;
 
 const
-  AUDIENCE = 'https://mcp.example/mcp';
+  Audience = 'https://mcp.example/mcp';
   IntrospectionClientId = 'mcp';
   ActiveToken = 'good';
   LongSecretLength = 64;
@@ -188,26 +189,26 @@ begin
   var Future := System.DateUtils.DateTimeToUnix(Now, False) + 600;
   var Past := System.DateUtils.DateTimeToUnix(Now, False) - 600;
 
-  var Invalid: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s","exp":%d}', [AUDIENCE, Future]));
+  var Invalid: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s","exp":%d}', [Audience, Future]));
   var Rejected := Decide(Invalid, 'nope');
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, Rejected.Decision);
   Assert.AreEqual('invalid_token', Rejected.Challenge.Error);
 
-  var WrongAudience: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"https://other","exp":%d}', [Future]));
+  var WrongAudience: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"https://other","exp":%d}', [Future]));
   var ForAnother := Decide(WrongAudience, 'valid');
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, ForAnother.Decision);
   Assert.IsTrue(ForAnother.Challenge.ErrorDescription.Contains('not issued for this server'),
     ForAnother.Challenge.ErrorDescription);
 
-  var Expired: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s","exp":%d}', [AUDIENCE, Past]));
+  var Expired: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s","exp":%d}', [Audience, Past]));
   var Stale := Decide(Expired, 'valid');
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, Stale.Decision);
   Assert.IsTrue(Stale.Challenge.ErrorDescription.Contains('expired'), Stale.Challenge.ErrorDescription);
 
-  var NoExpiry: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s"}', [AUDIENCE]));
+  var NoExpiry: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s"}', [Audience]));
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(NoExpiry, 'valid').Decision, 'exp is mandatory');
 
-  var Scoped := TClaimsAuthorizer.Create(AUDIENCE, Format('{"sub":"u","aud":"%s","exp":%d,"scope":"read"}', [AUDIENCE, Future]));
+  var Scoped := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s","exp":%d,"scope":"read"}', [Audience, Future]));
   var ScopedRef: IMCPAuthorizer := Scoped;
   Scoped.RequiredScopes := ['read', 'write'];
   var Denied := Decide(ScopedRef, 'valid');
@@ -226,8 +227,8 @@ end;
 procedure TAuthorizationTests.OAuth_AcceptsAudienceArray_AndScopeArray;
 begin
   var Future := System.DateUtils.DateTimeToUnix(Now, False) + 600;
-  var Authorizer: IMCPAuthorizer := TClaimsAuthorizer.Create(AUDIENCE,
-    Format('{"sub":"u","aud":["https://other","%s"],"exp":%d,"scp":["a","b"]}', [AUDIENCE.ToUpper, Future]));
+  var Authorizer: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience,
+    Format('{"sub":"u","aud":["https://other","%s"],"exp":%d,"scp":["a","b"]}', [Audience.ToUpper, Future]));
   var Outcome := Decide(Authorizer, 'valid');
   Assert.AreEqual(TMCPAuthDecision.Allow, Outcome.Decision);
   Assert.IsTrue(Outcome.Principal.HasScope('a'));
@@ -304,12 +305,12 @@ begin
   Response.ContentType := 'application/json';
   if FSeenBody.Contains('token=good') then
     Response.ContentText := Format('{"active":true,"sub":"alice","aud":"%s","exp":%d,"scope":"read"}',
-      [AUDIENCE, System.DateUtils.DateTimeToUnix(Now, False) + 600])
+      [Audience, System.DateUtils.DateTimeToUnix(Now, False) + 600])
   else
     Response.ContentText := '{"active":false}';
 end;
 
-function TAuthorizationTests.StartIntrospection: string;
+procedure TAuthorizationTests.StartIntrospectionServer;
 begin
   FIntrospection := TIdHTTPServer.Create(nil);
   const Binding = FIntrospection.Bindings.Add;
@@ -317,15 +318,20 @@ begin
   Binding.Port := 0;
   FIntrospection.OnCommandGet := HandleIntrospection;
   FIntrospection.Active := True;
+end;
 
+function TAuthorizationTests.IntrospectionUrl: string;
+begin
+  const Binding = FIntrospection.Bindings[0];
   Result := Format('http://127.0.0.1:%d/introspect', [Binding.Port]);
 end;
 
 procedure TAuthorizationTests.Introspection_PostsTokenWithClientCredentials;
 begin
-  const Url = StartIntrospection;
+  StartIntrospectionServer;
+  const Url = IntrospectionUrl;
 
-  const Authorizer: IMCPAuthorizer = TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, IntrospectionClientId, 's3cret');
+  const Authorizer: IMCPAuthorizer = TMCPIntrospectionAuthorizer.Create(Audience, Url, IntrospectionClientId, 's3cret');
   const Active = Decide(Authorizer, ActiveToken);
   Assert.AreEqual(TMCPAuthDecision.Allow, Active.Decision);
   Assert.AreEqual('alice', Active.Principal.Subject);
@@ -341,9 +347,10 @@ end;
 procedure TAuthorizationTests.Introspection_LongClientSecret_SendsBasicHeaderOnOneLine;
 begin
   FSeenAuthorization := '';
-  const Url = StartIntrospection;
+  StartIntrospectionServer;
+  const Url = IntrospectionUrl;
   const LongSecret = StringOfChar('x', LongSecretLength);
-  const Authorizer: IMCPAuthorizer = TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, IntrospectionClientId, LongSecret);
+  const Authorizer: IMCPAuthorizer = TMCPIntrospectionAuthorizer.Create(Audience, Url, IntrospectionClientId, LongSecret);
 
   const Active = Decide(Authorizer, ActiveToken);
 
