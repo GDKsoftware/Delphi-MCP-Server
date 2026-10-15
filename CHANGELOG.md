@@ -488,6 +488,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `TMCPIntrospectionAuthorizer` sends the client credentials for the introspection endpoint as a single-line `Authorization: Basic` header. It encoded them with `TNetEncoding.Base64`, which inserts a line break after every 76 characters, so a `client_id:client_secret` of 57 bytes or more broke the request and every token was rejected; it now uses `TNetEncoding.Base64String`.
 - The `resource_metadata` URL in the `WWW-Authenticate` challenge is derived from `[Auth] ResourceUri` when it is set (RFC 9728: origin of the resource, `/.well-known/oauth-protected-resource`, then the path of the resource). It used to be built from `Protocol`, `Host` and the listening port, so a server behind a reverse proxy sent clients to `http://localhost:8080/...` instead of its public address. `TMCPProtectedResourceMetadata.UrlFor` does the derivation and `PathFor` gives the matching path, which the server now also serves without a token when it differs from `/.well-known/oauth-protected-resource<Endpoint>`. `TMCPResourceLocation.TryParse` splits a resource URI into scheme, authority and path.
 - A record that failed to convert halfway leaked the objects it already held:
   `TMCPSerializer.JsonToValue` adds them to the caller's list only once the

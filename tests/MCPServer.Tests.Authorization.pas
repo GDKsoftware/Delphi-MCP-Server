@@ -80,6 +80,9 @@ type
 
     [Test]
     procedure Introspection_PostsTokenWithClientCredentials;
+
+    [Test]
+    procedure Introspection_LongClientSecret_SendsBasicHeaderOnOneLine;
   end;
 
 implementation
@@ -89,6 +92,9 @@ uses
 
 const
   AUDIENCE = 'https://mcp.example/mcp';
+  LONG_SECRET_LENGTH = 64;
+  LONG_SECRET_AUTHORIZATION =
+    'Basic bWNwOnh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=';
 
 { TClaimsAuthorizer }
 
@@ -320,6 +326,23 @@ begin
   var Stale := Decide(Authorizer, 'stale');
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, Stale.Decision);
   Assert.AreEqual('invalid_token', Stale.Challenge.Error);
+end;
+
+procedure TAuthorizationTests.Introspection_LongClientSecret_SendsBasicHeaderOnOneLine;
+begin
+  FSeenAuthorization := '';
+  FIntrospection := TIdHTTPServer.Create(nil);
+  FIntrospection.Bindings.Add.IP := '127.0.0.1';
+  FIntrospection.Bindings[0].Port := 0;
+  FIntrospection.OnCommandGet := HandleIntrospection;
+  FIntrospection.Active := True;
+  var Url := Format('http://127.0.0.1:%d/introspect', [FIntrospection.Bindings[0].Port]);
+
+  var Authorizer: IMCPAuthorizer := TMCPIntrospectionAuthorizer.Create(AUDIENCE, Url, 'mcp',
+    StringOfChar('x', LONG_SECRET_LENGTH));
+  var Active := Decide(Authorizer, 'good');
+  Assert.AreEqual(LONG_SECRET_AUTHORIZATION, FSeenAuthorization);
+  Assert.AreEqual(TMCPAuthDecision.Allow, Active.Decision);
 end;
 
 end.
