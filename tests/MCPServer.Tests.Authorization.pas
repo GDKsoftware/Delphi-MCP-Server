@@ -63,6 +63,22 @@ type
     procedure Metadata_Build_DropsOfflineAccess;
 
     [Test]
+    [TestCase('Path', 'https://catalog.example/mcp,https://catalog.example/.well-known/oauth-protected-resource/mcp')]
+    [TestCase('PortAndNestedPath', 'https://catalog.example:8443/tenant/mcp,https://catalog.example:8443/.well-known/oauth-protected-resource/tenant/mcp')]
+    [TestCase('NoPath', 'https://catalog.example,https://catalog.example/.well-known/oauth-protected-resource')]
+    [TestCase('TrailingSlash', 'https://catalog.example/,https://catalog.example/.well-known/oauth-protected-resource')]
+    [TestCase('QueryAndFragment', 'https://catalog.example/mcp?x=1#f,https://catalog.example/.well-known/oauth-protected-resource/mcp')]
+    [TestCase('NotAUrl', 'not a url,')]
+    [TestCase('NoAuthority', 'https:///mcp,')]
+    procedure Metadata_UrlFor_InsertsWellKnownBeforeResourcePath(const ResourceUri: string; const Expected: string);
+
+    [Test]
+    [TestCase('NestedPath', 'https://catalog.example/tenant/mcp,/.well-known/oauth-protected-resource/tenant/mcp')]
+    [TestCase('NoPath', 'https://catalog.example,/.well-known/oauth-protected-resource')]
+    [TestCase('NotAUrl', 'not a url,')]
+    procedure Metadata_PathFor_InsertsWellKnownBeforeResourcePath(const ResourceUri: string; const Expected: string);
+
+    [Test]
     procedure Introspection_PostsTokenWithClientCredentials;
   end;
 
@@ -253,6 +269,22 @@ begin
   finally
     Bare.Free;
   end;
+end;
+
+procedure TAuthorizationTests.Metadata_UrlFor_InsertsWellKnownBeforeResourcePath(const ResourceUri: string;
+                                                                                const Expected: string);
+begin
+  const Actual = TMCPProtectedResourceMetadata.UrlFor(ResourceUri);
+
+  Assert.AreEqual(Expected, Actual);
+end;
+
+procedure TAuthorizationTests.Metadata_PathFor_InsertsWellKnownBeforeResourcePath(const ResourceUri: string;
+                                                                                 const Expected: string);
+begin
+  const Actual = TMCPProtectedResourceMetadata.PathFor(ResourceUri);
+
+  Assert.AreEqual(Expected, Actual);
 end;
 
 procedure TAuthorizationTests.HandleIntrospection(Context: TIdContext; Request: TIdHTTPRequestInfo;

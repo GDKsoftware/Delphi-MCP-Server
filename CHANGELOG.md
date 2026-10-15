@@ -488,6 +488,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The `resource_metadata` URL in the `WWW-Authenticate` challenge is derived from `[Auth] ResourceUri` when it is set (RFC 9728: origin of the resource, `/.well-known/oauth-protected-resource`, then the path of the resource). It used to be built from `Protocol`, `Host` and the listening port, so a server behind a reverse proxy sent clients to `http://localhost:8080/...` instead of its public address. `TMCPProtectedResourceMetadata.UrlFor` does the derivation and `PathFor` gives the matching path, which the server now also serves without a token when it differs from `/.well-known/oauth-protected-resource<Endpoint>`. `TMCPResourceLocation.TryParse` splits a resource URI into scheme, authority and path.
 - A record that failed to convert halfway leaked the objects it already held:
   `TMCPSerializer.JsonToValue` adds them to the caller's list only once the
   whole record is built, so `{"line": {"sku": "a"}, "count": "x"}` created an
