@@ -57,12 +57,30 @@ type
     class function Quote(const Value: string): string; static;
   end;
 
+  TMCPResourceLocation = record
+  strict private
+    class function WithoutQueryAndFragment(const Value: string): string; static;
+    class function AuthorityOf(const Remainder: string): string; static;
+    class function PathOf(const Remainder: string): string; static;
+  public
+    const SCHEME_SEPARATOR = '://';
+    const PATH_SEPARATOR = '/';
+    var Scheme: string;
+    var Authority: string;
+    var Path: string;
+    class function TryParse(const ResourceUri: string; out Location: TMCPResourceLocation): Boolean; static;
+  end;
+
   TMCPProtectedResourceMetadata = record
+  strict private
+    class function MetadataPathOf(const Location: TMCPResourceLocation): string; static;
+  public
     const WELL_KNOWN_PATH = '/.well-known/oauth-protected-resource';
     class function Build(const ResourceUri, ResourceName: string;
       const AuthorizationServers, ScopesSupported: TArray<string>): TJSONObject; static;
     class function WithoutOfflineAccess(const Scopes: TArray<string>): TArray<string>; static;
     class function UrlFor(const ResourceUri: string): string; static;
+    class function PathFor(const ResourceUri: string): string; static;
   end;
 
   TMCPStaticBearerAuthorizer = class(TInterfacedObject, IMCPAuthorizer)
@@ -233,33 +251,59 @@ begin
     Result := Result + ' ' + string.Join(', ', Parameters);
 end;
 
-{ TMCPProtectedResourceMetadata }
+{ TMCPResourceLocation }
 
-class function TMCPProtectedResourceMetadata.UrlFor(const ResourceUri: string): string;
+class function TMCPResourceLocation.WithoutQueryAndFragment(const Value: string): string;
 begin
-  Result := '';
-  const SchemeEnd = ResourceUri.IndexOf('://');
-  if SchemeEnd <= 0 then
-    Exit;
+  const QueryOrFragmentStart = Value.IndexOfAny(['?', '#']);
+  const HasQueryOrFragment = (QueryOrFragmentStart >= 0);
+  if not HasQueryOrFragment then
+    Exit(Value);
 
-  var Remainder := ResourceUri.Substring(SchemeEnd + 3);
-  const QueryOrFragment = Remainder.IndexOfAny(['?', '#']);
-  if QueryOrFragment >= 0 then
-    Remainder := Remainder.Substring(0, QueryOrFragment);
-
-  var Authority := Remainder;
-  var Path := '';
-  const PathStart = Remainder.IndexOf('/');
-  if PathStart >= 0 then
-  begin
-    Authority := Remainder.Substring(0, PathStart);
-    Path := Remainder.Substring(PathStart).TrimRight(['/']);
-  end;
-  if Authority = '' then
-    Exit;
-
-  Result := Format('%s://%s%s%s', [ResourceUri.Substring(0, SchemeEnd), Authority, WELL_KNOWN_PATH, Path]);
+  Result := Value.Substring(0, QueryOrFragmentStart);
 end;
+
+class function TMCPResourceLocation.AuthorityOf(const Remainder: string): string;
+begin
+  const PathStart = Remainder.IndexOf(PATH_SEPARATOR);
+  const HasPath = (PathStart >= 0);
+  if not HasPath then
+    Exit(Remainder);
+
+  Result := Remainder.Substring(0, PathStart);
+end;
+
+class function TMCPResourceLocation.PathOf(const Remainder: string): string;
+begin
+  const PathStart = Remainder.IndexOf(PATH_SEPARATOR);
+  const HasPath = (PathStart >= 0);
+  if not HasPath then
+    Exit('');
+
+  const RawPath = Remainder.Substring(PathStart);
+  Result := RawPath.TrimRight([PATH_SEPARATOR]);
+end;
+
+class function TMCPResourceLocation.TryParse(const ResourceUri: string; out Location: TMCPResourceLocation): Boolean;
+begin
+  Location := Default(TMCPResourceLocation);
+  const SchemeEnd = ResourceUri.IndexOf(SCHEME_SEPARATOR);
+  const HasScheme = (SchemeEnd > 0);
+  if not HasScheme then
+    Exit(False);
+
+  const RemainderStart = SchemeEnd + Length(SCHEME_SEPARATOR);
+  const RemainderWithQuery = ResourceUri.Substring(RemainderStart);
+  const Remainder = WithoutQueryAndFragment(RemainderWithQuery);
+
+  Location.Scheme    := ResourceUri.Substring(0, SchemeEnd);
+  Location.Authority := AuthorityOf(Remainder);
+  Location.Path      := PathOf(Remainder);
+
+  Result := (Location.Authority <> '');
+end;
+
+{ TMCPProtectedResourceMetadata }
 
 class function TMCPProtectedResourceMetadata.WithoutOfflineAccess(const Scopes: TArray<string>): TArray<string>;
 begin
@@ -301,6 +345,37 @@ begin
   const HasResourceName = (ResourceName <> '');
   if HasResourceName then
     Result.AddPair('resource_name', ResourceName);
+end;
+
+class function TMCPProtectedResourceMetadata.MetadataPathOf(const Location: TMCPResourceLocation): string;
+begin
+  Result := Format('%s%s', [WELL_KNOWN_PATH, Location.Path]);
+end;
+
+class function TMCPProtectedResourceMetadata.UrlFor(const ResourceUri: string): string;
+begin
+  Result := '';
+  var Location: TMCPResourceLocation;
+  const IsParsed = TMCPResourceLocation.TryParse(ResourceUri, Location);
+  if not IsParsed then
+    Exit;
+
+  const MetadataPath = MetadataPathOf(Location);
+  Result := Format('%s%s%s%s', [Location.Scheme,
+                                TMCPResourceLocation.SCHEME_SEPARATOR,
+                                Location.Authority,
+                                MetadataPath]);
+end;
+
+class function TMCPProtectedResourceMetadata.PathFor(const ResourceUri: string): string;
+begin
+  Result := '';
+  var Location: TMCPResourceLocation;
+  const IsParsed = TMCPResourceLocation.TryParse(ResourceUri, Location);
+  if not IsParsed then
+    Exit;
+
+  Result := MetadataPathOf(Location);
 end;
 
 { TMCPStaticBearerAuthorizer }
