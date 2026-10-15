@@ -66,6 +66,8 @@ type
     function ValidateHost(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo): Boolean;
     procedure ApplyCorsHeaders(RequestInfo: TIdHTTPRequestInfo; ResponseInfo: TIdHTTPResponseInfo);
     procedure HandleEndpointInfo(ResponseInfo: TIdHTTPResponseInfo);
+    function ConfiguredResourceUri: string;
+    function IsPublicResourceMetadataPath(const Document: string): Boolean;
     function IsProtectedResourceMetadataPath(const Document: string): Boolean;
     function ResourceUri: string;
     function ResourceMetadataUrl: string;
@@ -592,13 +594,35 @@ begin
   end;
 end;
 
+function TMCPIdHTTPServer.ConfiguredResourceUri: string;
+begin
+  Result := '';
+  if not Assigned(FSettings) then
+    Exit;
+
+  const ResourceUriSetting = FSettings.ResourceUri;
+  Result := ResourceUriSetting.Trim;
+end;
+
+function TMCPIdHTTPServer.IsPublicResourceMetadataPath(const Document: string): Boolean;
+begin
+  const PublicResourceUri = ConfiguredResourceUri;
+  const PublicMetadataPath = TMCPProtectedResourceMetadata.PathFor(PublicResourceUri);
+  const HasPublicMetadataPath = (PublicMetadataPath <> '');
+
+  Result := (HasPublicMetadataPath and (Document = PublicMetadataPath));
+end;
+
 function TMCPIdHTTPServer.IsProtectedResourceMetadataPath(const Document: string): Boolean;
 begin
   var Endpoint := DEFAULT_ENDPOINT;
   if Assigned(FSettings) then
     Endpoint := FSettings.Endpoint;
-  Result := (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH) or
-    (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH + Endpoint);
+  const IsPublicPath = IsPublicResourceMetadataPath(Document);
+
+  Result := ((Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH) or
+             (Document = TMCPProtectedResourceMetadata.WELL_KNOWN_PATH + Endpoint) or
+             IsPublicPath);
 end;
 
 function TMCPIdHTTPServer.ResourceUri: string;
@@ -618,6 +642,13 @@ begin
   Result := '';
   if not Assigned(FSettings) or (Length(FSettings.AuthorizationServerList) = 0) then
     Exit;
+
+  const PublicResourceUri = ConfiguredResourceUri;
+  const PublicMetadataUrl = TMCPProtectedResourceMetadata.UrlFor(PublicResourceUri);
+  const HasPublicMetadataUrl = (PublicMetadataUrl <> '');
+  if HasPublicMetadataUrl then
+    Exit(PublicMetadataUrl);
+
   Result := Format('%s://%s:%d%s%s', [FSettings.Protocol.ToLower, FSettings.Host.ToLower, FPort,
     TMCPProtectedResourceMetadata.WELL_KNOWN_PATH, FSettings.Endpoint]);
 end;

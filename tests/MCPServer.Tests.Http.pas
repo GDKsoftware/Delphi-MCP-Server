@@ -157,6 +157,9 @@ type
     procedure Auth_MissingToken_Is401WithChallenge;
 
     [Test]
+    procedure Auth_MissingToken_WithResourceUri_ChallengePointsAtPublicMetadata;
+
+    [Test]
     procedure Auth_WrongToken_Is401_InvalidToken;
 
     [Test]
@@ -167,6 +170,9 @@ type
 
     [Test]
     procedure Auth_PreflightAndMetadata_NeedNoToken;
+
+    [Test]
+    procedure Auth_MetadataAtResourceUriPath_NeedsNoToken;
 
     [Test]
     procedure Auth_ScopedTool_Is403_WithInsufficientScope;
@@ -191,6 +197,13 @@ const
   MODERN_VERSION_HEADER = 'MCP-Protocol-Version: 2026-07-28';
   MODERN_META = TMCPTestMeta.MODERN_MEMBER;
   LEGACY_PING = '{"jsonrpc":"2.0","id":1,"method":"ping"}';
+  AUTHORIZATION_SERVER = 'https://auth.example';
+  STATIC_TOKEN = 's3cret';
+  NESTED_RESOURCE_URI = 'https://catalog.example/tenant/mcp';
+  NESTED_METADATA_PATH = '/.well-known/oauth-protected-resource/tenant/mcp';
+  CHALLENGE_HEADER = 'WWW-Authenticate';
+  RESOURCE_MEMBER = 'resource';
+  HTTP_GET = 'GET';
 
 { THttpReply }
 
@@ -277,7 +290,7 @@ begin
 
     if Method = 'POST' then
       Http.Post(Url(Path), Request, Response)
-    else if Method = 'GET' then
+    else if Method = HTTP_GET then
       Http.Get(Url(Path), Response)
     else if Method = 'DELETE' then
       Http.Delete(Url(Path), Response)
@@ -318,7 +331,7 @@ end;
 
 procedure THttpTransportTests.Get_IsMethodNotAllowedWithAllow;
 begin
-  var Reply := Send('GET', '/mcp', '', ['Accept: text/event-stream']);
+  var Reply := Send(HTTP_GET, '/mcp', '', ['Accept: text/event-stream']);
   Assert.AreEqual(405, Reply.Status);
   Assert.AreEqual('POST, OPTIONS', Reply.Header('Allow'));
   Assert.AreEqual('', Reply.Body);
@@ -340,7 +353,7 @@ end;
 procedure THttpTransportTests.WrongPath_Is404;
 begin
   Assert.AreEqual(404, Send('POST', '/other', LEGACY_PING, []).Status);
-  Assert.AreEqual(404, Send('GET', '/mcp/extra', '', []).Status);
+  Assert.AreEqual(404, Send(HTTP_GET, '/mcp/extra', '', []).Status);
 end;
 
 procedure THttpTransportTests.Origin_NotAllowed_Is403WithJsonRpcBody_EvenWithCorsDisabled;
@@ -388,7 +401,7 @@ begin
   Assert.AreEqual('http://localhost', Enabled.Header('Access-Control-Allow-Origin'));
   Assert.AreEqual('POST, OPTIONS', Enabled.Header('Access-Control-Allow-Methods'));
   Assert.IsTrue(Enabled.Header('Access-Control-Allow-Headers').Contains('Mcp-Method'));
-  Assert.IsTrue(Enabled.Header('Access-Control-Expose-Headers').Contains('WWW-Authenticate'));
+  Assert.IsTrue(Enabled.Header('Access-Control-Expose-Headers').Contains(CHALLENGE_HEADER));
 end;
 
 procedure THttpTransportTests.Cors_PreflightReflectsRequestedHeaders;
@@ -574,7 +587,7 @@ end;
 procedure THttpTransportTests.EndpointInfoPath_AnswersJson;
 begin
   FSettings.EndpointInfoPath := '/info';
-  var Reply := Send('GET', '/info', '', []);
+  var Reply := Send(HTTP_GET, '/info', '', []);
   Assert.AreEqual(200, Reply.Status);
   var Json := Reply.Json;
   try
@@ -583,7 +596,7 @@ begin
   finally
     Json.Free;
   end;
-  Assert.AreEqual(404, Send('GET', '/nothing', '', []).Status);
+  Assert.AreEqual(404, Send(HTTP_GET, '/nothing', '', []).Status);
 end;
 
 procedure THttpTransportTests.Progress_IsStreamedBeforeTheResponse;
@@ -719,41 +732,55 @@ end;
 
 procedure THttpTransportTests.Auth_MissingToken_Is401WithChallenge;
 begin
-  FSettings.AuthorizationServers := 'https://auth.example';
-  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  FSettings.AuthorizationServers := AUTHORIZATION_SERVER;
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create([STATIC_TOKEN]);
   var Reply := Post(LEGACY_PING, []);
   Assert.AreEqual(401, Reply.Status);
   Assert.AreEqual(Format('Bearer resource_metadata="http://localhost:%d/.well-known/oauth-protected-resource/mcp"', [FServer.Port]),
-    Reply.Header('WWW-Authenticate'));
+    Reply.Header(CHALLENGE_HEADER));
   Assert.IsTrue(Reply.Body.Contains('-32600'), Reply.Body);
   Assert.IsFalse(Reply.Body.Contains('"id"'), 'the challenge body carries no id');
 end;
 
+procedure THttpTransportTests.Auth_MissingToken_WithResourceUri_ChallengePointsAtPublicMetadata;
+begin
+  FSettings.AuthorizationServers := AUTHORIZATION_SERVER;
+  FSettings.ResourceUri          := NESTED_RESOURCE_URI;
+  FServer.Authorizer             := TMCPStaticBearerAuthorizer.Create([STATIC_TOKEN]);
+
+  const Reply = Post(LEGACY_PING, []);
+
+  const Challenge = Reply.Header(CHALLENGE_HEADER);
+  Assert.AreEqual(401, Reply.Status);
+  Assert.AreEqual('Bearer resource_metadata="https://catalog.example/.well-known/oauth-protected-resource/tenant/mcp"',
+                  Challenge);
+end;
+
 procedure THttpTransportTests.Auth_WrongToken_Is401_InvalidToken;
 begin
-  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create([STATIC_TOKEN]);
   var Reply := Post(LEGACY_PING, ['Authorization: Bearer nope']);
   Assert.AreEqual(401, Reply.Status);
   Assert.AreEqual('Bearer error="invalid_token", error_description="The bearer token is not recognised"',
-    Reply.Header('WWW-Authenticate'));
+    Reply.Header(CHALLENGE_HEADER));
 end;
 
 procedure THttpTransportTests.Auth_MalformedHeader_Is400;
 begin
-  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create([STATIC_TOKEN]);
   var Reply := Post(LEGACY_PING, ['Authorization: Basic abc']);
   Assert.AreEqual(400, Reply.Status);
-  Assert.IsTrue(Reply.Header('WWW-Authenticate').Contains('error="invalid_request"'), Reply.Header('WWW-Authenticate'));
+  Assert.IsTrue(Reply.Header(CHALLENGE_HEADER).Contains('error="invalid_request"'), Reply.Header(CHALLENGE_HEADER));
   var Empty := Post(LEGACY_PING, ['Authorization: Bearer']);
   Assert.AreEqual(400, Empty.Status);
 end;
 
 procedure THttpTransportTests.Auth_ValidToken_IsServed;
 begin
-  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create([STATIC_TOKEN]);
   var Reply := Post(LEGACY_PING, ['Authorization: bearer s3cret']);
   Assert.AreEqual(200, Reply.Status);
-  Assert.AreEqual('', Reply.Header('WWW-Authenticate'));
+  Assert.AreEqual('', Reply.Header(CHALLENGE_HEADER));
   var Modern := Post('{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{' + MODERN_META + '}}',
     [MODERN_VERSION_HEADER, 'Mcp-Method: tools/list', 'Authorization: Bearer s3cret']);
   Assert.AreEqual(200, Modern.Status);
@@ -764,17 +791,17 @@ begin
   FSettings.CorsEnabled := True;
   FSettings.AuthorizationServers := 'https://auth.example, https://auth2.example';
   FSettings.ScopesSupported := 'read,offline_access';
-  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['s3cret']);
+  FServer.Authorizer := TMCPStaticBearerAuthorizer.Create([STATIC_TOKEN]);
   Assert.AreEqual(204, Send('OPTIONS', '/mcp', '', ['Origin: http://localhost:5173']).Status);
 
   for var Path in ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'] do
   begin
-    var Reply := Send('GET', Path, '', []);
+    var Reply := Send(HTTP_GET, Path, '', []);
     Assert.AreEqual(200, Reply.Status, Path);
     Assert.AreEqual('max-age=3600', Reply.Header('Cache-Control'));
     var Json := Reply.Json;
     try
-      Assert.AreEqual(Format('http://localhost:%d/mcp', [FServer.Port]), Json.GetValue<string>('resource'));
+      Assert.AreEqual(Format('http://localhost:%d/mcp', [FServer.Port]), Json.GetValue<string>(RESOURCE_MEMBER));
       Assert.AreEqual('https://auth2.example', Json.GetValue<string>('authorization_servers[1]'));
       Assert.AreEqual(1, (Json.GetValue('scopes_supported') as TJSONArray).Count, 'offline_access is dropped');
       Assert.AreEqual('header', Json.GetValue<string>('bearer_methods_supported[0]'));
@@ -783,8 +810,26 @@ begin
     end;
   end;
 
-  Assert.AreEqual(404, Send('GET', '/.well-known/other', '', []).Status);
-  Assert.AreEqual(401, Send('GET', '/mcp', '', []).Status, 'GET on the endpoint is authenticated before 405');
+  Assert.AreEqual(404, Send(HTTP_GET, '/.well-known/other', '', []).Status);
+  Assert.AreEqual(401, Send(HTTP_GET, '/mcp', '', []).Status, 'GET on the endpoint is authenticated before 405');
+end;
+
+procedure THttpTransportTests.Auth_MetadataAtResourceUriPath_NeedsNoToken;
+begin
+  FSettings.AuthorizationServers := AUTHORIZATION_SERVER;
+  FSettings.ResourceUri          := NESTED_RESOURCE_URI;
+  FServer.Authorizer             := TMCPStaticBearerAuthorizer.Create([STATIC_TOKEN]);
+
+  const Reply = Send(HTTP_GET, NESTED_METADATA_PATH, '', []);
+
+  Assert.AreEqual(200, Reply.Status);
+  const Json = Reply.Json;
+  try
+    const PublishedResource = Json.GetValue<string>(RESOURCE_MEMBER);
+    Assert.AreEqual(NESTED_RESOURCE_URI, PublishedResource);
+  finally
+    Json.Free;
+  end;
 end;
 
 procedure THttpTransportTests.Auth_ScopedTool_Is403_WithInsufficientScope;
@@ -795,7 +840,7 @@ begin
   FServer.Authorizer := TMCPStaticBearerAuthorizer.Create(['reader'], ['read']);
   var Denied := Post(CALL, ['Authorization: Bearer reader']);
   Assert.AreEqual(403, Denied.Status);
-  Assert.AreEqual('Bearer error="insufficient_scope", scope="admin"', Denied.Header('WWW-Authenticate'));
+  Assert.AreEqual('Bearer error="insufficient_scope", scope="admin"', Denied.Header(CHALLENGE_HEADER));
   var Json := Denied.Json;
   try
     Assert.AreEqual(4, Json.GetValue<Integer>('id'));
@@ -835,7 +880,7 @@ begin
   var Denied := Post(LEGACY_PING, ['Origin: http://evil.example']);
   Assert.AreEqual(403, Denied.Status);
   Assert.AreEqual('http://evil.example', Denied.Header('Access-Control-Allow-Origin'), 'a browser can read the error');
-  Assert.IsTrue(Denied.Header('Access-Control-Expose-Headers').Contains('WWW-Authenticate'));
+  Assert.IsTrue(Denied.Header('Access-Control-Expose-Headers').Contains(CHALLENGE_HEADER));
 end;
 
 end.
