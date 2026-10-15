@@ -94,6 +94,7 @@ uses
 
 const
   Audience = 'https://mcp.example/mcp';
+  ClaimsWithExpiryFormat = '{"sub":"u","aud":"%s","exp":%d}';
   IntrospectionClientId = 'mcp';
   ActiveToken = 'good';
   LongSecretLength = 64;
@@ -189,26 +190,31 @@ begin
   var Future := System.DateUtils.DateTimeToUnix(Now, False) + 600;
   var Past := System.DateUtils.DateTimeToUnix(Now, False) - 600;
 
-  var Invalid: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s","exp":%d}', [Audience, Future]));
+  const InvalidClaims = Format(ClaimsWithExpiryFormat, [Audience, Future]);
+  const Invalid: IMCPAuthorizer = TClaimsAuthorizer.Create(Audience, InvalidClaims);
   var Rejected := Decide(Invalid, 'nope');
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, Rejected.Decision);
   Assert.AreEqual('invalid_token', Rejected.Challenge.Error);
 
-  var WrongAudience: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"https://other","exp":%d}', [Future]));
+  const OtherAudienceClaims = Format('{"sub":"u","aud":"https://other","exp":%d}', [Future]);
+  const WrongAudience: IMCPAuthorizer = TClaimsAuthorizer.Create(Audience, OtherAudienceClaims);
   var ForAnother := Decide(WrongAudience, 'valid');
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, ForAnother.Decision);
   Assert.IsTrue(ForAnother.Challenge.ErrorDescription.Contains('not issued for this server'),
     ForAnother.Challenge.ErrorDescription);
 
-  var Expired: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s","exp":%d}', [Audience, Past]));
+  const ExpiredClaims = Format(ClaimsWithExpiryFormat, [Audience, Past]);
+  const Expired: IMCPAuthorizer = TClaimsAuthorizer.Create(Audience, ExpiredClaims);
   var Stale := Decide(Expired, 'valid');
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, Stale.Decision);
   Assert.IsTrue(Stale.Challenge.ErrorDescription.Contains('expired'), Stale.Challenge.ErrorDescription);
 
-  var NoExpiry: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s"}', [Audience]));
+  const NoExpiryClaims = Format('{"sub":"u","aud":"%s"}', [Audience]);
+  const NoExpiry: IMCPAuthorizer = TClaimsAuthorizer.Create(Audience, NoExpiryClaims);
   Assert.AreEqual(TMCPAuthDecision.Unauthorized, Decide(NoExpiry, 'valid').Decision, 'exp is mandatory');
 
-  var Scoped := TClaimsAuthorizer.Create(Audience, Format('{"sub":"u","aud":"%s","exp":%d,"scope":"read"}', [Audience, Future]));
+  const ScopedClaims = Format('{"sub":"u","aud":"%s","exp":%d,"scope":"read"}', [Audience, Future]);
+  const Scoped = TClaimsAuthorizer.Create(Audience, ScopedClaims);
   var ScopedRef: IMCPAuthorizer := Scoped;
   Scoped.RequiredScopes := ['read', 'write'];
   var Denied := Decide(ScopedRef, 'valid');
@@ -227,8 +233,9 @@ end;
 procedure TAuthorizationTests.OAuth_AcceptsAudienceArray_AndScopeArray;
 begin
   var Future := System.DateUtils.DateTimeToUnix(Now, False) + 600;
-  var Authorizer: IMCPAuthorizer := TClaimsAuthorizer.Create(Audience,
-    Format('{"sub":"u","aud":["https://other","%s"],"exp":%d,"scp":["a","b"]}', [Audience.ToUpper, Future]));
+  const UpperAudience = Audience.ToUpper;
+  const ArrayClaims = Format('{"sub":"u","aud":["https://other","%s"],"exp":%d,"scp":["a","b"]}', [UpperAudience, Future]);
+  const Authorizer: IMCPAuthorizer = TClaimsAuthorizer.Create(Audience, ArrayClaims);
   var Outcome := Decide(Authorizer, 'valid');
   Assert.AreEqual(TMCPAuthDecision.Allow, Outcome.Decision);
   Assert.IsTrue(Outcome.Principal.HasScope('a'));
@@ -303,9 +310,9 @@ begin
   FSeenAuthorization := Request.RawHeaders.Values['Authorization'];
   FSeenBody := Request.FormParams;
   Response.ContentType := 'application/json';
+  const Expiry = System.DateUtils.DateTimeToUnix(Now, False) + 600;
   if FSeenBody.Contains('token=good') then
-    Response.ContentText := Format('{"active":true,"sub":"alice","aud":"%s","exp":%d,"scope":"read"}',
-      [Audience, System.DateUtils.DateTimeToUnix(Now, False) + 600])
+    Response.ContentText := Format('{"active":true,"sub":"alice","aud":"%s","exp":%d,"scope":"read"}', [Audience, Expiry])
   else
     Response.ContentText := '{"active":false}';
 end;
