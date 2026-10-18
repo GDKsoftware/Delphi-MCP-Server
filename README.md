@@ -140,7 +140,7 @@ The server will:
 - Log diagnostic messages to stderr, never to stdout
 - Answer `notifications/cancelled` by stopping the named request; it gets no response
 - Send `notifications/progress` for a request that carries `_meta.progressToken`, before its response
-- Exit within `[Server] MaxConcurrentRequests` worker threads' drain time (2 seconds by default) once stdin closes
+- Answer every request it read before stdin closed, then exit; see [When stdin closes](#when-stdin-closes)
 
 **Use STDIO transport for:**
 - Codex (OpenAI)
@@ -175,6 +175,29 @@ naming the same request is answered `202` and dropped, because the tracker a
 request consults is its own response stream and a notification always arrives
 on a connection of its own; only over stdio, where every message shares one
 channel, does the notification stop a running request.
+
+#### When stdin closes
+
+Closing stdin is how an MCP client shuts a stdio server down: the lifecycle
+has the client close the server's input, wait for it to exit and terminate it
+only when it does not. JSON-RPC in turn wants an answer to every request. The
+transport does both:
+
+1. It reads nothing more and lets the requests it already has, running or
+   queued, finish and answer, for up to `[Server] StdioShutdownDrainMs`
+   (2000 by default, `TMCPSettings.StdioShutdownDrainMs` in code).
+2. What is still running or queued after that is answered with `-32603`
+   "Server is shutting down", and the running ones are cancelled. A queued
+   request is never started, so it has no side effects.
+3. A request the client cancelled with `notifications/cancelled` gets no
+   answer, as the cancellation rules ask.
+
+Every request gets exactly one answer, also when a handler ignores its
+cancellation: the transport answers it with the error after a short grace and
+drops the result the handler produces later. The default bound suits a client
+that closes stdin to stop the server and waits only briefly before it
+terminates the process. For a client that pipes a batch of requests in and
+closes stdin at once, raise the bound so the batch fits in it.
 
 ### Change notifications (`subscriptions/listen`)
 

@@ -116,6 +116,7 @@ begin
     Assert.AreEqual<Integer>(TMCPSettings.DEFAULT_MAX_CONCURRENT_REQUESTS, Settings.MaxConcurrentRequests);
     Assert.AreEqual<Integer>(TMCPSettings.DEFAULT_REQUEST_STATE_TTL_SECONDS, Settings.RequestStateTtlSeconds);
     Assert.AreEqual<Integer>(0, Settings.MaxConnections);
+    Assert.AreEqual<Integer>(TMCPSettings.DEFAULT_STDIO_SHUTDOWN_DRAIN_MS, Settings.StdioShutdownDrainMs);
   finally
     Settings.Free;
   end;
@@ -248,6 +249,7 @@ begin
     Written.ServerName := 'round-trip';
     Written.BearerTokens := 'alpha,beta';
     Written.MaxJsonDepth := 12;
+    Written.StdioShutdownDrainMs := 15000;
     Written.SaveToFile;
   finally
     Written.Free;
@@ -259,6 +261,7 @@ begin
     Assert.AreEqual('round-trip', Reloaded.ServerName);
     Assert.AreEqual('alpha,beta', Reloaded.BearerTokens);
     Assert.AreEqual<Integer>(12, Reloaded.MaxJsonDepth);
+    Assert.AreEqual<Integer>(15000, Reloaded.StdioShutdownDrainMs);
     Assert.AreEqual<NativeInt>(2, Length(Reloaded.BearerTokenList));
   finally
     Reloaded.Free;

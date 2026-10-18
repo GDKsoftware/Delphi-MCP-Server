@@ -139,10 +139,14 @@ tools that report progress (`test_tool_with_progress` is the example); this
 is new traffic on stdout a client that does not expect it should tolerate,
 since it was already required by the specification.
 
-**The server exits promptly when stdin closes**, even with a request still
-running: it waits `[Server] MaxConcurrentRequests`-many workers up to 2
-seconds (configurable via `TMCPStdioTransport.ShutdownDrainMs` for a library
-consumer), then cancels what is left rather than blocking forever.
+**The server exits promptly when stdin closes, and answers every request
+first**, even with a request still running: it lets the requests it already
+read finish for up to `[Server] StdioShutdownDrainMs` (2000 by default; also
+`TMCPStdioTransport.ShutdownDrainMs` for a library consumer), then cancels
+what is left rather than blocking forever. What it cancels that way, and
+what was still queued, is answered with `-32603` "Server is shutting down";
+before, those requests got no response at all. A request the client
+cancelled still gets none.
 
 **A duplicate request id while the first is still in flight is `-32600`**,
 answered immediately, instead of being silently queued behind it.

@@ -7,19 +7,41 @@ uses
   System.SysUtils,
   System.Classes,
   System.JSON,
+  System.Rtti,
+  System.SyncObjs,
   MCPServer.Types,
+  MCPServer.Tool.Base,
   MCPServer.StdioTransport,
   MCPServer.Tests.Harness;
 
 type
+  TStubbornTool = class(TMCPToolBase)
+  strict private
+    FReleased: TEvent;
+    FReturned: TEvent;
+  protected
+    function BuildSchema: TJSONObject; override;
+    function DoExecute(const Arguments: TJSONObject): TValue; override;
+  public
+    constructor Create; override;
+    destructor Destroy; override;
+
+    procedure Release;
+    function WaitUntilReturned: Boolean;
+  end;
+
   [TestFixture]
   TStdioTransportTests = class
+  private
+    const KEEP_THE_SETTINGS_DRAIN = -1;
   private
     FHarness: TMCPTestHarness;
     FOutputBytes: TBytes;
     FElapsedMs: Int64;
-    function Run(const Lines: array of string; DrainMs: Integer = TMCPStdioTransport.DEFAULT_SHUTDOWN_DRAIN_MS;
+    function Run(const Lines: array of string; DrainMs: Integer = KEEP_THE_SETTINGS_DRAIN;
       const Separator: string = #10): TArray<string>;
+    function OutputLines(const Output: TBytesStream): TArray<string>;
+    procedure AssertShuttingDownError(const Lines: TArray<string>; const Id: string);
     function ParseLine(const Line: string): TJSONObject;
     function FindById(const Lines: TArray<string>; const Id: string): TJSONObject;
     function GetById(const Lines: TArray<string>; const Id: string): TJSONObject;
@@ -58,7 +80,19 @@ type
     procedure ModernRequest_OverStdio;
 
     [Test]
-    procedure Eof_WithRunningRequest_ReturnsAfterDrain;
+    procedure Eof_WithRunningRequest_IsAnsweredWithAnErrorAfterTheDrain;
+
+    [Test]
+    procedure Eof_QueuedRequestsWithinTheBound_AreAllAnswered;
+
+    [Test]
+    procedure Eof_PastTheBound_AnswersTheRestWithAnError;
+
+    [Test]
+    procedure Eof_RequestTheClientCancelled_GetsNoAnswer;
+
+    [Test]
+    procedure Eof_HandlerThatIgnoresCancellation_IsAnsweredOnce;
 
     [Test]
     procedure Listen_AckThenCancel_HasNoResponse;
@@ -80,6 +114,53 @@ uses
 const
   INITIALIZE = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}';
   INITIALIZED = '{"jsonrpc":"2.0","method":"notifications/initialized"}';
+  SLOW_CALL = '{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":%d,"stepMs":100}}}';
+  STUBBORN_TOOL_NAME = 'test_stubborn_tool';
+  STUBBORN_CALL = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{}}}';
+  SHUTTING_DOWN = 'shutting down';
+  STUBBORN_WAIT_MS = 10000;
+  LATE_ANSWER_GRACE_MS = 300;
+
+{ TStubbornTool }
+
+constructor TStubbornTool.Create;
+begin
+  inherited Create;
+  FName := STUBBORN_TOOL_NAME;
+  FDescription := 'A tool that never looks at its cancellation';
+  FReleased := TEvent.Create(nil, True, False, '');
+  FReturned := TEvent.Create(nil, True, False, '');
+end;
+
+destructor TStubbornTool.Destroy;
+begin
+  FReturned.Free;
+  FReleased.Free;
+  inherited;
+end;
+
+function TStubbornTool.BuildSchema: TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(
+    '{"type":"object","properties":{},"additionalProperties":false}') as TJSONObject;
+end;
+
+function TStubbornTool.DoExecute(const Arguments: TJSONObject): TValue;
+begin
+  FReleased.WaitFor(STUBBORN_WAIT_MS);
+  FReturned.SetEvent;
+  Result := TValue.From<string>('finished late');
+end;
+
+procedure TStubbornTool.Release;
+begin
+  FReleased.SetEvent;
+end;
+
+function TStubbornTool.WaitUntilReturned: Boolean;
+begin
+  Result := (FReturned.WaitFor(STUBBORN_WAIT_MS) = TWaitResult.wrSignaled);
+end;
 
 { TStdioTransportTests }
 
@@ -107,7 +188,9 @@ begin
   var Transport := TMCPStdioTransport.Create(FHarness.ManagerRegistry, FHarness.CoreManager);
   try
     Transport.Settings := FHarness.Settings;
-    Transport.ShutdownDrainMs := DrainMs;
+    const KeepsTheSettingsDrain = (DrainMs = KEEP_THE_SETTINGS_DRAIN);
+    if not KeepsTheSettingsDrain then
+      Transport.ShutdownDrainMs := DrainMs;
     var Watch := TStopwatch.StartNew;
     Transport.RunWith(InputStream, OutputStream);
     FElapsedMs := Watch.ElapsedMilliseconds;
@@ -118,6 +201,24 @@ begin
     Transport.Free;
     OutputStream.Free;
     InputStream.Free;
+  end;
+end;
+
+function TStdioTransportTests.OutputLines(const Output: TBytesStream): TArray<string>;
+begin
+  const Bytes = Copy(Output.Bytes, 0, Output.Size);
+  const Text = TEncoding.UTF8.GetString(Bytes);
+  Result := Text.Split([#10], TStringSplitOptions.ExcludeEmpty);
+end;
+
+procedure TStdioTransportTests.AssertShuttingDownError(const Lines: TArray<string>; const Id: string);
+begin
+  const Answer = GetById(Lines, Id);
+  try
+    Assert.AreEqual(JSONRPC_INTERNAL_ERROR, Answer.GetValue<Integer>('error.code'), Answer.ToJSON);
+    Assert.Contains(Answer.GetValue<string>('error.message'), SHUTTING_DOWN);
+  finally
+    Answer.Free;
   end;
 end;
 
@@ -304,13 +405,96 @@ begin
   end;
 end;
 
-procedure TStdioTransportTests.Eof_WithRunningRequest_ReturnsAfterDrain;
+procedure TStdioTransportTests.Eof_WithRunningRequest_IsAnsweredWithAnErrorAfterTheDrain;
 begin
-  var Lines := Run([
-    '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":100,"stepMs":100}}}'],
-    300);
-  Assert.AreEqual(0, Integer(Length(Lines)), 'the request was cancelled at shutdown and got no response');
-  Assert.IsTrue(FElapsedMs < 3000, 'Run returned after the drain timeout: ' + FElapsedMs.ToString + ' ms');
+  const Running = Format(SLOW_CALL, [4, 100]);
+
+  const Lines = Run([Running], 300);
+
+  Assert.AreEqual(1, Integer(Length(Lines)), 'the request still running at the bound gets an answer');
+  AssertShuttingDownError(Lines, '4');
+  Assert.IsTrue(FElapsedMs < 3000, Format('Run returned after the drain timeout: %d ms', [FElapsedMs]));
+end;
+
+procedure TStdioTransportTests.Eof_QueuedRequestsWithinTheBound_AreAllAnswered;
+begin
+  FHarness.Settings.StdioShutdownDrainMs := 10000;
+  const First = Format(SLOW_CALL, [1, 8]);
+  const Second = Format(SLOW_CALL, [2, 8]);
+  const Third = Format(SLOW_CALL, [3, 8]);
+
+  const Lines = Run([First, Second, Third]);
+
+  Assert.AreEqual(3, Integer(Length(Lines)), string.Join(' | ', Lines));
+  for var Id in ['1', '2', '3'] do
+  begin
+    const Answer = GetById(Lines, Id);
+    try
+      Assert.AreEqual('Completed 8 steps', Answer.GetValue<string>('result.content[0].text'));
+    finally
+      Answer.Free;
+    end;
+  end;
+end;
+
+procedure TStdioTransportTests.Eof_PastTheBound_AnswersTheRestWithAnError;
+begin
+  const Quick = Format(SLOW_CALL, [1, 2]);
+  const Long = Format(SLOW_CALL, [2, 50]);
+  const Queued = Format(SLOW_CALL, [3, 2]);
+
+  const Lines = Run([Quick, Long, Queued], 500);
+
+  Assert.AreEqual(3, Integer(Length(Lines)), 'every request gets exactly one answer: ' + string.Join(' | ', Lines));
+  const Finished = GetById(Lines, '1');
+  try
+    Assert.AreEqual('Completed 2 steps', Finished.GetValue<string>('result.content[0].text'));
+  finally
+    Finished.Free;
+  end;
+  AssertShuttingDownError(Lines, '2');
+  AssertShuttingDownError(Lines, '3');
+end;
+
+procedure TStdioTransportTests.Eof_RequestTheClientCancelled_GetsNoAnswer;
+begin
+  const Long = Format(SLOW_CALL, [5, 50]);
+  const Cancel = '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":5}}';
+
+  const Lines = Run([Long, Cancel], 0);
+
+  Assert.AreEqual(0, Integer(Length(Lines)), 'a request the client cancelled is never answered: ' +
+    string.Join(' | ', Lines));
+end;
+
+procedure TStdioTransportTests.Eof_HandlerThatIgnoresCancellation_IsAnsweredOnce;
+begin
+  const Stubborn = TStubbornTool.Create;
+  const StubbornTool: IMCPTool = Stubborn;
+  FHarness.ToolsManager.AddTool(StubbornTool);
+  const Input = TBytesStream.Create(TEncoding.UTF8.GetBytes(STUBBORN_CALL + #10));
+  const Output = TBytesStream.Create;
+  const Transport = TMCPStdioTransport.Create(FHarness.ManagerRegistry, FHarness.CoreManager);
+  try
+    Transport.Settings := FHarness.Settings;
+    Transport.ShutdownDrainMs := 100;
+
+    Transport.RunWith(Input, Output);
+    const AtShutdown = OutputLines(Output);
+    Stubborn.Release;
+    const HasReturned = Stubborn.WaitUntilReturned;
+    Sleep(LATE_ANSWER_GRACE_MS);
+    const AfterItReturned = OutputLines(Output);
+
+    Assert.IsTrue(HasReturned, 'the stubborn tool returned once it was released');
+    Assert.AreEqual(1, Integer(Length(AtShutdown)), 'the transport answered before it returned');
+    AssertShuttingDownError(AtShutdown, '1');
+    Assert.AreEqual(1, Integer(Length(AfterItReturned)), 'the late result is not sent a second time');
+  finally
+    Transport.Free;
+    Output.Free;
+    Input.Free;
+  end;
 end;
 
 procedure TStdioTransportTests.Listen_AckThenCancel_HasNoResponse;

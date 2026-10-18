@@ -32,6 +32,10 @@ MaxConnections=0
 ExposeDiagnosticsResources=1
 ; Worker threads of the stdio transport; 1 answers requests in arrival order
 MaxConcurrentRequests=1
+; Once stdin closes, how long (milliseconds) the stdio transport lets the
+; requests it already read finish; what is still queued or running then is
+; answered with an error. 0 = answer them all with the error at once
+StdioShutdownDrainMs=2000
 
 [Security]
 ; Origins allowed next to the loopback origins (localhost, 127.0.0.1, [::1] on
