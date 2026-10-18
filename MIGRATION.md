@@ -107,6 +107,11 @@ were booleans), sets and dynamic arrays as arrays, `nil` objects as `null`
 and `TDateTime` as an ISO 8601 string. The `logs://recent` timestamps and the
 `server://status` times are strings now.
 
+**A `TDate` or `TTime` value is a string.** As a result it used to go out as
+the number Delphi stores, which contradicted its own output schema
+(`format: date`, `format: time`), and as an argument it could not be sent at
+all. A client that read the number reads `2026-10-18` or `14:30:00` now.
+
 **Tools and resources are listed in registration order.** Anything that
 depended on the previous dictionary order should use the names instead.
 

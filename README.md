@@ -444,6 +444,20 @@ parameter. Integer properties are published as `integer`, `TDateTime` as a
 `[SchemaTitle]`, `[SchemaFormat]`, `[SchemaMinimum]` and `[SchemaMaximum]`
 add the corresponding keywords.
 
+Dates and times travel as ISO 8601 strings in both directions, the shape
+their schema announces:
+
+| Delphi type | Schema | Written as | Read from |
+|---|---|---|---|
+| `TDateTime` | `string`, `format: date-time` | `2026-10-18T14:30:00.000+02:00` | any ISO 8601 date-time |
+| `TDate` | `string`, `format: date` | `2026-10-18` | `yyyy-mm-dd` only |
+| `TTime` | `string`, `format: time` | `14:30:00`, or `14:30:00.250` | `hh:mm`, `hh:mm:ss`, `hh:mm:ss.fff` |
+
+A `TDate` is written without its time of day and a `TTime` without its date.
+A `TTime` carries no zone, so it is written without an offset, and a time with
+`Z` or an offset is refused rather than read as something it is not. A value
+of the wrong shape is refused with the shape the parameter expects.
+
 #### Records in a schema
 
 A record is described exactly the way a class is: `type: object` with one
@@ -486,9 +500,10 @@ type
 
 The same shape crosses the wire in both directions: `MCPServer.Serializer`
 builds the record from a JSON object and writes it back out, with enumerations
-by name, `TDateTime` as ISO 8601, and an absent `[Optional]` field left at the
-default of its type. A record is a value, so nothing about it is freed after a
-call; an object a record holds is owned by the call and freed with it.
+by name, `TDateTime`, `TDate` and `TTime` as ISO 8601, and an absent
+`[Optional]` field left at the default of its type. A record is a value, so
+nothing about it is freed after a call; an object a record holds is owned by
+the call and freed with it.
 
 **What a record needs from RTTI.** The generator reads a record's fields and
 their attributes through extended RTTI, so the unit that declares the record

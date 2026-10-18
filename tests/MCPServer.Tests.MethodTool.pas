@@ -68,6 +68,8 @@ type
     function Area(const Box: TSampleBox): Integer;
     function Grow(const Box: TSampleBox): TSampleBox;
     function Caption(const Labelled: TSampleLabelled): string;
+    function NextDay(const Day: TDate): TDate;
+    function QuarterLater(const At: TTime): TTime;
     property Seen: string read FSeen;
     property Kept: TCountedFilter read FKept;
   end;
@@ -214,6 +216,15 @@ type
 
     [Test]
     procedure RecordParameter_WrongFieldTypeRaisesArgumentException;
+
+    [Test]
+    procedure DateParameterAndResult_TravelAsIsoDates;
+
+    [Test]
+    procedure TimeParameterAndResult_TravelAsIsoTimes;
+
+    [Test]
+    procedure DateParameter_NotAnIsoDate_RaisesArgumentException;
   end;
 
 implementation
@@ -221,6 +232,7 @@ implementation
 uses
   System.SysUtils,
   System.Classes,
+  System.DateUtils,
   MCPServer.Logger,
   MCPServer.Schema.Validator,
   MCPServer.ToolsManager;
@@ -335,6 +347,16 @@ function TSampleTarget.Caption(const Labelled: TSampleLabelled): string;
 begin
   Result := Format('%s %dx%d%s',
     [Labelled.Caption, Labelled.Box.Width, Labelled.Box.Height, Labelled.Note]);
+end;
+
+function TSampleTarget.NextDay(const Day: TDate): TDate;
+begin
+  Result := IncDay(Day);
+end;
+
+function TSampleTarget.QuarterLater(const At: TTime): TTime;
+begin
+  Result := IncMinute(At, 15);
 end;
 
 destructor TSampleTarget.Destroy;
@@ -927,6 +949,43 @@ begin
       Run(Tool, '{"box":{"width":"three","height":4}}').Free;
     end,
     EArgumentException);
+end;
+
+procedure TMethodToolTests.DateParameterAndResult_TravelAsIsoDates;
+begin
+  const Tool = ToolFor('NextDay');
+
+  const Answer = Run(Tool, '{"day":"2026-10-18"}');
+  try
+    Assert.AreEqual('2026-10-19', Answer.GetValue<string>(MCP_KEY_RESULT));
+  finally
+    Answer.Free;
+  end;
+end;
+
+procedure TMethodToolTests.TimeParameterAndResult_TravelAsIsoTimes;
+begin
+  const Tool = ToolFor('QuarterLater');
+
+  const Answer = Run(Tool, '{"at":"14:30:00"}');
+  try
+    Assert.AreEqual('14:45:00', Answer.GetValue<string>(MCP_KEY_RESULT));
+  finally
+    Answer.Free;
+  end;
+end;
+
+procedure TMethodToolTests.DateParameter_NotAnIsoDate_RaisesArgumentException;
+begin
+  const Tool = ToolFor('NextDay');
+
+  Assert.WillRaiseWithMessageRegex(
+    procedure
+    begin
+      Run(Tool, '{"day":"18-10-2026"}').Free;
+    end,
+    EArgumentException,
+    'Parameter "day": expected an ISO 8601 date');
 end;
 
 end.
