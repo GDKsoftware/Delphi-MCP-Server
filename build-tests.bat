@@ -85,4 +85,36 @@ echo.
 echo Test build completed successfully!
 echo Output: %OUTPUT_DIR%\MCPServerTests.exe
 
+call :StdioOnlyCheck
+if errorlevel 1 exit /b 1
+
 endlocal
+exit /b 0
+
+REM A program that serves stdio only must build without TaurusTLS and link no
+REM Indy unit. tests\StdioOnly\StdioOnlyHost.dpr is built with no TaurusTLS on
+REM the search path, and its detailed map file must name no Indy or TaurusTLS
+REM unit.
+:StdioOnlyCheck
+set STDIO_ONLY_DIR=%OUTPUT_DIR%\StdioOnly
+if not exist %STDIO_ONLY_DIR% mkdir %STDIO_ONLY_DIR%
+set STDIO_ONLY_UNITS=src;src\Managers;src\Server;src\Tools;src\Core;src\Protocol;src\Resources;src\Prompts
+set STDIO_ONLY_DCC=!DCC32!
+if "%PLATFORM%"=="Win64" set STDIO_ONLY_DCC=!DCC64!
+
+echo.
+echo Building the stdio-only host check without TaurusTLS
+!STDIO_ONLY_DCC! -B -H -W -GD -NS%NAMESPACES% -U"!DELPHI_PATH!\lib\%PLATFORM%\debug";%STDIO_ONLY_UNITS% -Isrc -E%STDIO_ONLY_DIR% -N0%STDIO_ONLY_DIR% -D%CONFIG% tests\StdioOnly\StdioOnlyHost.dpr
+if errorlevel 1 (
+    echo Stdio-only host check FAILED: a stdio-only program needs more than MCPServer.StdioHost
+    exit /b 1
+)
+
+findstr /C:"M=Id" /C:"M=TaurusTLS" %STDIO_ONLY_DIR%\StdioOnlyHost.map >nul
+if not errorlevel 1 (
+    echo Stdio-only host check FAILED: an Indy or TaurusTLS unit is linked
+    exit /b 1
+)
+
+echo Stdio-only host check: no Indy and no TaurusTLS unit linked
+exit /b 0

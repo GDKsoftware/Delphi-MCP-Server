@@ -45,6 +45,7 @@ uses
   MCPServer.SubscriptionsManager in '..\src\Managers\MCPServer.SubscriptionsManager.pas',
   MCPServer.StdioTransport in '..\src\Server\MCPServer.StdioTransport.pas',
   MCPServer.StdioChannel in '..\src\Server\MCPServer.StdioChannel.pas',
+  MCPServer.StdioHost in '..\src\Server\MCPServer.StdioHost.pas',
   MCPServer.Host in '..\src\Server\MCPServer.Host.pas',
   // The built-in tools and resources register themselves in their
   // initialization sections. Keep the order identical to MCPServer.dpr so the
@@ -94,6 +95,7 @@ uses
   MCPServer.Tests.StdioChannel in 'MCPServer.Tests.StdioChannel.pas',
   MCPServer.Tests.Cancellation in 'MCPServer.Tests.Cancellation.pas',
   MCPServer.Tests.Stdio in 'MCPServer.Tests.Stdio.pas',
+  MCPServer.Tests.StdioHost in 'MCPServer.Tests.StdioHost.pas',
   MCPServer.Tests.SchemaValidator in 'MCPServer.Tests.SchemaValidator.pas',
   MCPServer.Tests.Prompt in 'MCPServer.Tests.Prompt.pas',
   MCPServer.Tests.Mrtr in 'MCPServer.Tests.Mrtr.pas',

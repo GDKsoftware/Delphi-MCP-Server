@@ -7,6 +7,7 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `TMCPStdioHost` (`MCPServer.StdioHost`): the host without the HTTP transport, for a program that serves stdio only. It compiles neither Indy's HTTP server nor TaurusTLS. `TMCPServerHost` descends from it and adds `StartHttp`, `Stop`, `BoundPort` and `Authorizer`, so existing hosts are unchanged. `build-tests.bat` builds `tests\StdioOnly\StdioOnlyHost.dpr` without TaurusTLS and fails when an Indy or TaurusTLS unit is linked into it.
 - `conformance.bat` / `conformance.ps1` run the MCP conformance suite against
   a build of the server (active suite plus the tasks scenarios), with
   `conformance-baseline.yml` listing the known failures: `logging/setLevel`,

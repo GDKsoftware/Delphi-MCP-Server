@@ -292,6 +292,27 @@ Copy the `src` folder from MCPServer into your project and add the units to your
    `MCPServer.ManagerRegistry`, `MCPServer.CoreManager`, the managers you want,
    and `MCPServer.IdHTTPServer` or `MCPServer.StdioTransport`.
 
+3. **Serving stdio only**: use `MCPServer.StdioHost` in place of
+   `MCPServer.Host`. `TMCPStdioHost` is the same host without the HTTP
+   transport: the same constructors, `AddTool`, `AddResource`, `AddPrompt`,
+   `SeedFromGlobalRegistry`, `TaskStore`, `Tasks`, `RunStdio` and
+   `RunStdioWith`. `TMCPServerHost` descends from it and adds `StartHttp`,
+   `Stop`, `BoundPort` and `Authorizer`. A program that names only
+   `MCPServer.StdioHost` compiles neither Indy's HTTP server nor TaurusTLS, so
+   its search path needs no TaurusTLS folder. `build-tests.bat` holds that to
+   account on every build: it compiles `tests\StdioOnly\StdioOnlyHost.dpr`
+   without TaurusTLS and fails when its map file names an Indy or TaurusTLS
+   unit.
+   ```pascal
+   const Host = TMCPStdioHost.Create;
+   try
+     Host.AddTool(TCustomTool.Create);
+     Host.RunStdio;
+   finally
+     Host.Free;
+   end;
+   ```
+
 ### Library Integration
 
 `TMCPServerHost` (`MCPServer.Host`) is the whole composition behind one class:
@@ -348,7 +369,8 @@ directory.
 both its IPv4 and its IPv6 binding, so `localhost` reaches it whichever family
 the client resolves first. `StartHttp` and `Stop` are both idempotent.
 
-**Transports.** `RunStdio` blocks and is a console entry point only: the stdio
+**Transports.** `TMCPServerHost` serves both, `TMCPStdioHost` stdio only.
+`RunStdio` blocks and is a console entry point only: the stdio
 transport claims stdout and redirects the logger to stderr for the whole
 process, so a GUI application must never call it. `RunStdioWith(Input, Output)`
 runs the same dispatch over two streams, which is how a test drives one line in
