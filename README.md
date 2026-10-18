@@ -688,7 +688,11 @@ and opens it on the retry into `Context.RequestState`; a tampered, expired
 or foreign token is `-32602`. `[Security] RequestStateKey` in `settings.ini`
 is the signing secret (set the same value on every instance behind a load
 balancer; empty means a random key per process) and
-`RequestStateTtlSeconds` the token lifetime (600 by default).
+`RequestStateTtlSeconds` the token lifetime (600 by default). An HTTP server
+started without a key logs one warning about it, because its tokens stop
+verifying after a restart and on any other instance. A stdio server does not:
+it lives exactly as long as its one client, so a random key per process is all
+it needs.
 
 Clients on the 2025 revisions cannot answer input requests, so a request
 that raises `EMCPInputRequired` in the legacy era is answered with

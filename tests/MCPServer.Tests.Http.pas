@@ -130,6 +130,9 @@ type
     procedure Bind_ExplicitAddress;
 
     [Test]
+    procedure Start_WithoutRequestStateKey_WarnsOnce;
+
+    [Test]
     procedure EndpointInfoPath_AnswersJson;
 
     [Test]
@@ -191,6 +194,8 @@ implementation
 
 uses
   System.Threading,
+  MCPServer.Logger,
+  MCPServer.RequestState,
   MCPServer.Tests.Support;
 
 const
@@ -582,6 +587,28 @@ begin
   Assert.AreEqual(1, Integer(Length(Addresses)));
   Assert.IsTrue(Addresses[0].StartsWith('127.0.0.1:'), Addresses[0]);
   Assert.AreEqual(200, Post(LEGACY_PING, []).Status);
+end;
+
+procedure THttpTransportTests.Start_WithoutRequestStateKey_WarnsOnce;
+begin
+  FSettings.RequestStateKey := '';
+  const Warnings = TStringList.Create;
+  try
+    TLogger.OnLogMessage :=
+      procedure(const Message: string)
+      begin
+        const IsKeyWarning = Message.Contains(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
+        if IsKeyWarning then
+          Warnings.Add(Message);
+      end;
+
+    StartServer;
+
+    Assert.AreEqual(1, Warnings.Count, 'an HTTP server can be restarted or balanced, so it says so once');
+  finally
+    TLogger.OnLogMessage := nil;
+    Warnings.Free;
+  end;
 end;
 
 procedure THttpTransportTests.EndpointInfoPath_AnswersJson;

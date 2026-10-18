@@ -65,12 +65,17 @@ type
 
     [Test]
     procedure Listen_Eof_ClosesGracefully;
+
+    [Test]
+    procedure UnsetRequestStateKey_IsNotWarnedAbout;
   end;
 
 implementation
 
 uses
-  System.Diagnostics;
+  System.Diagnostics,
+  MCPServer.Logger,
+  MCPServer.RequestState;
 
 const
   INITIALIZE = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}';
@@ -362,6 +367,28 @@ begin
     Assert.AreEqual(9, TJSONNumber(TJSONObject(Response.FindValue('result._meta')).GetValue(MCP_META_SUBSCRIPTION_ID)).AsInt);
   finally
     Response.Free;
+  end;
+end;
+
+procedure TStdioTransportTests.UnsetRequestStateKey_IsNotWarnedAbout;
+begin
+  FHarness.Settings.RequestStateKey := '';
+  const Warnings = TStringList.Create;
+  try
+    TLogger.OnLogMessage :=
+      procedure(const Message: string)
+      begin
+        const IsKeyWarning = Message.Contains(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
+        if IsKeyWarning then
+          Warnings.Add(Message);
+      end;
+
+    Run([INITIALIZE]);
+
+    Assert.AreEqual(0, Warnings.Count, 'a stdio server lives exactly as long as its one client');
+  finally
+    TLogger.OnLogMessage := nil;
+    Warnings.Free;
   end;
 end;
 
