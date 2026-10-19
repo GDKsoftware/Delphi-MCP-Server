@@ -154,17 +154,25 @@ type
     [TestCase('SingleDigits', '"2026-1-5"')]
     [TestCase('SignedYear', '"+026-10-18"')]
     [TestCase('TrailingNewline', '"2026-10-18\n"')]
-    [TestCase('Number', '20261018')]
+    [TestCase('DateAsNumber', '20261018')]
     procedure Date_NotAnIsoDate_Raises(const Json: string);
 
     [Test]
-    procedure Time_Iso8601_RoundTrip;
+    [TestCase('WholeSeconds', '0,"14:30:05"')]
+    [TestCase('WithMilliseconds', '250,"14:30:05.250"')]
+    procedure Time_Iso8601_RoundTrip(const Milliseconds: Integer; const Expected: string);
 
     [Test]
-    procedure Time_WithMilliseconds_KeepsThem;
+    procedure Time_WithADatePart_WritesTheTimeOnly;
 
     [Test]
     procedure Time_WithoutSeconds_IsRead;
+
+    [Test]
+    [TestCase('OneDigit', '"14:30:05.5",500')]
+    [TestCase('TwoDigits', '"14:30:05.12",120')]
+    [TestCase('MoreDigitsAreCutOff', '"14:30:05.123987",123')]
+    procedure Time_Fraction_IsReadAsMilliseconds(const Json: string; const Expected: Integer);
 
     [Test]
     [TestCase('Utc', '"14:30:00Z"')]
@@ -173,7 +181,7 @@ type
     [TestCase('PastMidnight', '"24:00:00"')]
     [TestCase('NoSuchMinute', '"14:60"')]
     [TestCase('EmptyFraction', '"14:30:00."')]
-    [TestCase('Number', '1430')]
+    [TestCase('TimeAsNumber', '1430')]
     procedure Time_NotAnIsoTime_Raises(const Json: string);
 
     [Test]
@@ -282,7 +290,8 @@ uses
   MCPServer.Serializer;
 
 const
-  ISO_DAY_TEXT = '"2026-10-18"';
+  ISO_DAY_TEXT   = '"2026-10-18"';
+  ISO_TIME_TEXT  = '"14:30:05"';
   TIME_TOLERANCE = OneMillisecond / 2;
 
 { TMarshalLine }
@@ -470,32 +479,29 @@ begin
   ExpectArgumentError(Json, DateType, 'expected an ISO 8601 date (yyyy-mm-dd)');
 end;
 
-procedure TMarshalTests.Time_Iso8601_RoundTrip;
+procedure TMarshalTests.Time_Iso8601_RoundTrip(const Milliseconds: Integer; const Expected: string);
 begin
   const TimeType = RttiTypeOf(TypeInfo(TTime));
-  const At: TTime = EncodeTime(14, 30, 5, 0);
+  const At: TTime = EncodeTime(14, 30, 5, Word(Milliseconds));
   const Value = TValue.From<TTime>(At);
 
   const Text = ToJsonText(Value, TimeType);
   const Back = FromJson(Text, TimeType);
 
   const Restored = Back.AsType<TTime>;
-  Assert.AreEqual('"14:30:05"', Text);
+  Assert.AreEqual(Expected, Text);
   Assert.AreEqual(Double(At), Double(Restored), TIME_TOLERANCE);
 end;
 
-procedure TMarshalTests.Time_WithMilliseconds_KeepsThem;
+procedure TMarshalTests.Time_WithADatePart_WritesTheTimeOnly;
 begin
   const TimeType = RttiTypeOf(TypeInfo(TTime));
-  const At: TTime = EncodeTime(14, 30, 5, 250);
-  const Value = TValue.From<TTime>(At);
+  const WithADate: TTime = EncodeDateTime(2026, 10, 18, 14, 30, 5, 0);
+  const Value = TValue.From<TTime>(WithADate);
 
   const Text = ToJsonText(Value, TimeType);
-  const Back = FromJson(Text, TimeType);
 
-  const Restored = Back.AsType<TTime>;
-  Assert.AreEqual('"14:30:05.250"', Text);
-  Assert.AreEqual(Double(At), Double(Restored), TIME_TOLERANCE);
+  Assert.AreEqual(ISO_TIME_TEXT, Text);
 end;
 
 procedure TMarshalTests.Time_WithoutSeconds_IsRead;
@@ -507,6 +513,17 @@ begin
 
   const Restored = Back.AsType<TTime>;
   Assert.AreEqual(Double(Expected), Double(Restored), TIME_TOLERANCE);
+end;
+
+procedure TMarshalTests.Time_Fraction_IsReadAsMilliseconds(const Json: string; const Expected: Integer);
+begin
+  const TimeType = RttiTypeOf(TypeInfo(TTime));
+
+  const Back = FromJson(Json, TimeType);
+
+  const Restored = Back.AsType<TTime>;
+  const Milliseconds: Integer = MilliSecondOf(Restored);
+  Assert.AreEqual(Expected, Milliseconds);
 end;
 
 procedure TMarshalTests.Time_NotAnIsoTime_Raises(const Json: string);

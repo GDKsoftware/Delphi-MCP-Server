@@ -41,7 +41,7 @@ type
     class function GetEnumValueNames(const EnumType: TRttiEnumerationType): string;
     class function ConvertValueToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
     class function ConvertFloatToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
-    class function TryCalendarText(const Value: Double; const RttiType: TRttiType; out Text: string): Boolean;
+    class function TryFormatCalendarValue(const Value: Double; const RttiType: TRttiType; out Text: string): Boolean;
     class function IsoDateText(const Value: TDate): string;
     class function IsoTimeText(const Value: TTime): string;
     class function ConvertRecordToJson(const Value: TValue; const RttiType: TRttiType): TJSONValue;
@@ -94,26 +94,28 @@ uses
   MCPServer.Types;
 
 const
-  MESSAGE_EXPECTED_INTEGER = 'expected an integer';
-  MESSAGE_EXPECTED_OBJECT = 'expected an object';
-  MESSAGE_EXPECTED_UUID = 'expected a UUID string';
+  MESSAGE_EXPECTED_INTEGER   = 'expected an integer';
+  MESSAGE_EXPECTED_OBJECT    = 'expected an object';
+  MESSAGE_EXPECTED_UUID      = 'expected a UUID string';
   MESSAGE_EXPECTED_DATE_TIME = 'expected an ISO 8601 date-time';
-  MESSAGE_EXPECTED_DATE = 'expected an ISO 8601 date (yyyy-mm-dd)';
-  MESSAGE_EXPECTED_TIME = 'expected an ISO 8601 time of day (hh:mm:ss), without a zone offset';
+  MESSAGE_EXPECTED_DATE      = 'expected an ISO 8601 date (yyyy-mm-dd)';
+  MESSAGE_EXPECTED_TIME      = 'expected an ISO 8601 time of day (hh:mm:ss), without a zone offset';
 
-  ISO_DATE_FORMAT = 'yyyy"-"mm"-"dd';
-  ISO_TIME_FORMAT = 'hh":"nn":"ss';
+  MESSAGE_UNSUPPORTED_CALENDAR_KIND = 'Unsupported calendar kind: %d';
+
+  ISO_DATE_FORMAT                   = 'yyyy"-"mm"-"dd';
+  ISO_TIME_FORMAT                   = 'hh":"nn":"ss';
   ISO_TIME_WITH_MILLISECONDS_FORMAT = 'hh":"nn":"ss"."zzz';
-  ISO_DATE_PATTERN = '\A([0-9]{4})-([0-9]{2})-([0-9]{2})\z';
-  ISO_TIME_PATTERN = '\A([0-9]{2}):([0-9]{2})(?::([0-9]{2})(?:\.([0-9]+))?)?\z';
-  ISO_YEAR_GROUP = 1;
-  ISO_MONTH_GROUP = 2;
-  ISO_DAY_GROUP = 3;
-  ISO_HOUR_GROUP = 1;
-  ISO_MINUTE_GROUP = 2;
-  ISO_SECOND_GROUP = 3;
-  ISO_FRACTION_GROUP = 4;
-  MILLISECOND_DIGITS = 3;
+  ISO_DATE_PATTERN                  = '\A([0-9]{4})-([0-9]{2})-([0-9]{2})\z';
+  ISO_TIME_PATTERN                  = '\A' + ISO_TIME_OF_DAY_PATTERN + '\z';
+  ISO_YEAR_GROUP                    = 1;
+  ISO_MONTH_GROUP                   = 2;
+  ISO_DAY_GROUP                     = 3;
+  ISO_HOUR_GROUP                    = 1;
+  ISO_MINUTE_GROUP                  = 2;
+  ISO_SECOND_GROUP                  = 3;
+  ISO_FRACTION_GROUP                = 4;
+  MILLISECOND_DIGITS                = 3;
 
   OWNERSHIP_BEARING_KINDS = [tkClass, tkDynArray, tkRecord, tkMRecord];
 
@@ -412,18 +414,15 @@ end;
 
 class function TMCPSerializer.ConvertJsonToFloat(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
 begin
-  const IsDateTime = (RttiType.Handle = TypeInfo(TDateTime));
-  const IsDate = (RttiType.Handle = TypeInfo(TDate));
-  const IsTime = (RttiType.Handle = TypeInfo(TTime));
-
-  if IsDateTime then
-    Result := ConvertJsonToDateTime(JsonValue)
-  else if IsDate then
-    Result := ConvertJsonToDate(JsonValue)
-  else if IsTime then
-    Result := ConvertJsonToTime(JsonValue)
+  const Kind = TMCPCalendarKind.FromType(RttiType.Handle);
+  case Kind of
+    TMCPCalendarKind.None     : Result := ConvertJsonToNumber(JsonValue);
+    TMCPCalendarKind.DateTime : Result := ConvertJsonToDateTime(JsonValue);
+    TMCPCalendarKind.Date     : Result := ConvertJsonToDate(JsonValue);
+    TMCPCalendarKind.Time     : Result := ConvertJsonToTime(JsonValue);
   else
-    Result := ConvertJsonToNumber(JsonValue);
+    raise ENotSupportedException.CreateFmt(MESSAGE_UNSUPPORTED_CALENDAR_KIND, [Ord(Kind)]);
+  end;
 end;
 
 class function TMCPSerializer.ConvertJsonToNumber(const JsonValue: TJSONValue): TValue;
@@ -450,12 +449,12 @@ end;
 
 class function TMCPSerializer.ConvertJsonToDate(const JsonValue: TJSONValue): TValue;
 begin
-  var Day: TDate;
-  const IsIsoDate = (IsJsonString(JsonValue) and TryParseIsoDate(JsonValue.Value, Day));
+  var ParsedDate: TDate;
+  const IsIsoDate = (IsJsonString(JsonValue) and TryParseIsoDate(JsonValue.Value, ParsedDate));
   if not IsIsoDate then
     raise EArgumentException.Create(MESSAGE_EXPECTED_DATE);
 
-  Result := TValue.From<TDate>(Day);
+  Result := TValue.From<TDate>(ParsedDate);
 end;
 
 class function TMCPSerializer.ConvertJsonToTime(const JsonValue: TJSONValue): TValue;
@@ -475,9 +474,9 @@ begin
   if not Match.Success then
     Exit(False);
 
-  const Year = GroupNumber(Match, ISO_YEAR_GROUP);
+  const Year  = GroupNumber(Match, ISO_YEAR_GROUP);
   const Month = GroupNumber(Match, ISO_MONTH_GROUP);
-  const Day = GroupNumber(Match, ISO_DAY_GROUP);
+  const Day   = GroupNumber(Match, ISO_DAY_GROUP);
 
   var Encoded: TDateTime;
   Result := TryEncodeDate(Year, Month, Day, Encoded);
@@ -492,10 +491,10 @@ begin
   if not Match.Success then
     Exit(False);
 
-  const Hour = GroupNumber(Match, ISO_HOUR_GROUP);
-  const Minute = GroupNumber(Match, ISO_MINUTE_GROUP);
-  const Second = GroupNumber(Match, ISO_SECOND_GROUP);
-  const Fraction = GroupText(Match, ISO_FRACTION_GROUP);
+  const Hour         = GroupNumber(Match, ISO_HOUR_GROUP);
+  const Minute       = GroupNumber(Match, ISO_MINUTE_GROUP);
+  const Second       = GroupNumber(Match, ISO_SECOND_GROUP);
+  const Fraction     = GroupText(Match, ISO_FRACTION_GROUP);
   const Milliseconds = FractionToMilliseconds(Fraction);
 
   var Encoded: TDateTime;
@@ -526,9 +525,9 @@ begin
   if Fraction.IsEmpty then
     Exit(0);
 
-  const Padded = Fraction.PadRight(MILLISECOND_DIGITS, '0');
+  const Padded            = Fraction.PadRight(MILLISECOND_DIGITS, '0');
   const MillisecondDigits = Padded.Substring(0, MILLISECOND_DIGITS);
-  const Number = StrToInt(MillisecondDigits);
+  const Number            = StrToInt(MillisecondDigits);
   Result := Word(Number);
 end;
 
@@ -851,7 +850,7 @@ class function TMCPSerializer.ConvertFloatToJson(const Value: TValue; const Rtti
 begin
   const Number = Value.AsExtended;
   var Text: string;
-  const IsCalendarValue = TryCalendarText(Number, RttiType, Text);
+  const IsCalendarValue = TryFormatCalendarValue(Number, RttiType, Text);
 
   if IsCalendarValue then
     Result := TJSONString.Create(Text)
@@ -859,29 +858,25 @@ begin
     Result := TJSONNumber.Create(Number);
 end;
 
-class function TMCPSerializer.TryCalendarText(const Value: Double; const RttiType: TRttiType;
-  out Text: string): Boolean;
+class function TMCPSerializer.TryFormatCalendarValue(const Value: Double; const RttiType: TRttiType; out Text: string): Boolean;
 begin
-  const IsDateTime = (RttiType.Handle = TypeInfo(TDateTime));
-  const IsDate = (RttiType.Handle = TypeInfo(TDate));
-  const IsTime = (RttiType.Handle = TypeInfo(TTime));
-
-  if IsDateTime then
-    Text := DateToISO8601(Value, False)
-  else if IsDate then
-    Text := IsoDateText(Value)
-  else if IsTime then
-    Text := IsoTimeText(Value)
+  const Kind = TMCPCalendarKind.FromType(RttiType.Handle);
+  case Kind of
+    TMCPCalendarKind.None     : Text := '';
+    TMCPCalendarKind.DateTime : Text := DateToISO8601(Value, False);
+    TMCPCalendarKind.Date     : Text := IsoDateText(Value);
+    TMCPCalendarKind.Time     : Text := IsoTimeText(Value);
   else
-    Text := '';
+    raise ENotSupportedException.CreateFmt(MESSAGE_UNSUPPORTED_CALENDAR_KIND, [Ord(Kind)]);
+  end;
 
-  Result := (IsDateTime or IsDate or IsTime);
+  Result := (Kind <> TMCPCalendarKind.None);
 end;
 
 class function TMCPSerializer.IsoDateText(const Value: TDate): string;
 begin
-  const Day = DateOf(Value);
-  Result := FormatDateTime(ISO_DATE_FORMAT, Day, TFormatSettings.Invariant);
+  const DateWithoutTime = DateOf(Value);
+  Result := FormatDateTime(ISO_DATE_FORMAT, DateWithoutTime, TFormatSettings.Invariant);
 end;
 
 class function TMCPSerializer.IsoTimeText(const Value: TTime): string;

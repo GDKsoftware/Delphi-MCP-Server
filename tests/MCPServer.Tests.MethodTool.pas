@@ -218,10 +218,9 @@ type
     procedure RecordParameter_WrongFieldTypeRaisesArgumentException;
 
     [Test]
-    procedure DateParameterAndResult_TravelAsIsoDates;
-
-    [Test]
-    procedure TimeParameterAndResult_TravelAsIsoTimes;
+    [TestCase('Date', 'NextDay,{"day":"2026-10-18"},2026-10-19')]
+    [TestCase('Time', 'QuarterLater,{"at":"14:30:00"},14:45:00')]
+    procedure CalendarParameterAndResult_TravelAsIsoText(const MethodName: string; const ArgumentsJson: string; const Expected: string);
 
     [Test]
     procedure DateParameter_NotAnIsoDate_RaisesArgumentException;
@@ -951,25 +950,14 @@ begin
     EArgumentException);
 end;
 
-procedure TMethodToolTests.DateParameterAndResult_TravelAsIsoDates;
+procedure TMethodToolTests.CalendarParameterAndResult_TravelAsIsoText(const MethodName: string; const ArgumentsJson: string; const Expected: string);
 begin
-  const Tool = ToolFor('NextDay');
+  const Tool = ToolFor(MethodName);
 
-  const Answer = Run(Tool, '{"day":"2026-10-18"}');
+  const Answer = Run(Tool, ArgumentsJson);
   try
-    Assert.AreEqual('2026-10-19', Answer.GetValue<string>(MCP_KEY_RESULT));
-  finally
-    Answer.Free;
-  end;
-end;
-
-procedure TMethodToolTests.TimeParameterAndResult_TravelAsIsoTimes;
-begin
-  const Tool = ToolFor('QuarterLater');
-
-  const Answer = Run(Tool, '{"at":"14:30:00"}');
-  try
-    Assert.AreEqual('14:45:00', Answer.GetValue<string>(MCP_KEY_RESULT));
+    const Text = Answer.GetValue<string>(MCP_KEY_RESULT);
+    Assert.AreEqual(Expected, Text);
   finally
     Answer.Free;
   end;
@@ -982,7 +970,8 @@ begin
   Assert.WillRaiseWithMessageRegex(
     procedure
     begin
-      Run(Tool, '{"day":"18-10-2026"}').Free;
+      const Answer = Run(Tool, '{"day":"18-10-2026"}');
+      Answer.Free;
     end,
     EArgumentException,
     'Parameter "day": expected an ISO 8601 date');
