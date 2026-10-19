@@ -31,15 +31,18 @@ type
     FTaskStore: IMCPTaskStore;
     FSeedFromGlobalRegistry: Boolean;
     procedure BuildManagers;
-    procedure BuildTasksManager;
     procedure HideDiagnosticsResources;
+    procedure BuildTasksManager;
     function GetManagerRegistry: IMCPManagerRegistry;
     function GetCoreManager: IMCPCapabilityManager;
     procedure SetSeedFromGlobalRegistry(const Value: Boolean);
     procedure SetTaskStore(const Value: IMCPTaskStore);
     function GetTasks: TMCPTasksManager;
+
   protected
     procedure EnsureManagers;
+    procedure ShutdownTasks;
+
   public
     constructor Create; overload;
     constructor Create(const SettingsFile: string); overload;
@@ -114,101 +117,12 @@ end;
 
 destructor TMCPStdioHost.Destroy;
 begin
-  if Assigned(FTasksManager) then
-    FTasksManager.Shutdown;
+  ShutdownTasks;
   FCoreManager := nil;
   FManagerRegistry := nil;
   if FOwnsSettings then
     FSettings.Free;
   inherited;
-end;
-
-procedure TMCPStdioHost.BuildManagers;
-begin
-  FManagerRegistry := TMCPManagerRegistry.Create;
-  FCoreManager := TMCPCoreManager.Create(FSettings);
-  FToolsManager := TMCPToolsManager.Create(FSeedFromGlobalRegistry);
-  FResourcesManager := TMCPResourcesManager.Create(FSeedFromGlobalRegistry);
-  FPromptsManager := TMCPPromptsManager.Create(FSeedFromGlobalRegistry);
-  FSubscriptionsManager := TMCPSubscriptionsManager.Create;
-
-  if not FSettings.ExposeDiagnosticsResources then
-    HideDiagnosticsResources;
-
-  FToolsManager.ChangeNotifier := FSubscriptionsManager;
-  FResourcesManager.ChangeNotifier := FSubscriptionsManager;
-  FPromptsManager.ChangeNotifier := FSubscriptionsManager;
-
-  FManagerRegistry.RegisterManager(FCoreManager);
-  FManagerRegistry.RegisterManager(FToolsManager);
-  FManagerRegistry.RegisterManager(FResourcesManager);
-  FManagerRegistry.RegisterManager(FPromptsManager);
-  FManagerRegistry.RegisterManager(TMCPCompletionManager.Create(FPromptsManager, FResourcesManager));
-  FManagerRegistry.RegisterManager(FSubscriptionsManager);
-
-  if FSettings.TasksEnabled then
-    BuildTasksManager;
-end;
-
-procedure TMCPStdioHost.BuildTasksManager;
-begin
-  if not Assigned(FTaskStore) then
-    FTaskStore := TMCPInMemoryTaskStore.Create;
-
-  FTasksManager := TMCPTasksManager.Create(FTaskStore, FSettings.TaskTtlMs, FSettings.TaskPollIntervalMs,
-                                           FSettings.MaxRunningTasks);
-  FToolsManager.TaskService := FTasksManager;
-  FManagerRegistry.RegisterManager(FTasksManager);
-end;
-
-procedure TMCPStdioHost.HideDiagnosticsResources;
-begin
-  FResourcesManager.RemoveResource(URI_LOGS_RECENT);
-  FResourcesManager.RemoveResource(URI_SERVER_STATUS);
-  FResourcesManager.RemoveResourceTemplate(URI_TEMPLATE_LOGS_BY_LEVEL);
-end;
-
-procedure TMCPStdioHost.EnsureManagers;
-begin
-  if not Assigned(FManagerRegistry) then
-    BuildManagers;
-end;
-
-function TMCPStdioHost.GetManagerRegistry: IMCPManagerRegistry;
-begin
-  EnsureManagers;
-  Result := FManagerRegistry;
-end;
-
-function TMCPStdioHost.GetCoreManager: IMCPCapabilityManager;
-begin
-  EnsureManagers;
-  Result := FCoreManager;
-end;
-
-procedure TMCPStdioHost.SetSeedFromGlobalRegistry(const Value: Boolean);
-begin
-  if Value = FSeedFromGlobalRegistry then
-    Exit;
-
-  if Assigned(FManagerRegistry) then
-    raise EMCPConfigurationError.Create('SeedFromGlobalRegistry must be set before the host builds its managers');
-
-  FSeedFromGlobalRegistry := Value;
-end;
-
-procedure TMCPStdioHost.SetTaskStore(const Value: IMCPTaskStore);
-begin
-  if Assigned(FManagerRegistry) then
-    raise EMCPConfigurationError.Create('TaskStore must be set before the host builds its managers');
-
-  FTaskStore := Value;
-end;
-
-function TMCPStdioHost.GetTasks: TMCPTasksManager;
-begin
-  EnsureManagers;
-  Result := FTasksManager;
 end;
 
 procedure TMCPStdioHost.AddTool(const Tool: IMCPTool);
@@ -265,6 +179,103 @@ begin
   finally
     Transport.Free;
   end;
+end;
+
+procedure TMCPStdioHost.EnsureManagers;
+begin
+  if not Assigned(FManagerRegistry) then
+    BuildManagers;
+end;
+
+procedure TMCPStdioHost.ShutdownTasks;
+begin
+  if not Assigned(FTasksManager) then
+    Exit;
+
+  FTasksManager.Shutdown;
+  FTasksManager := nil;
+end;
+
+procedure TMCPStdioHost.BuildManagers;
+begin
+  FManagerRegistry := TMCPManagerRegistry.Create;
+  FCoreManager := TMCPCoreManager.Create(FSettings);
+  FToolsManager := TMCPToolsManager.Create(FSeedFromGlobalRegistry);
+  FResourcesManager := TMCPResourcesManager.Create(FSeedFromGlobalRegistry);
+  FPromptsManager := TMCPPromptsManager.Create(FSeedFromGlobalRegistry);
+  FSubscriptionsManager := TMCPSubscriptionsManager.Create;
+
+  if not FSettings.ExposeDiagnosticsResources then
+    HideDiagnosticsResources;
+
+  FToolsManager.ChangeNotifier := FSubscriptionsManager;
+  FResourcesManager.ChangeNotifier := FSubscriptionsManager;
+  FPromptsManager.ChangeNotifier := FSubscriptionsManager;
+
+  FManagerRegistry.RegisterManager(FCoreManager);
+  FManagerRegistry.RegisterManager(FToolsManager);
+  FManagerRegistry.RegisterManager(FResourcesManager);
+  FManagerRegistry.RegisterManager(FPromptsManager);
+  FManagerRegistry.RegisterManager(TMCPCompletionManager.Create(FPromptsManager, FResourcesManager));
+  FManagerRegistry.RegisterManager(FSubscriptionsManager);
+
+  if FSettings.TasksEnabled then
+    BuildTasksManager;
+end;
+
+procedure TMCPStdioHost.HideDiagnosticsResources;
+begin
+  FResourcesManager.RemoveResource(URI_LOGS_RECENT);
+  FResourcesManager.RemoveResource(URI_SERVER_STATUS);
+  FResourcesManager.RemoveResourceTemplate(URI_TEMPLATE_LOGS_BY_LEVEL);
+end;
+
+procedure TMCPStdioHost.BuildTasksManager;
+begin
+  if not Assigned(FTaskStore) then
+    FTaskStore := TMCPInMemoryTaskStore.Create;
+
+  FTasksManager := TMCPTasksManager.Create(FTaskStore, FSettings.TaskTtlMs, FSettings.TaskPollIntervalMs,
+                                           FSettings.MaxRunningTasks);
+  FToolsManager.TaskService := FTasksManager;
+  FManagerRegistry.RegisterManager(FTasksManager);
+end;
+
+function TMCPStdioHost.GetManagerRegistry: IMCPManagerRegistry;
+begin
+  EnsureManagers;
+  Result := FManagerRegistry;
+end;
+
+function TMCPStdioHost.GetCoreManager: IMCPCapabilityManager;
+begin
+  EnsureManagers;
+  Result := FCoreManager;
+end;
+
+procedure TMCPStdioHost.SetSeedFromGlobalRegistry(const Value: Boolean);
+begin
+  if Value = FSeedFromGlobalRegistry then
+    Exit;
+
+  if Assigned(FManagerRegistry) then
+    raise EMCPConfigurationError.Create('SeedFromGlobalRegistry must be set before the host builds its managers');
+
+  FSeedFromGlobalRegistry := Value;
+end;
+
+procedure TMCPStdioHost.SetTaskStore(const Value: IMCPTaskStore);
+begin
+  if Assigned(FManagerRegistry) then
+    raise EMCPConfigurationError.Create('TaskStore must be set before the host builds its managers');
+
+  FTaskStore := Value;
+end;
+
+function TMCPStdioHost.GetTasks: TMCPTasksManager;
+begin
+  EnsureManagers;
+  Result := FTasksManager;
 end;
 
 end.

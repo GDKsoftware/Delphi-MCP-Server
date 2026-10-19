@@ -13,6 +13,7 @@ type
     FServer: TMCPIdHTTPServer;
     FAuthorizer: IMCPAuthorizer;
     FActive: Boolean;
+
   public
     destructor Destroy; override;
 
@@ -31,6 +32,7 @@ implementation
 destructor TMCPServerHost.Destroy;
 begin
   Stop;
+  ShutdownTasks;
   FServer.Free;
   inherited;
 end;
