@@ -185,19 +185,27 @@ transport does both:
 
 1. It reads nothing more and lets the requests it already has, running or
    queued, finish and answer, for up to `[Server] StdioShutdownDrainMs`
-   (2000 by default, `TMCPSettings.StdioShutdownDrainMs` in code).
+   (2000 by default, `TMCPSettings.StdioShutdownDrainMs` in code; a negative
+   value counts as 0). A library consumer that sets
+   `TMCPStdioTransport.ShutdownDrainMs` overrides the setting, whichever of
+   the two it sets first.
 2. What is still running or queued after that is answered with `-32603`
    "Server is shutting down", and the running ones are cancelled. A queued
-   request is never started, so it has no side effects.
+   request is never started, so it has no side effects. The same goes for a
+   `subscriptions/listen` that has not closed by then.
 3. A request the client cancelled with `notifications/cancelled` gets no
    answer, as the cancellation rules ask.
 
 Every request gets exactly one answer, also when a handler ignores its
 cancellation: the transport answers it with the error after a short grace and
-drops the result the handler produces later. The default bound suits a client
-that closes stdin to stop the server and waits only briefly before it
-terminates the process. For a client that pipes a batch of requests in and
-closes stdin at once, raise the bound so the batch fits in it.
+drops the result the handler produces later, even when that comes after the
+transport and its host are freed. A handler that cancels itself while the
+server keeps running gets `-32603` "Request was cancelled".
+
+The default bound suits a client that closes stdin to stop the server and
+waits only briefly before it terminates the process. For a client that pipes
+a batch of requests in and closes stdin at once, raise the bound so the batch
+fits in it.
 
 ### Change notifications (`subscriptions/listen`)
 
@@ -496,12 +504,16 @@ their schema announces:
 |---|---|---|---|
 | `TDateTime` | `string`, `format: date-time` | `2026-10-18T14:30:00.000+02:00` | any ISO 8601 date-time |
 | `TDate` | `string`, `format: date` | `2026-10-18` | `yyyy-mm-dd` only |
-| `TTime` | `string`, `format: time` | `14:30:00`, or `14:30:00.250` | `hh:mm`, `hh:mm:ss`, `hh:mm:ss.fff` |
+| `TTime` | `string` with a `pattern` and a description | `14:30:00`, or `14:30:00.250` | `hh:mm`, `hh:mm:ss`, `hh:mm:ss.fff` |
 
 A `TDate` is written without its time of day and a `TTime` without its date.
 A `TTime` carries no zone, so it is written without an offset, and a time with
-`Z` or an offset is refused rather than read as something it is not. A value
-of the wrong shape is refused with the shape the parameter expects.
+`Z` or an offset is refused rather than read as something it is not. That is
+why its schema has no `format: time`: JSON Schema defines that as RFC 3339
+`full-time`, which requires seconds and a zone offset. The `pattern` accepts
+exactly the text the server reads. A value of the wrong shape is refused with
+the shape the parameter expects. `[SchemaDescription]` and `[SchemaPattern]`
+on a `TTime` replace the generated description and pattern.
 
 #### Records in a schema
 

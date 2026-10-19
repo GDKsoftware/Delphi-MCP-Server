@@ -110,7 +110,10 @@ and `TDateTime` as an ISO 8601 string. The `logs://recent` timestamps and the
 **A `TDate` or `TTime` value is a string.** As a result it used to go out as
 the number Delphi stores, which contradicted its own output schema
 (`format: date`, `format: time`), and as an argument it could not be sent at
-all. A client that read the number reads `2026-10-18` or `14:30:00` now.
+all. A client that read the number reads `2026-10-18` or `14:30:00` now. The
+schema of a `TTime` no longer says `format: time` but carries a `pattern`
+for `hh:mm`, `hh:mm:ss` and `hh:mm:ss.fff`; a client that sent a time with a
+zone offset because of that format is refused.
 
 **Tools and resources are listed in registration order.** Anything that
 depended on the previous dictionary order should use the names instead.
@@ -141,8 +144,9 @@ since it was already required by the specification.
 
 **The server exits promptly when stdin closes, and answers every request
 first**, even with a request still running: it lets the requests it already
-read finish for up to `[Server] StdioShutdownDrainMs` (2000 by default; also
-`TMCPStdioTransport.ShutdownDrainMs` for a library consumer), then cancels
+read finish for up to `[Server] StdioShutdownDrainMs` (2000 by default;
+`TMCPStdioTransport.ShutdownDrainMs`, when a library consumer sets it, wins
+over the setting), then cancels
 what is left rather than blocking forever. What it cancels that way, and
 what was still queued, is answered with `-32603` "Server is shutting down";
 before, those requests got no response at all. A request the client
