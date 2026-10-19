@@ -194,7 +194,6 @@ implementation
 
 uses
   System.Threading,
-  MCPServer.Logger,
   MCPServer.RequestState,
   MCPServer.Tests.Support;
 
@@ -592,21 +591,12 @@ end;
 procedure THttpTransportTests.Start_WithoutRequestStateKey_WarnsOnce;
 begin
   FSettings.RequestStateKey := '';
-  const Warnings = TStringList.Create;
+  const Warnings = TMCPTestLogWatch.Create(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
   try
-    TLogger.OnLogMessage :=
-      procedure(const Message: string)
-      begin
-        const IsKeyWarning = Message.Contains(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
-        if IsKeyWarning then
-          Warnings.Add(Message);
-      end;
-
     StartServer;
 
-    Assert.AreEqual(1, Warnings.Count, 'an HTTP server can be restarted or balanced, so it says so once');
+    Assert.AreEqual(1, Warnings.MatchCount, 'an HTTP server can be restarted or balanced, so it says so once');
   finally
-    TLogger.OnLogMessage := nil;
     Warnings.Free;
   end;
 end;

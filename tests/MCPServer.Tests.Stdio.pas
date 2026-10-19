@@ -7,45 +7,32 @@ uses
   System.SysUtils,
   System.Classes,
   System.JSON,
-  System.Rtti,
-  System.SyncObjs,
   MCPServer.Types,
-  MCPServer.Tool.Base,
   MCPServer.StdioTransport,
   MCPServer.Tests.Harness;
 
 type
-  TStubbornTool = class(TMCPToolBase)
-  strict private
-    FReleased: TEvent;
-    FReturned: TEvent;
-  protected
-    function BuildSchema: TJSONObject; override;
-    function DoExecute(const Arguments: TJSONObject): TValue; override;
-  public
-    constructor Create; override;
-    destructor Destroy; override;
-
-    procedure Release;
-    function WaitUntilReturned: Boolean;
-  end;
-
   [TestFixture]
   TStdioTransportTests = class
   private
-    const KEEP_THE_SETTINGS_DRAIN = -1;
-  private
-    FHarness: TMCPTestHarness;
-    FOutputBytes: TBytes;
-    FElapsedMs: Int64;
-    function Run(const Lines: array of string; DrainMs: Integer = KEEP_THE_SETTINGS_DRAIN;
-      const Separator: string = #10): TArray<string>;
-    function OutputLines(const Output: TBytesStream): TArray<string>;
-    procedure AssertShuttingDownError(const Lines: TArray<string>; const Id: string);
+    const
+      KEEP_THE_SETTINGS_DRAIN = -1;
+      LINE_FEED               = #10;
+    var
+      FHarness: TMCPTestHarness;
+      FOutputBytes: TBytes;
+      FElapsedMs: Int64;
+    function Run(const Lines: array of string; const DrainMs: Integer = KEEP_THE_SETTINGS_DRAIN; const Separator: string = LINE_FEED): TArray<string>;
+    function JoinLines(const Lines: array of string; const Separator: string): string;
+    procedure RunInto(const Output: TBytesStream; const Registry: IMCPManagerRegistry; const Input: string; const DrainMs: Integer);
+    function ReadOutput(const Output: TBytesStream): TArray<string>;
+    procedure AssertLineCount(const Lines: TArray<string>; const Expected: Integer; const Reason: string);
+    procedure AssertErrorAnswer(const Lines: TArray<string>; const Id: string; const MessageFragment: string);
     function ParseLine(const Line: string): TJSONObject;
     function FindById(const Lines: TArray<string>; const Id: string): TJSONObject;
     function GetById(const Lines: TArray<string>; const Id: string): TJSONObject;
     function FindNotification(const Lines: TArray<string>; const Method: string): TJSONObject;
+
   public
     [Setup]
     procedure Setup;
@@ -74,6 +61,9 @@ type
     procedure Cancelled_GetsNoResponse_PingIsStillAnswered;
 
     [Test]
+    procedure Cancelled_ByTheHandlerItself_IsNotCalledAShutdown;
+
+    [Test]
     procedure Progress_IsSentBeforeTheResponse;
 
     [Test]
@@ -95,6 +85,18 @@ type
     procedure Eof_HandlerThatIgnoresCancellation_IsAnsweredOnce;
 
     [Test]
+    procedure Eof_ListenerThatOutlivesTheDrain_IsAnsweredWithAnError;
+
+    [Test]
+    procedure Eof_NegativeDrain_AnswersAtOnce;
+
+    [Test]
+    procedure ShutdownDrainMs_SetBeforeTheSettings_IsKept;
+
+    [Test]
+    procedure ShutdownDrainMs_NotSet_FollowsTheSettings;
+
+    [Test]
     procedure Listen_AckThenCancel_HasNoResponse;
 
     [Test]
@@ -108,59 +110,29 @@ implementation
 
 uses
   System.Diagnostics,
-  MCPServer.Logger,
-  MCPServer.RequestState;
+  MCPServer.RequestState,
+  MCPServer.ManagerRegistry,
+  MCPServer.CoreManager,
+  MCPServer.Tool.Base,
+  MCPServer.Tests.Support,
+  MCPServer.Tests.StdioDoubles;
 
 const
-  INITIALIZE = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}';
-  INITIALIZED = '{"jsonrpc":"2.0","method":"notifications/initialized"}';
-  SLOW_CALL = '{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":%d,"stepMs":100}}}';
-  STUBBORN_TOOL_NAME = 'test_stubborn_tool';
-  STUBBORN_CALL = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{}}}';
-  SHUTTING_DOWN = 'shutting down';
-  STUBBORN_WAIT_MS = 10000;
-  LATE_ANSWER_GRACE_MS = 300;
-
-{ TStubbornTool }
-
-constructor TStubbornTool.Create;
-begin
-  inherited Create;
-  FName := STUBBORN_TOOL_NAME;
-  FDescription := 'A tool that never looks at its cancellation';
-  FReleased := TEvent.Create(nil, True, False, '');
-  FReturned := TEvent.Create(nil, True, False, '');
-end;
-
-destructor TStubbornTool.Destroy;
-begin
-  FReturned.Free;
-  FReleased.Free;
-  inherited;
-end;
-
-function TStubbornTool.BuildSchema: TJSONObject;
-begin
-  Result := TJSONObject.ParseJSONValue(
-    '{"type":"object","properties":{},"additionalProperties":false}') as TJSONObject;
-end;
-
-function TStubbornTool.DoExecute(const Arguments: TJSONObject): TValue;
-begin
-  FReleased.WaitFor(STUBBORN_WAIT_MS);
-  FReturned.SetEvent;
-  Result := TValue.From<string>('finished late');
-end;
-
-procedure TStubbornTool.Release;
-begin
-  FReleased.SetEvent;
-end;
-
-function TStubbornTool.WaitUntilReturned: Boolean;
-begin
-  Result := (FReturned.WaitFor(STUBBORN_WAIT_MS) = TWaitResult.wrSignaled);
-end;
+  INITIALIZE           = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}';
+  INITIALIZED          = '{"jsonrpc":"2.0","method":"notifications/initialized"}';
+  SLOW_CALL            = '{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":%d,"stepMs":100}}}';
+  ECHO_CALL            = '{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"echo","arguments":{"message":"quick"}}}';
+  STUBBORN_CALL        = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{}}}';
+  SELF_CANCELLING_CALL = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"' + SELF_CANCELLING_TOOL_NAME + '","arguments":{}}}';
+  STUBBORN_LISTEN      = '{"jsonrpc":"2.0","id":9,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true},' +
+                         TMCPTestMeta.MODERN_MEMBER + '}}';
+  FIRST_TEXT_PATH      = 'result.content[0].text';
+  OUTPUT_SEPARATOR     = ' | ';
+  SHUTTING_DOWN        = 'shutting down';
+  REQUEST_CANCELLED    = 'Request was cancelled';
+  LONG_STEPS           = 600;
+  LISTENER_DRAIN_MS    = 200;
+  QUICK_ANSWER         = 'Echo: quick';
 
 { TStdioTransportTests }
 
@@ -174,49 +146,74 @@ begin
   FHarness.Free;
 end;
 
-function TStdioTransportTests.Run(const Lines: array of string; DrainMs: Integer;
-  const Separator: string): TArray<string>;
+function TStdioTransportTests.Run(const Lines: array of string; const DrainMs: Integer; const Separator: string): TArray<string>;
 begin
-  var Input := '';
+  const Input = JoinLines(Lines, Separator);
+  const Output = TBytesStream.Create;
+  try
+    RunInto(Output, FHarness.ManagerRegistry, Input, DrainMs);
+    Result := ReadOutput(Output);
+  finally
+    Output.Free;
+  end;
+end;
+
+function TStdioTransportTests.JoinLines(const Lines: array of string; const Separator: string): string;
+begin
+  Result := '';
   for var Line in Lines do
   begin
-    Input := Input + Line + Separator;
+    Result := Result + Line + Separator;
   end;
+end;
 
-  var InputStream := TBytesStream.Create(TEncoding.UTF8.GetBytes(Input));
-  var OutputStream := TBytesStream.Create;
-  var Transport := TMCPStdioTransport.Create(FHarness.ManagerRegistry, FHarness.CoreManager);
+procedure TStdioTransportTests.RunInto(const Output: TBytesStream; const Registry: IMCPManagerRegistry; const Input: string; const DrainMs: Integer);
+begin
+  const InputBytes = TEncoding.UTF8.GetBytes(Input);
+  const InputStream = TBytesStream.Create(InputBytes);
   try
-    Transport.Settings := FHarness.Settings;
-    const KeepsTheSettingsDrain = (DrainMs = KEEP_THE_SETTINGS_DRAIN);
-    if not KeepsTheSettingsDrain then
-      Transport.ShutdownDrainMs := DrainMs;
-    var Watch := TStopwatch.StartNew;
-    Transport.RunWith(InputStream, OutputStream);
-    FElapsedMs := Watch.ElapsedMilliseconds;
+    const Transport = TMCPStdioTransport.Create(Registry, FHarness.CoreManager);
+    try
+      Transport.Settings := FHarness.Settings;
+      const KeepsTheSettingsDrain = (DrainMs = KEEP_THE_SETTINGS_DRAIN);
+      if not KeepsTheSettingsDrain then
+        Transport.ShutdownDrainMs := DrainMs;
 
-    FOutputBytes := Copy(OutputStream.Bytes, 0, OutputStream.Size);
-    Result := TEncoding.UTF8.GetString(FOutputBytes).Split([#10], TStringSplitOptions.ExcludeEmpty);
+      var Watch := TStopwatch.StartNew;
+      Transport.RunWith(InputStream, Output);
+      FElapsedMs := Watch.ElapsedMilliseconds;
+    finally
+      Transport.Free;
+    end;
   finally
-    Transport.Free;
-    OutputStream.Free;
     InputStream.Free;
   end;
 end;
 
-function TStdioTransportTests.OutputLines(const Output: TBytesStream): TArray<string>;
+function TStdioTransportTests.ReadOutput(const Output: TBytesStream): TArray<string>;
 begin
-  const Bytes = Copy(Output.Bytes, 0, Output.Size);
-  const Text = TEncoding.UTF8.GetString(Bytes);
-  Result := Text.Split([#10], TStringSplitOptions.ExcludeEmpty);
+  FOutputBytes := Copy(Output.Bytes, 0, Output.Size);
+  const Text = TEncoding.UTF8.GetString(FOutputBytes);
+  Result := Text.Split([LINE_FEED], TStringSplitOptions.ExcludeEmpty);
 end;
 
-procedure TStdioTransportTests.AssertShuttingDownError(const Lines: TArray<string>; const Id: string);
+procedure TStdioTransportTests.AssertLineCount(const Lines: TArray<string>; const Expected: Integer; const Reason: string);
+begin
+  const LineCount = Length(Lines);
+  const Output = string.Join(OUTPUT_SEPARATOR, Lines);
+  const Message = Format('%s: %s', [Reason, Output]);
+  Assert.AreEqual<NativeInt>(Expected, LineCount, Message);
+end;
+
+procedure TStdioTransportTests.AssertErrorAnswer(const Lines: TArray<string>; const Id: string; const MessageFragment: string);
 begin
   const Answer = GetById(Lines, Id);
   try
-    Assert.AreEqual(JSONRPC_INTERNAL_ERROR, Answer.GetValue<Integer>('error.code'), Answer.ToJSON);
-    Assert.Contains(Answer.GetValue<string>('error.message'), SHUTTING_DOWN);
+    const Code = Answer.GetValue<Integer>('error.code');
+    const ErrorMessage = Answer.GetValue<string>('error.message');
+    const AnswerText = Answer.ToJSON;
+    Assert.AreEqual(JSONRPC_INTERNAL_ERROR, Code, AnswerText);
+    Assert.Contains(ErrorMessage, MessageFragment);
   finally
     Answer.Free;
   end;
@@ -244,7 +241,9 @@ end;
 function TStdioTransportTests.GetById(const Lines: TArray<string>; const Id: string): TJSONObject;
 begin
   Result := FindById(Lines, Id);
-  Assert.IsNotNull(Result, Format('no message with id %s in %s', [Id, string.Join(' | ', Lines)]));
+  const Output = string.Join(OUTPUT_SEPARATOR, Lines);
+  const Message = Format('no message with id %s in %s', [Id, Output]);
+  Assert.IsNotNull(Result, Message);
 end;
 
 function TStdioTransportTests.FindNotification(const Lines: TArray<string>; const Method: string): TJSONObject;
@@ -282,7 +281,7 @@ begin
     '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"' + Probe + '"}}}']);
   var Echo := GetById(Lines, '3');
   try
-    Assert.AreEqual('Echo: ' + Probe, Echo.GetValue<string>('result.content[0].text'));
+    Assert.AreEqual('Echo: ' + Probe, Echo.GetValue<string>(FIRST_TEXT_PATH));
   finally
     Echo.Free;
   end;
@@ -358,6 +357,17 @@ begin
   Assert.IsTrue(FElapsedMs < 3000, 'the cancelled tool stopped early: ' + FElapsedMs.ToString + ' ms');
 end;
 
+procedure TStdioTransportTests.Cancelled_ByTheHandlerItself_IsNotCalledAShutdown;
+begin
+  const Tool: IMCPTool = TSelfCancellingTool.Create;
+  FHarness.ToolsManager.AddTool(Tool);
+
+  const Lines = Run([SELF_CANCELLING_CALL]);
+
+  AssertLineCount(Lines, 1, 'a request nobody cancelled still gets an answer');
+  AssertErrorAnswer(Lines, '1', REQUEST_CANCELLED);
+end;
+
 procedure TStdioTransportTests.Progress_IsSentBeforeTheResponse;
 begin
   var Lines := Run([
@@ -373,7 +383,7 @@ begin
       if I = High(Lines) then
       begin
         Assert.AreEqual('8', Json.GetValue('id').Value, 'the response comes last');
-        Assert.AreEqual('Completed 3 steps', Json.GetValue<string>('result.content[0].text'));
+        Assert.AreEqual('Completed 3 steps', Json.GetValue<string>(FIRST_TEXT_PATH));
       end
       else
       begin
@@ -407,30 +417,33 @@ end;
 
 procedure TStdioTransportTests.Eof_WithRunningRequest_IsAnsweredWithAnErrorAfterTheDrain;
 begin
-  const Running = Format(SLOW_CALL, [4, 100]);
+  const Running = Format(SLOW_CALL, [4, LONG_STEPS]);
 
   const Lines = Run([Running], 300);
 
-  Assert.AreEqual(1, Integer(Length(Lines)), 'the request still running at the bound gets an answer');
-  AssertShuttingDownError(Lines, '4');
-  Assert.IsTrue(FElapsedMs < 3000, Format('Run returned after the drain timeout: %d ms', [FElapsedMs]));
+  AssertLineCount(Lines, 1, 'the request still running at the bound gets an answer');
+  AssertErrorAnswer(Lines, '4', SHUTTING_DOWN);
+  const ReturnedSoon = (FElapsedMs < 3000);
+  const Elapsed = Format('Run returned after the drain timeout: %d ms', [FElapsedMs]);
+  Assert.IsTrue(ReturnedSoon, Elapsed);
 end;
 
 procedure TStdioTransportTests.Eof_QueuedRequestsWithinTheBound_AreAllAnswered;
 begin
   FHarness.Settings.StdioShutdownDrainMs := 10000;
-  const First = Format(SLOW_CALL, [1, 8]);
-  const Second = Format(SLOW_CALL, [2, 8]);
-  const Third = Format(SLOW_CALL, [3, 8]);
+  const First = Format(SLOW_CALL, [1, 3]);
+  const Second = Format(SLOW_CALL, [2, 3]);
+  const Third = Format(SLOW_CALL, [3, 3]);
 
   const Lines = Run([First, Second, Third]);
 
-  Assert.AreEqual(3, Integer(Length(Lines)), string.Join(' | ', Lines));
+  AssertLineCount(Lines, 3, 'every queued request finishes within the bound');
   for var Id in ['1', '2', '3'] do
   begin
     const Answer = GetById(Lines, Id);
     try
-      Assert.AreEqual('Completed 8 steps', Answer.GetValue<string>('result.content[0].text'));
+      const Text = Answer.GetValue<string>(FIRST_TEXT_PATH);
+      Assert.AreEqual('Completed 3 steps', Text);
     finally
       Answer.Free;
     end;
@@ -439,21 +452,22 @@ end;
 
 procedure TStdioTransportTests.Eof_PastTheBound_AnswersTheRestWithAnError;
 begin
-  const Quick = Format(SLOW_CALL, [1, 2]);
-  const Long = Format(SLOW_CALL, [2, 50]);
-  const Queued = Format(SLOW_CALL, [3, 2]);
+  const Quick = Format(ECHO_CALL, [1]);
+  const Long = Format(SLOW_CALL, [2, LONG_STEPS]);
+  const Queued = Format(ECHO_CALL, [3]);
 
   const Lines = Run([Quick, Long, Queued], 500);
 
-  Assert.AreEqual(3, Integer(Length(Lines)), 'every request gets exactly one answer: ' + string.Join(' | ', Lines));
+  AssertLineCount(Lines, 3, 'every request gets exactly one answer');
   const Finished = GetById(Lines, '1');
   try
-    Assert.AreEqual('Completed 2 steps', Finished.GetValue<string>('result.content[0].text'));
+    const Text = Finished.GetValue<string>(FIRST_TEXT_PATH);
+    Assert.AreEqual(QUICK_ANSWER, Text);
   finally
     Finished.Free;
   end;
-  AssertShuttingDownError(Lines, '2');
-  AssertShuttingDownError(Lines, '3');
+  AssertErrorAnswer(Lines, '2', SHUTTING_DOWN);
+  AssertErrorAnswer(Lines, '3', SHUTTING_DOWN);
 end;
 
 procedure TStdioTransportTests.Eof_RequestTheClientCancelled_GetsNoAnswer;
@@ -463,37 +477,104 @@ begin
 
   const Lines = Run([Long, Cancel], 0);
 
-  Assert.AreEqual(0, Integer(Length(Lines)), 'a request the client cancelled is never answered: ' +
-    string.Join(' | ', Lines));
+  AssertLineCount(Lines, 0, 'a request the client cancelled is never answered');
 end;
 
 procedure TStdioTransportTests.Eof_HandlerThatIgnoresCancellation_IsAnsweredOnce;
 begin
-  const Stubborn = TStubbornTool.Create;
-  const StubbornTool: IMCPTool = Stubborn;
-  FHarness.ToolsManager.AddTool(StubbornTool);
-  const Input = TBytesStream.Create(TEncoding.UTF8.GetBytes(STUBBORN_CALL + #10));
-  const Output = TBytesStream.Create;
+  const Gate: IStubbornGate = TStubbornGate.Create;
+  const Tool: IMCPTool = TStubbornTool.Create(Gate);
+  FHarness.ToolsManager.AddTool(Tool);
+  const LateAnswers = TMCPTestLogWatch.Create(LATE_ANSWER_LOG_FRAGMENT);
+  try
+    const Output = TBytesStream.Create;
+    try
+      RunInto(Output, FHarness.ManagerRegistry, STUBBORN_CALL, 100);
+      const AtShutdown = ReadOutput(Output);
+      Gate.Release;
+      const HasReturned = Gate.WaitUntilReturned;
+      const IsDropped = LateAnswers.WaitForMatch;
+      const AfterItReturned = ReadOutput(Output);
+
+      Assert.IsTrue(HasReturned, 'the stubborn tool returned once it was released');
+      Assert.IsTrue(IsDropped, 'the late result reached the transport after it stopped');
+      AssertLineCount(AtShutdown, 1, 'the transport answered before the handler returned');
+      AssertErrorAnswer(AtShutdown, '1', SHUTTING_DOWN);
+      AssertLineCount(AfterItReturned, 1, 'the late result is not sent a second time');
+    finally
+      Output.Free;
+    end;
+  finally
+    LateAnswers.Free;
+  end;
+end;
+
+procedure TStdioTransportTests.Eof_ListenerThatOutlivesTheDrain_IsAnsweredWithAnError;
+begin
+  const Gate: IStubbornGate = TStubbornGate.Create;
+  const ListenManager: IMCPCapabilityManager = TStubbornListenManager.Create(Gate);
+  const CoreManager: IMCPCapabilityManager = TMCPCoreManager.Create(FHarness.Settings);
+  const Registry: IMCPManagerRegistry = TMCPManagerRegistry.Create;
+  Registry.RegisterManager(CoreManager);
+  Registry.RegisterManager(ListenManager);
+  const LateAnswers = TMCPTestLogWatch.Create(LATE_ANSWER_LOG_FRAGMENT);
+  try
+    const Output = TBytesStream.Create;
+    try
+      RunInto(Output, Registry, STUBBORN_LISTEN, LISTENER_DRAIN_MS);
+      const AtShutdown = ReadOutput(Output);
+      Gate.Release;
+      const IsDropped = LateAnswers.WaitForMatch;
+
+      AssertLineCount(AtShutdown, 1, 'a listener that does not close in time is answered');
+      AssertErrorAnswer(AtShutdown, '9', SHUTTING_DOWN);
+      Assert.IsTrue(IsDropped, 'the listener returned after the transport stopped');
+    finally
+      Output.Free;
+    end;
+  finally
+    LateAnswers.Free;
+  end;
+end;
+
+procedure TStdioTransportTests.Eof_NegativeDrain_AnswersAtOnce;
+begin
+  FHarness.Settings.StdioShutdownDrainMs := -5;
+  const Running = Format(SLOW_CALL, [4, LONG_STEPS]);
+
+  const Lines = Run([Running]);
+
+  AssertLineCount(Lines, 1, 'a negative bound is no bound at all');
+  AssertErrorAnswer(Lines, '4', SHUTTING_DOWN);
+end;
+
+procedure TStdioTransportTests.ShutdownDrainMs_SetBeforeTheSettings_IsKept;
+begin
+  FHarness.Settings.StdioShutdownDrainMs := 10000;
+  const Transport = TMCPStdioTransport.Create(FHarness.ManagerRegistry, FHarness.CoreManager);
+  try
+    Transport.ShutdownDrainMs := 100;
+
+    Transport.Settings := FHarness.Settings;
+
+    const DrainMs = Transport.ShutdownDrainMs;
+    Assert.AreEqual(100, DrainMs, 'a bound set in code wins over the setting');
+  finally
+    Transport.Free;
+  end;
+end;
+
+procedure TStdioTransportTests.ShutdownDrainMs_NotSet_FollowsTheSettings;
+begin
+  FHarness.Settings.StdioShutdownDrainMs := 10000;
   const Transport = TMCPStdioTransport.Create(FHarness.ManagerRegistry, FHarness.CoreManager);
   try
     Transport.Settings := FHarness.Settings;
-    Transport.ShutdownDrainMs := 100;
 
-    Transport.RunWith(Input, Output);
-    const AtShutdown = OutputLines(Output);
-    Stubborn.Release;
-    const HasReturned = Stubborn.WaitUntilReturned;
-    Sleep(LATE_ANSWER_GRACE_MS);
-    const AfterItReturned = OutputLines(Output);
-
-    Assert.IsTrue(HasReturned, 'the stubborn tool returned once it was released');
-    Assert.AreEqual(1, Integer(Length(AtShutdown)), 'the transport answered before it returned');
-    AssertShuttingDownError(AtShutdown, '1');
-    Assert.AreEqual(1, Integer(Length(AfterItReturned)), 'the late result is not sent a second time');
+    const DrainMs = Transport.ShutdownDrainMs;
+    Assert.AreEqual(10000, DrainMs, 'without a bound in code the setting applies');
   finally
     Transport.Free;
-    Output.Free;
-    Input.Free;
   end;
 end;
 
@@ -504,7 +585,7 @@ const
   PING = '{"jsonrpc":"2.0","id":10,"method":"ping"}';
 begin
   var Lines := Run([LISTEN, PING, CANCEL]);
-  Assert.AreEqual(2, Integer(Length(Lines)), string.Join(' | ', Lines));
+  AssertLineCount(Lines, 2, 'the acknowledgement and the pong');
   var Ack := FindNotification(Lines, 'notifications/subscriptions/acknowledged');
   try
     Assert.IsNotNull(Ack, 'the subscription is acknowledged');
@@ -530,7 +611,9 @@ const
   SLOW = '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":3,"stepMs":100}}}';
 begin
   var Lines := Run([LISTEN, SLOW, TRIGGER]);
-  Assert.IsTrue(Length(Lines) >= 4, string.Join(' | ', Lines));
+  const Output = string.Join(OUTPUT_SEPARATOR, Lines);
+  const HasEveryAnswer = (Length(Lines) >= 4);
+  Assert.IsTrue(HasEveryAnswer, Output);
   var Ack := FindNotification(Lines, 'notifications/subscriptions/acknowledged');
   try
     Assert.IsNotNull(Ack, 'the subscription is acknowledged');
@@ -557,21 +640,12 @@ end;
 procedure TStdioTransportTests.UnsetRequestStateKey_IsNotWarnedAbout;
 begin
   FHarness.Settings.RequestStateKey := '';
-  const Warnings = TStringList.Create;
+  const Warnings = TMCPTestLogWatch.Create(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
   try
-    TLogger.OnLogMessage :=
-      procedure(const Message: string)
-      begin
-        const IsKeyWarning = Message.Contains(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
-        if IsKeyWarning then
-          Warnings.Add(Message);
-      end;
-
     Run([INITIALIZE]);
 
-    Assert.AreEqual(0, Warnings.Count, 'a stdio server lives exactly as long as its one client');
+    Assert.AreEqual(0, Warnings.MatchCount, 'a stdio server lives exactly as long as its one client');
   finally
-    TLogger.OnLogMessage := nil;
     Warnings.Free;
   end;
 end;

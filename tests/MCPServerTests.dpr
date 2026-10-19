@@ -94,6 +94,8 @@ uses
   MCPServer.Tests.ResourcesManager in 'MCPServer.Tests.ResourcesManager.pas',
   MCPServer.Tests.StdioChannel in 'MCPServer.Tests.StdioChannel.pas',
   MCPServer.Tests.Cancellation in 'MCPServer.Tests.Cancellation.pas',
+  MCPServer.Tests.StdioDoubles in 'MCPServer.Tests.StdioDoubles.pas',
+  MCPServer.Tests.StdioRequestTracker in 'MCPServer.Tests.StdioRequestTracker.pas',
   MCPServer.Tests.Stdio in 'MCPServer.Tests.Stdio.pas',
   MCPServer.Tests.StdioHost in 'MCPServer.Tests.StdioHost.pas',
   MCPServer.Tests.SchemaValidator in 'MCPServer.Tests.SchemaValidator.pas',

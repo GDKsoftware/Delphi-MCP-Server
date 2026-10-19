@@ -4,6 +4,7 @@ interface
 
 uses
   System.SysUtils,
+  System.SyncObjs,
   System.JSON;
 
 type
@@ -27,11 +28,27 @@ type
       const TimeoutMs: Cardinal = DEFAULT_TIMEOUT_MS): Boolean; static;
   end;
 
+  TMCPTestLogWatch = class
+  strict private
+    FFragment: string;
+    FMatchCount: Integer;
+    FMatched: TEvent;
+    procedure Observe(const Message: string);
+
+  public
+    constructor Create(const Fragment: string);
+    destructor Destroy; override;
+
+    function WaitForMatch(const TimeoutMs: Cardinal = TMCPTestWait.DEFAULT_TIMEOUT_MS): Boolean;
+    function MatchCount: Integer;
+  end;
+
 implementation
 
 uses
   System.Classes,
-  DUnitX.TestFramework;
+  DUnitX.TestFramework,
+  MCPServer.Logger;
 
 { TMCPTestJson }
 
@@ -59,6 +76,44 @@ begin
     TThread.Sleep(STEP_MS);
     Result := Condition;
   end;
+end;
+
+{ TMCPTestLogWatch }
+
+constructor TMCPTestLogWatch.Create(const Fragment: string);
+begin
+  inherited Create;
+  FFragment := Fragment;
+  FMatched  := TEvent.Create(nil, True, False, '');
+  TLogger.OnLogMessage := Observe;
+end;
+
+destructor TMCPTestLogWatch.Destroy;
+begin
+  TLogger.OnLogMessage := nil;
+  FMatched.Free;
+  inherited;
+end;
+
+function TMCPTestLogWatch.WaitForMatch(const TimeoutMs: Cardinal): Boolean;
+begin
+  const Outcome = FMatched.WaitFor(TimeoutMs);
+  Result := (Outcome = TWaitResult.wrSignaled);
+end;
+
+function TMCPTestLogWatch.MatchCount: Integer;
+begin
+  Result := AtomicCmpExchange(FMatchCount, 0, 0);
+end;
+
+procedure TMCPTestLogWatch.Observe(const Message: string);
+begin
+  const IsMatch = Message.Contains(FFragment);
+  if not IsMatch then
+    Exit;
+
+  AtomicIncrement(FMatchCount);
+  FMatched.SetEvent;
 end;
 
 end.

@@ -11,7 +11,8 @@ type
   TStdioHostTests = class
   private
     FHost: TMCPStdioHost;
-    function AnswerOverStdio(const Request: string): string;
+    function AnswerOverStdio(const Host: TMCPStdioHost; const Request: string): string;
+
   public
     [Setup]
     procedure Setup;
@@ -25,7 +26,10 @@ type
     procedure RunStdioWith_ToolItWasHanded_IsCalled;
 
     [Test]
-    procedure ServerHost_IsAStdioHost_SoExistingHostsKeepServingStdio;
+    procedure RunStdioWith_HandlerThatOutlivesTheTransport_DropsItsLateResult;
+
+    [Test]
+    procedure ServerHost_RunStdioWith_AnswersOverStdio;
   end;
 
 implementation
@@ -34,19 +38,28 @@ uses
   System.SysUtils,
   System.Classes,
   System.JSON,
+  MCPServer.Types,
+  MCPServer.Tool.Base,
   MCPServer.Host,
-  MCPServer.Tool.Echo;
+  MCPServer.Tool.Echo,
+  MCPServer.Tests.Support,
+  MCPServer.Tests.StdioDoubles;
 
 const
-  TOOLS_LIST = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}';
-  ECHO_CALL = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"over stdio"}}}';
+  TOOLS_LIST     = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}';
+  ECHO_CALL      = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"over stdio"}}}';
+  STUBBORN_CALL  = '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{}}}';
+  ECHO_ANSWER    = 'Echo: over stdio';
+  FIRST_TEXT     = 'result.content[0].text';
+  SHORT_DRAIN_MS = 100;
 
 { TStdioHostTests }
 
 procedure TStdioHostTests.Setup;
 begin
   FHost := TMCPStdioHost.Create;
-  FHost.AddTool(TEchoTool.Create);
+  const EchoTool: IMCPTool = TEchoTool.Create;
+  FHost.AddTool(EchoTool);
 end;
 
 procedure TStdioHostTests.TearDown;
@@ -54,32 +67,36 @@ begin
   FHost.Free;
 end;
 
-function TStdioHostTests.AnswerOverStdio(const Request: string): string;
+function TStdioHostTests.AnswerOverStdio(const Host: TMCPStdioHost; const Request: string): string;
 begin
-  const RequestBytes = TEncoding.UTF8.GetBytes(Request + #10);
+  const RequestBytes = TEncoding.UTF8.GetBytes(Request);
   const Input = TBytesStream.Create(RequestBytes);
-  const Output = TBytesStream.Create;
   try
-    FHost.RunStdioWith(Input, Output);
+    const Output = TBytesStream.Create;
+    try
+      Host.RunStdioWith(Input, Output);
 
-    const Written = Copy(Output.Bytes, 0, Output.Size);
-    const Text = TEncoding.UTF8.GetString(Written);
-    Result := Text.Trim;
+      const Written = Copy(Output.Bytes, 0, Output.Size);
+      const Text = TEncoding.UTF8.GetString(Written);
+      Result := Text.Trim;
+    finally
+      Output.Free;
+    end;
   finally
-    Output.Free;
     Input.Free;
   end;
 end;
 
 procedure TStdioHostTests.RunStdioWith_ToolItWasHanded_IsListed;
 begin
-  const Answer = AnswerOverStdio(TOOLS_LIST);
+  const Answer = AnswerOverStdio(FHost, TOOLS_LIST);
 
-  const Json = TJSONObject.ParseJSONValue(Answer) as TJSONObject;
+  const Json = TMCPTestJson.ParseObject(Answer);
   try
-    Assert.IsNotNull(Json, Answer);
-    Assert.AreEqual(1, Json.GetValue<TJSONArray>('result.tools').Count, 'a stdio host publishes what it was handed');
-    Assert.AreEqual('echo', Json.GetValue<string>('result.tools[0].name'));
+    const Tools = Json.GetValue<TJSONArray>('result.tools');
+    const ToolName = Json.GetValue<string>('result.tools[0].name');
+    Assert.AreEqual(1, Tools.Count, 'a stdio host publishes what it was handed');
+    Assert.AreEqual('echo', ToolName);
   finally
     Json.Free;
   end;
@@ -87,22 +104,63 @@ end;
 
 procedure TStdioHostTests.RunStdioWith_ToolItWasHanded_IsCalled;
 begin
-  const Answer = AnswerOverStdio(ECHO_CALL);
+  const Answer = AnswerOverStdio(FHost, ECHO_CALL);
 
-  const Json = TJSONObject.ParseJSONValue(Answer) as TJSONObject;
+  const Json = TMCPTestJson.ParseObject(Answer);
   try
-    Assert.IsNotNull(Json, Answer);
-    Assert.AreEqual('Echo: over stdio', Json.GetValue<string>('result.content[0].text'));
+    const Text = Json.GetValue<string>(FIRST_TEXT);
+    Assert.AreEqual(ECHO_ANSWER, Text);
   finally
     Json.Free;
   end;
 end;
 
-procedure TStdioHostTests.ServerHost_IsAStdioHost_SoExistingHostsKeepServingStdio;
+procedure TStdioHostTests.RunStdioWith_HandlerThatOutlivesTheTransport_DropsItsLateResult;
 begin
-  const IsAStdioHost = TMCPServerHost.InheritsFrom(TMCPStdioHost);
+  FHost.Settings.StdioShutdownDrainMs := SHORT_DRAIN_MS;
+  const Gate: IStubbornGate = TStubbornGate.Create;
+  const StubbornTool: IMCPTool = TStubbornTool.Create(Gate);
+  FHost.AddTool(StubbornTool);
+  const LateAnswers = TMCPTestLogWatch.Create(LATE_ANSWER_LOG_FRAGMENT);
+  try
+    const Answer = AnswerOverStdio(FHost, STUBBORN_CALL);
+    Gate.Release;
+    const HasReturned = Gate.WaitUntilReturned;
+    const IsDropped = LateAnswers.WaitForMatch;
 
-  Assert.IsTrue(IsAStdioHost, 'TMCPServerHost adds the HTTP transport to the stdio host');
+    const Json = TMCPTestJson.ParseObject(Answer);
+    try
+      const Code = Json.GetValue<Integer>('error.code');
+      Assert.IsTrue(HasReturned, 'the stubborn tool returned once it was released');
+      Assert.IsTrue(IsDropped, 'the host had freed its transport, and the late result was still dropped safely');
+      Assert.AreEqual(JSONRPC_INTERNAL_ERROR, Code, Answer);
+    finally
+      Json.Free;
+    end;
+  finally
+    LateAnswers.Free;
+  end;
+end;
+
+procedure TStdioHostTests.ServerHost_RunStdioWith_AnswersOverStdio;
+begin
+  const ServerHost = TMCPServerHost.Create;
+  try
+    const EchoTool: IMCPTool = TEchoTool.Create;
+    ServerHost.AddTool(EchoTool);
+
+    const Answer = AnswerOverStdio(ServerHost, ECHO_CALL);
+
+    const Json = TMCPTestJson.ParseObject(Answer);
+    try
+      const Text = Json.GetValue<string>(FIRST_TEXT);
+      Assert.AreEqual(ECHO_ANSWER, Text, 'the HTTP host keeps serving stdio');
+    finally
+      Json.Free;
+    end;
+  finally
+    ServerHost.Free;
+  end;
 end;
 
 end.

@@ -50,6 +50,9 @@ type
 
     [Test]
     procedure Writer_ConcurrentSends_DoNotInterleave;
+
+    [Test]
+    procedure Writer_AfterClose_WritesNothing;
   end;
 
 implementation
@@ -198,6 +201,24 @@ begin
     SetLength(Bytes, Stream.Size);
     Move(Stream.Memory^, Bytes[0], Length(Bytes));
     Assert.AreEqual('a  b'#10, TEncoding.UTF8.GetString(Bytes));
+  finally
+    Stream.Free;
+  end;
+end;
+
+procedure TStdioChannelTests.Writer_AfterClose_WritesNothing;
+begin
+  const Stream = TMemoryStream.Create;
+  try
+    const Writer = TMCPLineWriter.Create(Stream);
+    const Sink: IMCPMessageSink = Writer;
+    Sink.Send('{"before":1}');
+
+    Writer.Close;
+    Sink.Send('{"after":2}');
+
+    const Written = Stream.Size;
+    Assert.AreEqual<Int64>(13, Written, 'only the line sent before Close reaches the stream');
   finally
     Stream.Free;
   end;
