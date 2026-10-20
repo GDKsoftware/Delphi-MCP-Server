@@ -107,6 +107,17 @@ were booleans), sets and dynamic arrays as arrays, `nil` objects as `null`
 and `TDateTime` as an ISO 8601 string. The `logs://recent` timestamps and the
 `server://status` times are strings now.
 
+**A `TDate` or `TTime` value is a string**, in a result and in an argument:
+`2026-10-18` or `14:30:00`. A client that read the number Delphi stores
+reads that text instead. The schema of a `TTime` carries a `pattern` for
+`hh:mm`, `hh:mm:ss` and `hh:mm:ss.fff` rather than `format: time`, so a time
+with a zone offset is refused.
+
+**A `TDateTime` without a zone offset is local time**: `2026-10-18T14:30:00`
+reaches the handler as 14:30. A client that compensated for a shift by the
+offset of the server should stop doing so; a value with `Z` or an offset is
+converted to local time.
+
 **Tools and resources are listed in registration order.** Anything that
 depended on the previous dictionary order should use the names instead.
 

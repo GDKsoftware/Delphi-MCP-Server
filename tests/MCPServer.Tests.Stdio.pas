@@ -65,12 +65,18 @@ type
 
     [Test]
     procedure Listen_Eof_ClosesGracefully;
+
+    [Test]
+    [TestCase('Unset', ',1')]
+    [TestCase('Set', 'a-key,0')]
+    procedure RequestStateKey_IsWarnedAboutOnlyWhenUnset(const Key: string; const ExpectedWarnings: Integer);
   end;
 
 implementation
 
 uses
-  System.Diagnostics;
+  System.Diagnostics,
+  MCPServer.Tests.Support;
 
 const
   INITIALIZE = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}';
@@ -362,6 +368,20 @@ begin
     Assert.AreEqual(9, TJSONNumber(TJSONObject(Response.FindValue('result._meta')).GetValue(MCP_META_SUBSCRIPTION_ID)).AsInt);
   finally
     Response.Free;
+  end;
+end;
+
+procedure TStdioTransportTests.RequestStateKey_IsWarnedAboutOnlyWhenUnset(const Key: string; const ExpectedWarnings: Integer);
+begin
+  FHarness.Settings.RequestStateKey := Key;
+  const Log = TMCPTestLogWatch.Create;
+  try
+    Run([]);
+
+    const Warnings = Log.CountOf(EPHEMERAL_KEY_WARNING);
+    Assert.AreEqual(ExpectedWarnings, Warnings, 'the transport warns about the settings it is handed, once');
+  finally
+    Log.Free;
   end;
 end;
 

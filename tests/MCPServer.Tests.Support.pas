@@ -4,7 +4,11 @@ interface
 
 uses
   System.SysUtils,
+  System.SyncObjs,
   System.JSON;
+
+const
+  EPHEMERAL_KEY_WARNING = 'RequestStateKey is not set';
 
 type
   TMCPTestMeta = record
@@ -27,11 +31,25 @@ type
       const TimeoutMs: Cardinal = DEFAULT_TIMEOUT_MS): Boolean; static;
   end;
 
+  TMCPTestLogWatch = class
+  strict private
+    FLock: TCriticalSection;
+    FLines: TArray<string>;
+    procedure Observe(const Message: string);
+
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    function CountOf(const Fragment: string): Integer;
+  end;
+
 implementation
 
 uses
   System.Classes,
-  DUnitX.TestFramework;
+  DUnitX.TestFramework,
+  MCPServer.Logger;
 
 { TMCPTestJson }
 
@@ -58,6 +76,48 @@ begin
   begin
     TThread.Sleep(STEP_MS);
     Result := Condition;
+  end;
+end;
+
+{ TMCPTestLogWatch }
+
+constructor TMCPTestLogWatch.Create;
+begin
+  inherited Create;
+  FLock := TCriticalSection.Create;
+  TLogger.OnLogMessage := Observe;
+end;
+
+destructor TMCPTestLogWatch.Destroy;
+begin
+  TLogger.OnLogMessage := nil;
+  FLock.Free;
+  inherited;
+end;
+
+function TMCPTestLogWatch.CountOf(const Fragment: string): Integer;
+begin
+  Result := 0;
+  FLock.Enter;
+  try
+    for var Line in FLines do
+    begin
+      const IsMatch = Line.Contains(Fragment);
+      if IsMatch then
+        Inc(Result);
+    end;
+  finally
+    FLock.Leave;
+  end;
+end;
+
+procedure TMCPTestLogWatch.Observe(const Message: string);
+begin
+  FLock.Enter;
+  try
+    FLines := FLines + [Message];
+  finally
+    FLock.Leave;
   end;
 end;
 
