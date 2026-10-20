@@ -884,11 +884,11 @@ begin
   const TimeOfDay = TimeOf(Value);
   const HasMilliseconds = (MilliSecondOf(TimeOfDay) <> 0);
 
-  var Pattern := ISO_TIME_FORMAT;
+  var TimeFormat := ISO_TIME_FORMAT;
   if HasMilliseconds then
-    Pattern := ISO_TIME_WITH_MILLISECONDS_FORMAT;
+    TimeFormat := ISO_TIME_WITH_MILLISECONDS_FORMAT;
 
-  Result := FormatDateTime(Pattern, TimeOfDay, TFormatSettings.Invariant);
+  Result := FormatDateTime(TimeFormat, TimeOfDay, TFormatSettings.Invariant);
 end;
 
 class function TMCPSerializer.ConvertRecordToJson(const Value: TValue;

@@ -14,7 +14,8 @@ uses
   MCPServer.PromptsManager,
   MCPServer.SubscriptionsManager,
   MCPServer.Task.Types,
-  MCPServer.TasksManager;
+  MCPServer.TasksManager,
+  MCPServer.StdioTransport;
 
 type
   TMCPStdioHost = class
@@ -30,6 +31,7 @@ type
     FTasksManager: TMCPTasksManager;
     FTaskStore: IMCPTaskStore;
     FSeedFromGlobalRegistry: Boolean;
+    function CreateTransport: TMCPStdioTransport;
     procedure BuildManagers;
     procedure HideDiagnosticsResources;
     procedure BuildTasksManager;
@@ -74,8 +76,7 @@ uses
   MCPServer.ManagerRegistry,
   MCPServer.CoreManager,
   MCPServer.CompletionManager,
-  MCPServer.TaskStore.Memory,
-  MCPServer.StdioTransport;
+  MCPServer.TaskStore.Memory;
 
 const
   URI_LOGS_RECENT = 'logs://recent';
@@ -157,11 +158,8 @@ end;
 
 procedure TMCPStdioHost.RunStdio;
 begin
-  EnsureManagers;
-
-  const Transport = TMCPStdioTransport.Create(FManagerRegistry, FCoreManager);
+  const Transport = CreateTransport;
   try
-    Transport.Settings := FSettings;
     Transport.Run;
   finally
     Transport.Free;
@@ -170,15 +168,20 @@ end;
 
 procedure TMCPStdioHost.RunStdioWith(const Input, Output: TStream);
 begin
-  EnsureManagers;
-
-  const Transport = TMCPStdioTransport.Create(FManagerRegistry, FCoreManager);
+  const Transport = CreateTransport;
   try
-    Transport.Settings := FSettings;
     Transport.RunWith(Input, Output);
   finally
     Transport.Free;
   end;
+end;
+
+function TMCPStdioHost.CreateTransport: TMCPStdioTransport;
+begin
+  EnsureManagers;
+
+  Result := TMCPStdioTransport.Create(FManagerRegistry, FCoreManager);
+  Result.Settings := FSettings;
 end;
 
 procedure TMCPStdioHost.EnsureManagers;
@@ -198,25 +201,26 @@ end;
 
 procedure TMCPStdioHost.BuildManagers;
 begin
-  FManagerRegistry := TMCPManagerRegistry.Create;
-  FCoreManager := TMCPCoreManager.Create(FSettings);
-  FToolsManager := TMCPToolsManager.Create(FSeedFromGlobalRegistry);
-  FResourcesManager := TMCPResourcesManager.Create(FSeedFromGlobalRegistry);
-  FPromptsManager := TMCPPromptsManager.Create(FSeedFromGlobalRegistry);
+  FManagerRegistry      := TMCPManagerRegistry.Create;
+  FCoreManager          := TMCPCoreManager.Create(FSettings);
+  FToolsManager         := TMCPToolsManager.Create(FSeedFromGlobalRegistry);
+  FResourcesManager     := TMCPResourcesManager.Create(FSeedFromGlobalRegistry);
+  FPromptsManager       := TMCPPromptsManager.Create(FSeedFromGlobalRegistry);
   FSubscriptionsManager := TMCPSubscriptionsManager.Create;
 
   if not FSettings.ExposeDiagnosticsResources then
     HideDiagnosticsResources;
 
-  FToolsManager.ChangeNotifier := FSubscriptionsManager;
+  FToolsManager.ChangeNotifier     := FSubscriptionsManager;
   FResourcesManager.ChangeNotifier := FSubscriptionsManager;
-  FPromptsManager.ChangeNotifier := FSubscriptionsManager;
+  FPromptsManager.ChangeNotifier   := FSubscriptionsManager;
 
+  const CompletionManager: IMCPCapabilityManager = TMCPCompletionManager.Create(FPromptsManager, FResourcesManager);
   FManagerRegistry.RegisterManager(FCoreManager);
   FManagerRegistry.RegisterManager(FToolsManager);
   FManagerRegistry.RegisterManager(FResourcesManager);
   FManagerRegistry.RegisterManager(FPromptsManager);
-  FManagerRegistry.RegisterManager(TMCPCompletionManager.Create(FPromptsManager, FResourcesManager));
+  FManagerRegistry.RegisterManager(CompletionManager);
   FManagerRegistry.RegisterManager(FSubscriptionsManager);
 
   if FSettings.TasksEnabled then
@@ -255,7 +259,8 @@ end;
 
 procedure TMCPStdioHost.SetSeedFromGlobalRegistry(const Value: Boolean);
 begin
-  if Value = FSeedFromGlobalRegistry then
+  const IsUnchanged = (Value = FSeedFromGlobalRegistry);
+  if IsUnchanged then
     Exit;
 
   if Assigned(FManagerRegistry) then

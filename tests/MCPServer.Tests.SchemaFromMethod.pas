@@ -663,10 +663,13 @@ begin
   const Schema = SchemaOf('Alarm');
   try
     const AtSchema = Schema.GetValue<TJSONObject>(ALARM_TIME_PATH);
-    const JsonType = AtSchema.GetValue<string>('type');
-    const HasFormat = Assigned(AtSchema.GetValue('format'));
-    const HasPattern = Assigned(AtSchema.GetValue('pattern'));
-    const HasDescription = Assigned(AtSchema.GetValue(DESCRIPTION_KEY));
+    const JsonType         = AtSchema.GetValue<string>('type');
+    const FormatValue      = AtSchema.GetValue('format');
+    const PatternValue     = AtSchema.GetValue('pattern');
+    const DescriptionValue = AtSchema.GetValue(DESCRIPTION_KEY);
+    const HasFormat        = Assigned(FormatValue);
+    const HasPattern       = Assigned(PatternValue);
+    const HasDescription   = Assigned(DescriptionValue);
     Assert.AreEqual('string', JsonType);
     Assert.IsFalse(HasFormat, 'format: time is RFC 3339 full-time, with a zone offset a TTime does not have');
     Assert.IsTrue(HasPattern, 'the pattern names the text that is accepted');
