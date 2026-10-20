@@ -82,8 +82,6 @@ type
     constructor Create(ManagerRegistry: IMCPManagerRegistry; Settings: TMCPSettings); overload;
     destructor Destroy; override;
 
-    function IsRequestStateKeyEphemeral: Boolean;
-
     function ProcessRequest(const RequestBody: string; const SessionID: string): string;
     function ProcessRequestEx(const RequestBody: string; const Hints: TMCPTransportHints): TMCPProcessResult; overload;
     function ProcessRequestEx(const Message: TJSONValue; const Hints: TMCPTransportHints): TMCPProcessResult; overload;
@@ -118,6 +116,8 @@ const
   MESSAGE_HEADER_INVALID_SUFFIX = ' header value is not a valid header value';
   RESULT_TYPE_COMPLETE = 'complete';
   MESSAGE_UNDECLARED_RESULT_TYPE = '%s answered with result type ''%s'', which needs an extension the client did not declare';
+  MESSAGE_EPHEMERAL_KEY = '[Security] RequestStateKey is not set: requestState tokens are sealed with a random key ' +
+                          'and stop verifying after a restart or on another instance';
 
   LEGACY_ONLY_METHODS: array[0..4] of string = (
     MCP_METHOD_PING, MCP_METHOD_INITIALIZE, MCP_METHOD_LOGGING_SET_LEVEL, MCP_METHOD_RESOURCES_SUBSCRIBE, MCP_METHOD_RESOURCES_UNSUBSCRIBE);
@@ -165,11 +165,10 @@ begin
 
   FreeAndNil(FStateSealer);
   FStateSealer := TMCPRequestStateSealer.Create(FSettings.RequestStateKey, FSettings.RequestStateTtlSeconds);
-end;
 
-function TMCPJsonRpcProcessor.IsRequestStateKeyEphemeral: Boolean;
-begin
-  Result := FStateSealer.KeyIsEphemeral;
+  const IsConfiguredWithoutKey = (Assigned(Value) and FStateSealer.KeyIsEphemeral);
+  if IsConfiguredWithoutKey then
+    TLogger.Warning(MESSAGE_EPHEMERAL_KEY);
 end;
 
 function TMCPJsonRpcProcessor.SupportedModernVersions: TArray<string>;

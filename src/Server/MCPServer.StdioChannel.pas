@@ -47,7 +47,6 @@ type
     constructor Create(Stream: TStream);
     destructor Destroy; override;
     procedure Send(const Json: string);
-    procedure Close;
   end;
 
 function StandardInputStream: TStream;
@@ -239,21 +238,7 @@ begin
   var Bytes := TEncoding.UTF8.GetBytes(Line);
   FLock.Enter;
   try
-    const IsClosed = not Assigned(FStream);
-    if IsClosed then
-      Exit;
-
     FStream.WriteBuffer(Bytes, Length(Bytes));
-  finally
-    FLock.Leave;
-  end;
-end;
-
-procedure TMCPLineWriter.Close;
-begin
-  FLock.Enter;
-  try
-    FStream := nil;
   finally
     FLock.Leave;
   end;

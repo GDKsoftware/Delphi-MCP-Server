@@ -194,7 +194,6 @@ implementation
 
 uses
   System.Threading,
-  MCPServer.RequestState,
   MCPServer.Tests.Support;
 
 const
@@ -595,7 +594,7 @@ begin
   try
     StartServer;
 
-    const Warnings = Log.CountOf(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
+    const Warnings = Log.CountOf(EPHEMERAL_KEY_WARNING);
     Assert.AreEqual(1, Warnings, 'an HTTP server can be restarted or balanced, so it says so once');
   finally
     Log.Free;

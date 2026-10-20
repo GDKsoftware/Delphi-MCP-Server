@@ -24,6 +24,7 @@ type
     class function ConvertJsonToFloat(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
     class function ConvertJsonToNumber(const JsonValue: TJSONValue): TValue;
     class function ConvertJsonToDateTime(const JsonValue: TJSONValue): TValue;
+    class function HasZoneDesignator(const Text: string): Boolean;
     class function ConvertJsonToDate(const JsonValue: TJSONValue): TValue;
     class function ConvertJsonToTime(const JsonValue: TJSONValue): TValue;
     class function TryParseIsoDate(const Text: string; out Value: TDate): Boolean;
@@ -114,6 +115,9 @@ const
   ISO_SECOND_GROUP                  = 3;
   ISO_FRACTION_GROUP                = 4;
   MILLISECOND_DIGITS                = 3;
+
+  ISO_TIME_SEPARATORS: array[0..1] of Char  = ('T', 't');
+  ISO_ZONE_DESIGNATORS: array[0..3] of Char = ('Z', 'z', '+', '-');
 
   OWNERSHIP_BEARING_KINDS = [tkClass, tkDynArray, tkRecord, tkMRecord];
 
@@ -435,14 +439,32 @@ class function TMCPSerializer.ConvertJsonToDateTime(const JsonValue: TJSONValue)
 begin
   if not IsJsonString(JsonValue) then
     raise EArgumentException.Create('expected a date-time string');
+
+  const Text = JsonValue.Value;
+  const HasZone = HasZoneDesignator(Text);
   try
-    Result := TValue.From<TDateTime>(ISO8601ToDate(JsonValue.Value, False));
+    const WrittenOrUtc = ISO8601ToDate(Text, True);
+    var Moment := WrittenOrUtc;
+    if HasZone then
+      Moment := TTimeZone.Local.ToLocalTime(WrittenOrUtc);
+
+    Result := TValue.From<TDateTime>(Moment);
   except
     on E: EConvertError do
       raise EArgumentException.Create(MESSAGE_EXPECTED_DATE_TIME);
     on E: EDateTimeException do
       raise EArgumentException.Create(MESSAGE_EXPECTED_DATE_TIME);
   end;
+end;
+
+class function TMCPSerializer.HasZoneDesignator(const Text: string): Boolean;
+begin
+  const TimeStart = Text.IndexOfAny(ISO_TIME_SEPARATORS);
+  if TimeStart < 0 then
+    Exit(False);
+
+  const TimeOfDay = Text.Substring(TimeStart + 1);
+  Result := (TimeOfDay.IndexOfAny(ISO_ZONE_DESIGNATORS) >= 0);
 end;
 
 class function TMCPSerializer.ConvertJsonToDate(const JsonValue: TJSONValue): TValue;

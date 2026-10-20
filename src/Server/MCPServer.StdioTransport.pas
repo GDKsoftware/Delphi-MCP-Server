@@ -20,19 +20,13 @@ type
   strict private
     type
       TEntry = record
-        RequestId: TMCPRequestId;
         Context: IMCPRequestContext;
-        IsReserved: Boolean;
         Cancelled: Boolean;
-        IsCancelledByClient: Boolean;
-        IsAnswered: Boolean;
-        function IsOwedAnAnswer: Boolean;
       end;
     var
       FLock: TCriticalSection;
       FEntries: TDictionary<string, TEntry>;
     class function KeyOf(const RequestId: TMCPRequestId): string; static;
-
   public
     constructor Create;
     destructor Destroy; override;
@@ -42,142 +36,85 @@ type
     procedure Untrack(const Context: IMCPRequestContext);
     function TryCancel(const RequestId: TMCPRequestId; const Reason: string): Boolean;
     function CancelAll(const Reason: string): Integer;
-    function TryClaimAnswer(const RequestId: TMCPRequestId): Boolean;
-    function WasCancelledByClient(const RequestId: TMCPRequestId): Boolean;
-    function ClaimUnanswered: TArray<TMCPRequestId>;
   end;
 
   TMCPStdioTransport = class
   public
-    const DEFAULT_SHUTDOWN_DRAIN_MS = TMCPSettings.DEFAULT_STDIO_SHUTDOWN_DRAIN_MS;
+    const DEFAULT_SHUTDOWN_DRAIN_MS = 2000;
     const SHUTDOWN_CANCEL_GRACE_MS = 500;
     const QUEUE_DEPTH = 1024;
     const LISTENER_POLL_MS = 10;
     const QUEUE_PUSH_TIMEOUT_MS = 1000;
-
   strict private
-    type
-      TRequestRunner = class(TInterfacedObject)
-      strict private
-        FSettings: TMCPSettings;
-        FJsonRpcProcessor: TMCPJsonRpcProcessor;
-        FLegacySession: TMCPLegacySession;
-        FTracker: TMCPStdioRequestTracker;
-        FTrackerLifetime: IMCPRequestTracker;
-        FWriter: TMCPLineWriter;
-        FWriterLifetime: IMCPMessageSink;
-        FQueue: TThreadedQueue<TJSONValue>;
-        FWorkersDone: TCountdownEvent;
-        FStartedWorkers: Integer;
-        FListeners: Integer;
-        FIsAborting: Boolean;
-        procedure WorkerLoop;
-        procedure RunListener(const Message: TJSONValue);
-        procedure ProcessQueued(const Message: TJSONValue);
-        procedure AnswerRequest(const Message: TJSONValue; const RequestId: TMCPRequestId);
-        procedure SendAnswerOnce(const RequestId: TMCPRequestId; const Body: string);
-        procedure SendErrorOnce(const RequestId: TMCPRequestId; const Message: string);
-        function TryClaimAnswer(const RequestId: TMCPRequestId): Boolean;
-        function Hints: TMCPTransportHints;
-        procedure SendResponse(const Body: string);
-
-      public
-        constructor Create(const ManagerRegistry: IMCPManagerRegistry; const Settings: TMCPSettings; const OutputStream: TStream);
-        destructor Destroy; override;
-
-        procedure StartWorkers(const Count: Integer);
-        function Reserve(const RequestId: TMCPRequestId): Boolean;
-        procedure Release(const RequestId: TMCPRequestId);
-        function TryEnqueue(const Message: TJSONValue): Boolean;
-        procedure StartListener(const Message: TJSONValue);
-        procedure ProcessInline(const Message: TJSONValue);
-        procedure SendError(const RequestId: TMCPRequestId; const Code: Integer; const Message: string);
-        procedure StopWorkersWhenIdle;
-        function WaitForWorkers(const TimeoutMs: Integer): Boolean;
-        function HasRunningListeners: Boolean;
-        procedure AbortRequests(const Reason: string);
-        function WaitUntilStopped(const TimeoutMs: Integer): Boolean;
-        procedure AnswerUnansweredRequests;
-        procedure DetachOutput;
-      end;
-    var
-      FManagerRegistry: IMCPManagerRegistry;
-      FCoreManager: IMCPCapabilityManager;
-      FDefaultSettings: TMCPSettings;
-      FSettings: TMCPSettings;
-      FRunner: TRequestRunner;
-      FRunnerLifetime: IInterface;
-      FShutdownDrainMs: Integer;
-      FHasShutdownDrainMs: Boolean;
-    class function DeadlineAfter(const TimeoutMs: Integer): UInt64; static;
-    class function HasPassed(const Deadline: UInt64): Boolean; static;
-    procedure StartRunner(const OutputStream: TStream);
-    procedure ReleaseRunner;
-    function WorkerCount: Integer;
-    procedure ReadLoop(const InputStream: TStream);
-    procedure DispatchLine(const Message: TJSONValue);
-    procedure DrainAndStop;
-    procedure CloseSubscriptions(const Deadline: UInt64);
-    procedure AbortOutstandingRequests;
+    FManagerRegistry: IMCPManagerRegistry;
+    FCoreManager: IMCPCapabilityManager;
+    FJsonRpcProcessor: TMCPJsonRpcProcessor;
+    FLegacySession: TMCPLegacySession;
+    FTracker: TMCPStdioRequestTracker;
+    FTrackerIntf: IMCPRequestTracker;
+    FWriter: IMCPMessageSink;
+    FQueue: TThreadedQueue<TJSONValue>;
+    FWorkersDone: TCountdownEvent;
+    FShutdownDrainMs: Integer;
+    FWorkerStuck: Boolean;
+    FListeners: Integer;
+    FStartedWorkers: Integer;
+    function GetSettings: TMCPSettings;
     procedure SetSettings(const Value: TMCPSettings);
-    function GetShutdownDrainMs: Integer;
-    procedure SetShutdownDrainMs(const Value: Integer);
-
+    function Hints: TMCPTransportHints;
+    function WorkerCount: Integer;
+    procedure SendResponse(const Body: string);
+    procedure SendError(const RequestId: TMCPRequestId; Code: Integer; const Message: string);
+    procedure ProcessInline(const Message: TJSONValue);
+    procedure DispatchLine(const Message: TJSONValue);
+    procedure ProcessQueued(const Message: TJSONValue);
+    procedure StartListener(const Message: TJSONValue);
+    procedure CloseSubscriptions;
+    procedure StartWorkers;
+    procedure DrainAndStop;
+    procedure ReadLoop(InputStream: TStream);
+  private
+    procedure WorkerLoop;
   public
-    constructor Create(const ManagerRegistry: IMCPManagerRegistry; const CoreManager: IMCPCapabilityManager);
+    constructor Create(ManagerRegistry: IMCPManagerRegistry; CoreManager: IMCPCapabilityManager);
     destructor Destroy; override;
     procedure Run;
-    procedure RunWith(const InputStream, OutputStream: TStream);
-    property Settings: TMCPSettings read FSettings write SetSettings;
-    property ShutdownDrainMs: Integer read GetShutdownDrainMs write SetShutdownDrainMs;
+    procedure RunWith(InputStream, OutputStream: TStream);
+    property Settings: TMCPSettings read GetSettings write SetSettings;
+    property ShutdownDrainMs: Integer read FShutdownDrainMs write FShutdownDrainMs;
   end;
 
 implementation
 
 uses
-  System.Math,
   MCPServer.Errors;
 
 const
-  REASON_STDIN_CLOSED       = 'stdin closed';
-  MESSAGE_SHUTTING_DOWN     = 'Server is shutting down';
-  MESSAGE_REQUEST_CANCELLED = 'Request was cancelled';
-  MESSAGE_ANSWER_DROPPED    = 'Request %s was answered or cancelled already, so this answer is dropped';
+  REASON_STDIN_CLOSED = 'stdin closed';
 
 
 type
-  TMCPStdioThread = class(TThread)
+  TMCPStdioWorker = class(TThread)
   strict private
-    FRunnerLifetime: IInterface;
-    FWork: TProc;
-
+    FTransport: TMCPStdioTransport;
   protected
     procedure Execute; override;
-
   public
-    constructor Create(const RunnerLifetime: IInterface; const Work: TProc);
+    constructor Create(Transport: TMCPStdioTransport);
   end;
 
-{ TMCPStdioThread }
+{ TMCPStdioWorker }
 
-constructor TMCPStdioThread.Create(const RunnerLifetime: IInterface; const Work: TProc);
+constructor TMCPStdioWorker.Create(Transport: TMCPStdioTransport);
 begin
   inherited Create(False);
-  FRunnerLifetime := RunnerLifetime;
-  FWork           := Work;
+  FTransport := Transport;
   FreeOnTerminate := True;
 end;
 
-procedure TMCPStdioThread.Execute;
+procedure TMCPStdioWorker.Execute;
 begin
-  FWork();
-end;
-
-{ TMCPStdioRequestTracker.TEntry }
-
-function TMCPStdioRequestTracker.TEntry.IsOwedAnAnswer: Boolean;
-begin
-  Result := (not IsAnswered and not IsCancelledByClient);
+  FTransport.WorkerLoop;
 end;
 
 { TMCPStdioRequestTracker }
@@ -206,15 +143,11 @@ end;
 
 function TMCPStdioRequestTracker.Reserve(const RequestId: TMCPRequestId): Boolean;
 begin
-  const Key = KeyOf(RequestId);
-  var Entry := Default(TEntry);
-  Entry.RequestId  := RequestId;
-  Entry.IsReserved := True;
   FLock.Enter;
   try
-    Result := not FEntries.ContainsKey(Key);
+    Result := not FEntries.ContainsKey(KeyOf(RequestId));
     if Result then
-      FEntries.Add(Key, Entry);
+      FEntries.Add(KeyOf(RequestId), Default(TEntry));
   finally
     FLock.Leave;
   end;
@@ -239,10 +172,7 @@ begin
   FLock.Enter;
   try
     if not FEntries.TryGetValue(Key, Entry) then
-    begin
-      Entry           := Default(TEntry);
-      Entry.RequestId := Context.RequestId;
-    end;
+      Entry := Default(TEntry);
     Entry.Context := Context;
     FEntries.AddOrSetValue(Key, Entry);
     CancelNow := Entry.Cancelled;
@@ -255,24 +185,7 @@ end;
 
 procedure TMCPStdioRequestTracker.Untrack(const Context: IMCPRequestContext);
 begin
-  const Key = KeyOf(Context.RequestId);
-  var Entry: TEntry;
-  FLock.Enter;
-  try
-    if not FEntries.TryGetValue(Key, Entry) then
-      Exit;
-
-    if not Entry.IsReserved then
-    begin
-      FEntries.Remove(Key);
-      Exit;
-    end;
-
-    Entry.Context := nil;
-    FEntries[Key] := Entry;
-  finally
-    FLock.Leave;
-  end;
+  Release(Context.RequestId);
 end;
 
 function TMCPStdioRequestTracker.TryCancel(const RequestId: TMCPRequestId; const Reason: string): Boolean;
@@ -285,10 +198,9 @@ begin
     Result := FEntries.TryGetValue(KeyOf(RequestId), Entry);
     if Result then
     begin
-      Entry.Cancelled            := True;
-      Entry.IsCancelledByClient  := True;
+      Entry.Cancelled := True;
       FEntries[KeyOf(RequestId)] := Entry;
-      Context                    := Entry.Context;
+      Context := Entry.Context;
     end;
   finally
     FLock.Leave;
@@ -334,79 +246,18 @@ begin
     TLogger.Warning(Format('%d request(s) cancelled: %s', [Result, Reason]));
 end;
 
-function TMCPStdioRequestTracker.TryClaimAnswer(const RequestId: TMCPRequestId): Boolean;
-begin
-  const Key = KeyOf(RequestId);
-  var Entry: TEntry;
-  FLock.Enter;
-  try
-    if not FEntries.TryGetValue(Key, Entry) then
-      Exit(True);
-
-    Result := Entry.IsOwedAnAnswer;
-    Entry.IsAnswered := True;
-    FEntries[Key]    := Entry;
-  finally
-    FLock.Leave;
-  end;
-end;
-
-function TMCPStdioRequestTracker.WasCancelledByClient(const RequestId: TMCPRequestId): Boolean;
-begin
-  const Key = KeyOf(RequestId);
-  var Entry: TEntry;
-  FLock.Enter;
-  try
-    const IsKnown = FEntries.TryGetValue(Key, Entry);
-    Result := (IsKnown and Entry.IsCancelledByClient);
-  finally
-    FLock.Leave;
-  end;
-end;
-
-function TMCPStdioRequestTracker.ClaimUnanswered: TArray<TMCPRequestId>;
-begin
-  Result := nil;
-
-  FLock.Enter;
-  try
-    const Keys = FEntries.Keys;
-    for var Key in Keys.ToArray do
-    begin
-      var Entry := FEntries[Key];
-      if Entry.IsOwedAnAnswer then
-      begin
-        Entry.IsAnswered := True;
-        FEntries[Key]    := Entry;
-        Result           := Result + [Entry.RequestId];
-      end;
-    end;
-  finally
-    FLock.Leave;
-  end;
-end;
-
 { TMCPStdioTransport }
 
-class function TMCPStdioTransport.DeadlineAfter(const TimeoutMs: Integer): UInt64;
-begin
-  const Ticks = TThread.GetTickCount64;
-  Result := Ticks + UInt64(TimeoutMs);
-end;
-
-class function TMCPStdioTransport.HasPassed(const Deadline: UInt64): Boolean;
-begin
-  const Ticks = TThread.GetTickCount64;
-  Result := (Ticks >= Deadline);
-end;
-
-constructor TMCPStdioTransport.Create(const ManagerRegistry: IMCPManagerRegistry; const CoreManager: IMCPCapabilityManager);
+constructor TMCPStdioTransport.Create(ManagerRegistry: IMCPManagerRegistry; CoreManager: IMCPCapabilityManager);
 begin
   inherited Create;
   FManagerRegistry := ManagerRegistry;
-  FCoreManager     := CoreManager;
-  FDefaultSettings := TMCPSettings.Create('', False);
-  FSettings        := FDefaultSettings;
+  FCoreManager := CoreManager;
+  FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(ManagerRegistry);
+  FLegacySession := TMCPLegacySession.Create;
+  FTracker := TMCPStdioRequestTracker.Create;
+  FTrackerIntf := FTracker;
+  FShutdownDrainMs := DEFAULT_SHUTDOWN_DRAIN_MS;
 
   TLogger.UseStdErr := True;
   TLogger.StdoutReserved := True;
@@ -414,54 +265,28 @@ end;
 
 destructor TMCPStdioTransport.Destroy;
 begin
-  FDefaultSettings.Free;
+  if not FWorkerStuck then
+  begin
+    FJsonRpcProcessor.Free;
+    FLegacySession.Free;
+    FTrackerIntf := nil;
+  end;
   inherited;
 end;
 
-procedure TMCPStdioTransport.Run;
+function TMCPStdioTransport.GetSettings: TMCPSettings;
 begin
-  const InputStream = StandardInputStream;
-  try
-    const OutputStream = StandardOutputStream;
-    try
-      RunWith(InputStream, OutputStream);
-    finally
-      OutputStream.Free;
-    end;
-  finally
-    InputStream.Free;
-  end;
+  Result := FJsonRpcProcessor.Settings;
 end;
 
-procedure TMCPStdioTransport.RunWith(const InputStream, OutputStream: TStream);
+procedure TMCPStdioTransport.SetSettings(const Value: TMCPSettings);
 begin
-  StartRunner(OutputStream);
-  try
-    const Workers = WorkerCount;
-    FRunner.StartWorkers(Workers);
-    try
-      ReadLoop(InputStream);
-      TLogger.Info('STDIO transport: stdin closed');
-    finally
-      DrainAndStop;
-    end;
-  finally
-    ReleaseRunner;
-  end;
-  TLogger.Info('STDIO transport stopped');
+  FJsonRpcProcessor.Settings := Value;
 end;
 
-procedure TMCPStdioTransport.StartRunner(const OutputStream: TStream);
+function TMCPStdioTransport.Hints: TMCPTransportHints;
 begin
-  FRunner         := TRequestRunner.Create(FManagerRegistry, FSettings, OutputStream);
-  FRunnerLifetime := FRunner;
-end;
-
-procedure TMCPStdioTransport.ReleaseRunner;
-begin
-  FRunner.DetachOutput;
-  FRunner         := nil;
-  FRunnerLifetime := nil;
+  Result := TMCPTransportHints.ForStdio(FLegacySession, FWriter, FTrackerIntf);
 end;
 
 function TMCPStdioTransport.WorkerCount: Integer;
@@ -471,45 +296,27 @@ begin
     Result := 1;
 end;
 
-procedure TMCPStdioTransport.ReadLoop(const InputStream: TStream);
-var
-  Line: TMCPLine;
+procedure TMCPStdioTransport.SendResponse(const Body: string);
 begin
-  const Reader = TMCPLineReader.Create(InputStream, Settings.MaxRequestBodyBytes);
-  try
-    while Reader.TryReadLine(Line) do
-    begin
-      try
-        case Line.Status of
-          TMCPLineStatus.TooLong:
-            begin
-              const NoId = TMCPRequestId.FromJson(nil);
-              const TooLong = Format('Message exceeds %d bytes', [Settings.MaxRequestBodyBytes]);
-              FRunner.SendError(NoId, JSONRPC_INVALID_REQUEST, TooLong);
-            end;
-          TMCPLineStatus.InvalidUtf8:
-            begin
-              const NoId = TMCPRequestId.FromJson(nil);
-              FRunner.SendError(NoId, JSONRPC_PARSE_ERROR, 'Message is not valid UTF-8');
-            end;
-        else
-          const Trimmed = Line.Text.Trim;
-          if Trimmed.IsEmpty then
-            Continue;
+  if Body = '' then
+    Exit;
+  FWriter.Send(Body);
+  TLogger.Debug('Sent: ' + TLogger.RedactJson(Body));
+end;
 
-          const Redacted = TLogger.RedactJson(Line.Text);
-          TLogger.Debug('Received: %s', [Redacted]);
-          const Message = TJSONObject.ParseJSONValue(Line.Text);
-          DispatchLine(Message);
-        end;
-      except
-        on E: Exception do
-          TLogger.Error('Error reading stdio request: %s', [E.Message]);
-      end;
-    end;
+procedure TMCPStdioTransport.SendError(const RequestId: TMCPRequestId; Code: Integer; const Message: string);
+begin
+  var Error := EMCPError.Create(Code, Message);
+  try
+    SendResponse(FJsonRpcProcessor.BuildErrorResponse(RequestId, Error));
   finally
-    Reader.Free;
+    Error.Free;
   end;
+end;
+
+procedure TMCPStdioTransport.ProcessInline(const Message: TJSONValue);
+begin
+  SendResponse(FJsonRpcProcessor.ProcessRequestEx(Message, Hints).Body);
 end;
 
 procedure TMCPStdioTransport.DispatchLine(const Message: TJSONValue);
@@ -527,24 +334,23 @@ begin
 
       if RequestId.IsPresent and (Method <> '') and (Method <> MCP_METHOD_PING) then
       begin
-        if not FRunner.Reserve(RequestId) then
+        if not FTracker.Reserve(RequestId) then
         begin
-          const InFlight = Format('Request id %s is still in flight', [RequestId.AsText]);
-          FRunner.SendError(RequestId, JSONRPC_INVALID_REQUEST, InFlight);
+          SendError(RequestId, JSONRPC_INVALID_REQUEST, Format('Request id %s is still in flight', [RequestId.AsText]));
           Exit;
         end;
         try
           if Method = MCP_METHOD_SUBSCRIPTIONS_LISTEN then
           begin
-            FRunner.StartListener(Message);
+            StartListener(Message);
             Queued := True;
             Exit;
           end;
-          const Accepted = FRunner.TryEnqueue(Message);
+          const Accepted = (FQueue.PushItem(Message) = TWaitResult.wrSignaled);
           if not Accepted then
           begin
-            FRunner.Release(RequestId);
-            FRunner.SendError(RequestId, JSONRPC_INTERNAL_ERROR, MESSAGE_SHUTTING_DOWN);
+            FTracker.Release(RequestId);
+            SendError(RequestId, JSONRPC_INTERNAL_ERROR, 'Server is shutting down');
             Exit;
           end;
           Queued := True;
@@ -552,223 +358,78 @@ begin
         except
           on E: Exception do
           begin
-            FRunner.Release(RequestId);
-            const NotStarted = Format('Request could not be started: %s', [E.Message]);
-            FRunner.SendError(RequestId, JSONRPC_INTERNAL_ERROR, NotStarted);
+            FTracker.Release(RequestId);
+            SendError(RequestId, JSONRPC_INTERNAL_ERROR, Format('Request could not be started: %s', [E.Message]));
             Exit;
           end;
         end;
       end;
     end;
 
-    FRunner.ProcessInline(Message);
+    ProcessInline(Message);
   finally
     if not Queued then
       Message.Free;
   end;
 end;
 
-procedure TMCPStdioTransport.DrainAndStop;
+procedure TMCPStdioTransport.ProcessQueued(const Message: TJSONValue);
 begin
-  const DrainMs  = Max(ShutdownDrainMs, 0);
-  const Deadline = DeadlineAfter(DrainMs);
-
-  FRunner.StopWorkersWhenIdle;
-  const WorkersDrained = FRunner.WaitForWorkers(DrainMs);
-  CloseSubscriptions(Deadline);
-
-  const IsEverythingAnswered = (WorkersDrained and not FRunner.HasRunningListeners);
-  if not IsEverythingAnswered then
-    AbortOutstandingRequests;
+  var RequestId := TMCPRequestId.FromJson(TJSONObject(Message).GetValue(MCP_KEY_ID));
+  try
+    var Outcome := FJsonRpcProcessor.ProcessRequestEx(Message, Hints);
+    if Outcome.Cancelled then
+      TLogger.Info('No response for cancelled request ' + RequestId.AsText)
+    else
+      SendResponse(Outcome.Body);
+  finally
+    FTracker.Release(RequestId);
+    Message.Free;
+  end;
 end;
 
-procedure TMCPStdioTransport.CloseSubscriptions(const Deadline: UInt64);
+procedure TMCPStdioTransport.StartListener(const Message: TJSONValue);
+begin
+  AtomicIncrement(FListeners);
+  TThread.CreateAnonymousThread(
+    procedure
+    begin
+      try
+        try
+          ProcessQueued(Message);
+        except
+          on E: Exception do
+            TLogger.Error(Format('Error processing stdio subscription: %s', [E.Message]));
+        end;
+      finally
+        AtomicDecrement(FListeners);
+      end;
+    end).Start;
+end;
+
+procedure TMCPStdioTransport.CloseSubscriptions;
 var
   Hub: IMCPSubscriptionHub;
 begin
   Supports(FManagerRegistry.GetManagerForMethod(MCP_METHOD_SUBSCRIPTIONS_LISTEN), IMCPSubscriptionHub, Hub);
+  var Deadline := TThread.GetTickCount64 + UInt64(FShutdownDrainMs);
   repeat
     if Assigned(Hub) then
       Hub.CloseAll(REASON_STDIN_CLOSED);
-    if not FRunner.HasRunningListeners then
+    if AtomicCmpExchange(FListeners, 0, 0) = 0 then
       Break;
     Sleep(LISTENER_POLL_MS);
-  until HasPassed(Deadline);
+  until TThread.GetTickCount64 >= Deadline;
 end;
 
-procedure TMCPStdioTransport.AbortOutstandingRequests;
-begin
-  FRunner.AbortRequests(REASON_STDIN_CLOSED);
-
-  const HasStopped = FRunner.WaitUntilStopped(SHUTDOWN_CANCEL_GRACE_MS);
-  if HasStopped then
-    Exit;
-
-  FRunner.AnswerUnansweredRequests;
-  TLogger.Warning('A request handler did not stop; it is answered and its late result will be dropped');
-end;
-
-procedure TMCPStdioTransport.SetSettings(const Value: TMCPSettings);
-begin
-  if Assigned(Value) then
-    FSettings := Value
-  else
-    FSettings := FDefaultSettings;
-end;
-
-function TMCPStdioTransport.GetShutdownDrainMs: Integer;
-begin
-  if FHasShutdownDrainMs then
-    Exit(FShutdownDrainMs);
-
-  Result := Settings.StdioShutdownDrainMs;
-end;
-
-procedure TMCPStdioTransport.SetShutdownDrainMs(const Value: Integer);
-begin
-  FShutdownDrainMs    := Value;
-  FHasShutdownDrainMs := True;
-end;
-
-{ TMCPStdioTransport.TRequestRunner }
-
-constructor TMCPStdioTransport.TRequestRunner.Create(const ManagerRegistry: IMCPManagerRegistry; const Settings: TMCPSettings; const OutputStream: TStream);
-begin
-  inherited Create;
-  FSettings         := Settings.Clone;
-  FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(ManagerRegistry, FSettings);
-  FLegacySession    := TMCPLegacySession.Create;
-  FTracker          := TMCPStdioRequestTracker.Create;
-  FTrackerLifetime  := FTracker;
-  FWriter           := TMCPLineWriter.Create(OutputStream);
-  FWriterLifetime   := FWriter;
-end;
-
-destructor TMCPStdioTransport.TRequestRunner.Destroy;
-begin
-  FWorkersDone.Free;
-  FQueue.Free;
-  FJsonRpcProcessor.Free;
-  FLegacySession.Free;
-  FTrackerLifetime := nil;
-  FWriterLifetime  := nil;
-  FSettings.Free;
-  inherited;
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.StartWorkers(const Count: Integer);
-begin
-  FStartedWorkers := Count;
-  FQueue          := TThreadedQueue<TJSONValue>.Create(QUEUE_DEPTH, QUEUE_PUSH_TIMEOUT_MS, INFINITE);
-  FWorkersDone    := TCountdownEvent.Create(Count);
-  for var WorkerNumber := 1 to Count do
-  begin
-    TMCPStdioThread.Create(Self, WorkerLoop);
-  end;
-  TLogger.Info('STDIO transport started: %d worker thread(s), logging to stderr', [Count]);
-end;
-
-function TMCPStdioTransport.TRequestRunner.Reserve(const RequestId: TMCPRequestId): Boolean;
-begin
-  Result := FTracker.Reserve(RequestId);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.Release(const RequestId: TMCPRequestId);
-begin
-  FTracker.Release(RequestId);
-end;
-
-function TMCPStdioTransport.TRequestRunner.TryEnqueue(const Message: TJSONValue): Boolean;
-begin
-  const Outcome = FQueue.PushItem(Message);
-  Result := (Outcome = TWaitResult.wrSignaled);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.StartListener(const Message: TJSONValue);
-begin
-  AtomicIncrement(FListeners);
-  TMCPStdioThread.Create(Self,
-    procedure
-    begin
-      RunListener(Message);
-    end);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.ProcessInline(const Message: TJSONValue);
-begin
-  const RequestHints = Hints;
-  const Outcome = FJsonRpcProcessor.ProcessRequestEx(Message, RequestHints);
-  SendResponse(Outcome.Body);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.SendError(const RequestId: TMCPRequestId; const Code: Integer; const Message: string);
-begin
-  const Error = EMCPError.Create(Code, Message);
-  try
-    const Body = FJsonRpcProcessor.BuildErrorResponse(RequestId, Error);
-    SendResponse(Body);
-  finally
-    Error.Free;
-  end;
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.StopWorkersWhenIdle;
-begin
-  for var WorkerNumber := 1 to FStartedWorkers do
-  begin
-    FQueue.PushItem(nil);
-  end;
-end;
-
-function TMCPStdioTransport.TRequestRunner.WaitForWorkers(const TimeoutMs: Integer): Boolean;
-begin
-  const Outcome = FWorkersDone.WaitFor(Cardinal(TimeoutMs));
-  Result := (Outcome = TWaitResult.wrSignaled);
-end;
-
-function TMCPStdioTransport.TRequestRunner.HasRunningListeners: Boolean;
-begin
-  Result := (AtomicCmpExchange(FListeners, 0, 0) <> 0);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.AbortRequests(const Reason: string);
-begin
-  FIsAborting := True;
-  FTracker.CancelAll(Reason);
-end;
-
-function TMCPStdioTransport.TRequestRunner.WaitUntilStopped(const TimeoutMs: Integer): Boolean;
-begin
-  const Deadline       = DeadlineAfter(TimeoutMs);
-  const WorkersStopped = WaitForWorkers(TimeoutMs);
-  while HasRunningListeners and not HasPassed(Deadline) do
-  begin
-    Sleep(LISTENER_POLL_MS);
-  end;
-
-  Result := (WorkersStopped and not HasRunningListeners);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.AnswerUnansweredRequests;
-begin
-  const Unanswered = FTracker.ClaimUnanswered;
-  for var RequestId in Unanswered do
-  begin
-    SendError(RequestId, JSONRPC_INTERNAL_ERROR, MESSAGE_SHUTTING_DOWN);
-  end;
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.DetachOutput;
-begin
-  FWriter.Close;
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.WorkerLoop;
+procedure TMCPStdioTransport.WorkerLoop;
 var
   Message: TJSONValue;
 begin
+  var Queue := FQueue;
+  var Done := FWorkersDone;
   try
-    while FQueue.PopItem(Message) = TWaitResult.wrSignaled do
+    while Queue.PopItem(Message) = TWaitResult.wrSignaled do
     begin
       if not Assigned(Message) then
         Break;
@@ -776,96 +437,114 @@ begin
         ProcessQueued(Message);
       except
         on E: Exception do
-          TLogger.Error('Error processing stdio request: %s', [E.Message]);
+          TLogger.Error('Error processing stdio request: ' + E.Message);
       end;
     end;
   finally
-    FWorkersDone.Signal;
+    Done.Signal;
   end;
 end;
 
-procedure TMCPStdioTransport.TRequestRunner.RunListener(const Message: TJSONValue);
+procedure TMCPStdioTransport.StartWorkers;
 begin
+  FStartedWorkers := WorkerCount;
+  FQueue := TThreadedQueue<TJSONValue>.Create(QUEUE_DEPTH, QUEUE_PUSH_TIMEOUT_MS, INFINITE);
+  FWorkersDone := TCountdownEvent.Create(FStartedWorkers);
+  for var WorkerNumber := 1 to FStartedWorkers do
+  begin
+    TMCPStdioWorker.Create(Self);
+  end;
+  TLogger.Info(Format('STDIO transport started: %d worker thread(s), logging to stderr', [FStartedWorkers]));
+end;
+
+procedure TMCPStdioTransport.DrainAndStop;
+begin
+  for var WorkerNumber := 1 to FStartedWorkers do
+  begin
+    FQueue.PushItem(nil);
+  end;
+
+  const Drained = (FWorkersDone.WaitFor(Cardinal(FShutdownDrainMs)) = TWaitResult.wrSignaled);
+  if not Drained then
+  begin
+    FTracker.CancelAll(REASON_STDIN_CLOSED);
+    FWorkersDone.WaitFor(SHUTDOWN_CANCEL_GRACE_MS);
+  end;
+  CloseSubscriptions;
+
+  const AllStopped = (FWorkersDone.IsSet and (AtomicCmpExchange(FListeners, 0, 0) = 0));
+  if AllStopped then
+  begin
+    FWorkersDone.Free;
+    FQueue.Free;
+    FWorkersDone := nil;
+    FQueue := nil;
+  end
+  else
+  begin
+    FWorkerStuck := True;
+    TLogger.Warning('A request handler did not stop; leaving it to the process exit');
+  end;
+end;
+
+procedure TMCPStdioTransport.ReadLoop(InputStream: TStream);
+var
+  Line: TMCPLine;
+begin
+  var Reader := TMCPLineReader.Create(InputStream, Settings.MaxRequestBodyBytes);
   try
-    try
-      ProcessQueued(Message);
-    except
-      on E: Exception do
-        TLogger.Error('Error processing stdio subscription: %s', [E.Message]);
+    while Reader.TryReadLine(Line) do
+    begin
+      try
+        case Line.Status of
+          TMCPLineStatus.TooLong:
+            SendError(TMCPRequestId.FromJson(nil), JSONRPC_INVALID_REQUEST,
+              Format('Message exceeds %d bytes', [Settings.MaxRequestBodyBytes]));
+          TMCPLineStatus.InvalidUtf8:
+            SendError(TMCPRequestId.FromJson(nil), JSONRPC_PARSE_ERROR, 'Message is not valid UTF-8');
+        else
+          if Line.Text.Trim = '' then
+            Continue;
+          TLogger.Debug('Received: ' + TLogger.RedactJson(Line.Text));
+          DispatchLine(TJSONObject.ParseJSONValue(Line.Text));
+        end;
+      except
+        on E: Exception do
+          TLogger.Error('Error reading stdio request: ' + E.Message);
+      end;
     end;
   finally
-    AtomicDecrement(FListeners);
+    Reader.Free;
   end;
 end;
 
-procedure TMCPStdioTransport.TRequestRunner.ProcessQueued(const Message: TJSONValue);
+procedure TMCPStdioTransport.RunWith(InputStream, OutputStream: TStream);
 begin
-  const IdValue = TJSONObject(Message).GetValue(MCP_KEY_ID);
-  const RequestId = TMCPRequestId.FromJson(IdValue);
+  FWriter := TMCPLineWriter.Create(OutputStream);
   try
-    if FIsAborting then
-      SendErrorOnce(RequestId, MESSAGE_SHUTTING_DOWN)
-    else
-      AnswerRequest(Message, RequestId);
+    StartWorkers;
+    try
+      ReadLoop(InputStream);
+      TLogger.Info('STDIO transport: stdin closed');
+    finally
+      DrainAndStop;
+    end;
   finally
-    FTracker.Release(RequestId);
-    Message.Free;
+    FWriter := nil;
   end;
+  TLogger.Info('STDIO transport stopped');
 end;
 
-procedure TMCPStdioTransport.TRequestRunner.AnswerRequest(const Message: TJSONValue; const RequestId: TMCPRequestId);
+procedure TMCPStdioTransport.Run;
 begin
-  const RequestHints = Hints;
-  const Outcome = FJsonRpcProcessor.ProcessRequestEx(Message, RequestHints);
-  if not Outcome.Cancelled then
-  begin
-    SendAnswerOnce(RequestId, Outcome.Body);
-    Exit;
+  var InputStream := StandardInputStream;
+  var OutputStream := StandardOutputStream;
+  try
+    RunWith(InputStream, OutputStream);
+  finally
+    OutputStream.Free;
+    InputStream.Free;
   end;
-
-  const IsClientCancellation = FTracker.WasCancelledByClient(RequestId);
-  if IsClientCancellation then
-    TLogger.Info('No response for cancelled request %s', [RequestId.AsText])
-  else if FIsAborting then
-    SendErrorOnce(RequestId, MESSAGE_SHUTTING_DOWN)
-  else
-    SendErrorOnce(RequestId, MESSAGE_REQUEST_CANCELLED);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.SendAnswerOnce(const RequestId: TMCPRequestId; const Body: string);
-begin
-  const IsFirstAnswer = TryClaimAnswer(RequestId);
-  if IsFirstAnswer then
-    SendResponse(Body);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.SendErrorOnce(const RequestId: TMCPRequestId; const Message: string);
-begin
-  const IsFirstAnswer = TryClaimAnswer(RequestId);
-  if IsFirstAnswer then
-    SendError(RequestId, JSONRPC_INTERNAL_ERROR, Message);
-end;
-
-function TMCPStdioTransport.TRequestRunner.TryClaimAnswer(const RequestId: TMCPRequestId): Boolean;
-begin
-  Result := FTracker.TryClaimAnswer(RequestId);
-  if not Result then
-    TLogger.Info(MESSAGE_ANSWER_DROPPED, [RequestId.AsText]);
-end;
-
-function TMCPStdioTransport.TRequestRunner.Hints: TMCPTransportHints;
-begin
-  Result := TMCPTransportHints.ForStdio(FLegacySession, FWriterLifetime, FTrackerLifetime);
-end;
-
-procedure TMCPStdioTransport.TRequestRunner.SendResponse(const Body: string);
-begin
-  if Body.IsEmpty then
-    Exit;
-
-  FWriter.Send(Body);
-  const Redacted = TLogger.RedactJson(Body);
-  TLogger.Debug('Sent: %s', [Redacted]);
 end;
 
 end.

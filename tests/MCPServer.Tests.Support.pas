@@ -7,6 +7,9 @@ uses
   System.SyncObjs,
   System.JSON;
 
+const
+  EPHEMERAL_KEY_WARNING = 'RequestStateKey is not set';
+
 type
   TMCPTestMeta = record
   public const
@@ -15,8 +18,6 @@ type
   end;
 
   TMCPTestJson = record
-  public const
-    FIRST_TEXT_PATH = 'result.content[0].text';
   public
     class function ParseObject(const Text: string): TJSONObject; static;
   end;
@@ -41,7 +42,6 @@ type
     destructor Destroy; override;
 
     function CountOf(const Fragment: string): Integer;
-    function WaitFor(const Fragment: string; const TimeoutMs: Cardinal = TMCPTestWait.DEFAULT_TIMEOUT_MS): Boolean;
   end;
 
 implementation
@@ -109,17 +109,6 @@ begin
   finally
     FLock.Leave;
   end;
-end;
-
-function TMCPTestLogWatch.WaitFor(const Fragment: string; const TimeoutMs: Cardinal): Boolean;
-begin
-  Result := TMCPTestWait.UntilTrue(
-    function: Boolean
-    begin
-      const Matches = CountOf(Fragment);
-      Result := (Matches > 0);
-    end,
-    TimeoutMs);
 end;
 
 procedure TMCPTestLogWatch.Observe(const Message: string);

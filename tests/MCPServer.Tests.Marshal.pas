@@ -142,6 +142,14 @@ type
     procedure DateTime_Iso8601_RoundTrip;
 
     [Test]
+    [TestCase('TimeOfDay', '"2026-10-18T14:30:00",14,30')]
+    [TestCase('DateOnly', '"2026-10-18",0,0')]
+    procedure DateTime_WithoutZone_KeepsItsClockTime(const Json: string; const Hour: Integer; const Minute: Integer);
+
+    [Test]
+    procedure DateTime_WithZone_IsReadAsLocalTime;
+
+    [Test]
     procedure Date_Iso8601_RoundTrip;
 
     [Test]
@@ -445,6 +453,29 @@ begin
 
   const Back = FromJson(Text, DateTimeType);
   Assert.AreEqual(Double(When), Double(Back.AsType<TDateTime>), 1.0 / SecsPerDay);
+end;
+
+procedure TMarshalTests.DateTime_WithoutZone_KeepsItsClockTime(const Json: string; const Hour: Integer; const Minute: Integer);
+begin
+  const DateTimeType = RttiTypeOf(TypeInfo(TDateTime));
+  const Expected = EncodeDateTime(2026, 10, 18, Word(Hour), Word(Minute), 0, 0);
+
+  const Back = FromJson(Json, DateTimeType);
+
+  const Restored = Back.AsType<TDateTime>;
+  Assert.AreEqual(Double(Expected), Double(Restored), TIME_TOLERANCE, 'a date-time without an offset is local time');
+end;
+
+procedure TMarshalTests.DateTime_WithZone_IsReadAsLocalTime;
+begin
+  const DateTimeType = RttiTypeOf(TypeInfo(TDateTime));
+  const InUtc = EncodeDateTime(2026, 10, 18, 12, 30, 0, 0);
+  const Expected = TTimeZone.Local.ToLocalTime(InUtc);
+
+  const Back = FromJson('"2026-10-18T12:30:00Z"', DateTimeType);
+
+  const Restored = Back.AsType<TDateTime>;
+  Assert.AreEqual(Double(Expected), Double(Restored), TIME_TOLERANCE);
 end;
 
 procedure TMarshalTests.Date_Iso8601_RoundTrip;
