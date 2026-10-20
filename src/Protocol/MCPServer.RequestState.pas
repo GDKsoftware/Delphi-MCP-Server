@@ -11,8 +11,6 @@ type
   public
     const DEFAULT_TTL_SECONDS = 600;
     const TOKEN_VERSION = 1;
-    const EPHEMERAL_KEY_WARNING = '[Security] RequestStateKey is not set: requestState tokens are sealed ' +
-                                  'with a random key and stop verifying after a restart or on another instance';
   strict private
     FKey: TBytes;
     FTtlSeconds: Integer;
@@ -42,6 +40,7 @@ uses
   System.Generics.Defaults,
   MCPServer.Types,
   MCPServer.Errors,
+  MCPServer.Logger,
   MCPServer.SecureRandom,
   System.NetEncoding;
 
@@ -83,6 +82,8 @@ begin
   begin
     FKey := TMCPSecureRandom.Bytes(KEY_BYTES);
     FKeyIsEphemeral := True;
+    TLogger.Warning('[Security] RequestStateKey is not set: requestState tokens are sealed with a random key ' +
+      'and stop verifying after a restart or on another instance');
   end;
 end;
 

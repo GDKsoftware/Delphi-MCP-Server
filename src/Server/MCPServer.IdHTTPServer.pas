@@ -119,7 +119,6 @@ uses
   MCPServer.Errors,
   MCPServer.HttpHeaders,
   MCPServer.HttpStream,
-  MCPServer.RequestState,
   MCPServer.Logger;
 
 const
@@ -206,8 +205,6 @@ begin
 
   FJsonRpcProcessor.Free;
   FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(FManagerRegistry, FSettings);
-  if FJsonRpcProcessor.IsRequestStateKeyEphemeral then
-    TLogger.Warning(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
 
   if Assigned(FSettings) then
   begin

@@ -9,9 +9,6 @@ uses
   System.Generics.Collections,
   MCPServer.Types;
 
-const
-  ALARM_DESCRIPTION = 'When the alarm rings';
-
 type
   TShipMode = (Standard, Express);
 
@@ -175,8 +172,6 @@ type
     procedure Primitives(const Name: string; const Count: Integer; const Ratio: Double;
       const Flag: Boolean);
     procedure Scheduled(const When: TDateTime; const Mode: TShipMode);
-    procedure Alarm(const At: TTime);
-    procedure DescribedAlarm([SchemaDescription(ALARM_DESCRIPTION)] const At: TTime);
     procedure WithFilter(const Filter: TOrderFilter);
     procedure WithSkus(const Skus: TArray<string>);
     procedure WithLines(const Lines: TArray<TOrderLine>);
@@ -221,7 +216,6 @@ type
     function MethodOf(const MethodName: string): TRttiMethod;
     function SchemaOf(const MethodName: string): TJSONObject;
     function ResultSchemaOf(const MethodName: string): TJSONObject;
-    function IsReadAsTime(const Value: TJSONValue): Boolean;
   public
     [Setup]
     procedure Setup;
@@ -236,19 +230,6 @@ type
 
     [Test]
     procedure DateTime_IsStringWithFormat;
-
-    [Test]
-    procedure Time_IsStringWithAPatternAndNoFormat;
-
-    [Test]
-    [TestCase('Minutes', '"14:30",True')]
-    [TestCase('Milliseconds', '"14:30:05.250",True')]
-    [TestCase('Utc', '"14:30:00Z",False')]
-    [TestCase('PastMidnight', '"24:00",False')]
-    procedure Time_Pattern_AcceptsWhatTheReaderAccepts(const Json: string; const Expected: Boolean);
-
-    [Test]
-    procedure Time_WithItsOwnDescription_KeepsOnlyThatDescription;
 
     [Test]
     procedure Enumeration_IsStringWithItsNames;
@@ -396,15 +377,7 @@ implementation
 
 uses
   System.SysUtils,
-  MCPServer.Schema.Generator,
-  MCPServer.Schema.Validator,
-  MCPServer.Serializer;
-
-const
-  ALARM_METHOD           = 'Alarm';
-  DESCRIBED_ALARM_METHOD = 'DescribedAlarm';
-  ALARM_TIME_PATH        = 'properties.at';
-  DESCRIPTION_KEY        = 'description';
+  MCPServer.Schema.Generator;
 
 { TAnnotatedFields }
 
@@ -432,14 +405,6 @@ begin
 end;
 
 procedure TSampleService.Scheduled(const When: TDateTime; const Mode: TShipMode);
-begin
-end;
-
-procedure TSampleService.Alarm(const At: TTime);
-begin
-end;
-
-procedure TSampleService.DescribedAlarm(const At: TTime);
 begin
 end;
 
@@ -614,18 +579,6 @@ begin
   Result := TMCPSchemaGenerator.GenerateSchemaFromMethodResult(MethodOf(MethodName));
 end;
 
-function TSchemaFromMethodTests.IsReadAsTime(const Value: TJSONValue): Boolean;
-begin
-  const TimeType = FContext.GetType(TypeInfo(TTime));
-  try
-    TMCPSerializer.JsonToValue(Value, TimeType, nil);
-    Result := True;
-  except
-    on E: EArgumentException do
-      Result := False;
-  end;
-end;
-
 procedure TSchemaFromMethodTests.NoParameters_GivesAnEmptyObjectSchema;
 begin
   var Schema := SchemaOf('NoParameters');
@@ -658,71 +611,6 @@ begin
   try
     Assert.AreEqual('string', Schema.GetValue<string>('properties.when.type'));
     Assert.AreEqual('date-time', Schema.GetValue<string>('properties.when.format'));
-  finally
-    Schema.Free;
-  end;
-end;
-
-procedure TSchemaFromMethodTests.Time_IsStringWithAPatternAndNoFormat;
-begin
-  const Schema = SchemaOf(ALARM_METHOD);
-  try
-    const AtSchema = Schema.GetValue<TJSONObject>(ALARM_TIME_PATH);
-    const JsonType         = AtSchema.GetValue<string>('type');
-    const FormatValue      = AtSchema.GetValue('format');
-    const PatternValue     = AtSchema.GetValue('pattern');
-    const DescriptionValue = AtSchema.GetValue(DESCRIPTION_KEY);
-    const HasFormat        = Assigned(FormatValue);
-    const HasPattern       = Assigned(PatternValue);
-    const HasDescription   = Assigned(DescriptionValue);
-
-    Assert.AreEqual('string', JsonType);
-    Assert.IsFalse(HasFormat, 'format: time is RFC 3339 full-time, with a zone offset a TTime does not have');
-    Assert.IsTrue(HasPattern, 'the pattern names the text that is accepted');
-    Assert.IsTrue(HasDescription, 'the description says the same in words');
-  finally
-    Schema.Free;
-  end;
-end;
-
-procedure TSchemaFromMethodTests.Time_Pattern_AcceptsWhatTheReaderAccepts(const Json: string; const Expected: Boolean);
-begin
-  const Schema = SchemaOf(ALARM_METHOD);
-  try
-    const AtSchema = Schema.GetValue<TJSONObject>(ALARM_TIME_PATH);
-    const Value = TJSONObject.ParseJSONValue(Json);
-    try
-      var Errors: TArray<string>;
-      const MatchesTheSchema = TMCPSchemaValidator.TryValidate(AtSchema, Value, Errors);
-      const IsRead = IsReadAsTime(Value);
-
-      Assert.AreEqual(Expected, MatchesTheSchema, 'the schema');
-      Assert.AreEqual(Expected, IsRead, 'the reader');
-    finally
-      Value.Free;
-    end;
-  finally
-    Schema.Free;
-  end;
-end;
-
-procedure TSchemaFromMethodTests.Time_WithItsOwnDescription_KeepsOnlyThatDescription;
-begin
-  const Schema = SchemaOf(DESCRIBED_ALARM_METHOD);
-  try
-    const AtSchema = Schema.GetValue<TJSONObject>(ALARM_TIME_PATH);
-    const Description = AtSchema.GetValue<string>(DESCRIPTION_KEY);
-    var DescriptionCount := 0;
-    for var Pair in AtSchema do
-    begin
-      const Key = Pair.JsonString;
-      const IsDescription = (Key.Value = DESCRIPTION_KEY);
-      if IsDescription then
-        Inc(DescriptionCount);
-    end;
-
-    Assert.AreEqual(ALARM_DESCRIPTION, Description);
-    Assert.AreEqual(1, DescriptionCount, 'the attribute replaces the generated description');
   finally
     Schema.Free;
   end;

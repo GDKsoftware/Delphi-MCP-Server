@@ -82,8 +82,6 @@ type
     constructor Create(ManagerRegistry: IMCPManagerRegistry; Settings: TMCPSettings); overload;
     destructor Destroy; override;
 
-    function IsRequestStateKeyEphemeral: Boolean;
-
     function ProcessRequest(const RequestBody: string; const SessionID: string): string;
     function ProcessRequestEx(const RequestBody: string; const Hints: TMCPTransportHints): TMCPProcessResult; overload;
     function ProcessRequestEx(const Message: TJSONValue; const Hints: TMCPTransportHints): TMCPProcessResult; overload;
@@ -165,11 +163,6 @@ begin
 
   FreeAndNil(FStateSealer);
   FStateSealer := TMCPRequestStateSealer.Create(FSettings.RequestStateKey, FSettings.RequestStateTtlSeconds);
-end;
-
-function TMCPJsonRpcProcessor.IsRequestStateKeyEphemeral: Boolean;
-begin
-  Result := FStateSealer.KeyIsEphemeral;
 end;
 
 function TMCPJsonRpcProcessor.SupportedModernVersions: TArray<string>;
