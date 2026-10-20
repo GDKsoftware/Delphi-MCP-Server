@@ -854,7 +854,10 @@ begin
     except
       on E: EMCPInputRequired do
         begin
-          Result := InputRequiredResult(Context, Params, Hints, E);
+          if Context.IsCancelled then
+            Result := CancelledResult(Context.Era)
+          else
+            Result := InputRequiredResult(Context, Params, Hints, E);
           Exit;
         end;
     end;

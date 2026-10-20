@@ -55,7 +55,6 @@ type
 
     procedure LoadDefaults;
     procedure CreateDefaultSettingsFile;
-    procedure CopyFieldsTo(const Target: TMCPSettings);
   public
     constructor Create(const ASettingsFile: string = ''; const ACreateFile: Boolean = True);
     constructor CreateDefaults;
@@ -63,7 +62,6 @@ type
 
     procedure LoadFromFile;
     procedure SaveToFile;
-    function Clone: TMCPSettings;
 
     property Port: Integer read FPort write FPort;
     property Host: string read FHost write FHost;
@@ -128,7 +126,6 @@ type
 implementation
 
 uses
-  System.Rtti,
   MCPServer.Logger;
 
 const
@@ -178,34 +175,6 @@ end;
 destructor TMCPSettings.Destroy;
 begin
   inherited;
-end;
-
-function TMCPSettings.Clone: TMCPSettings;
-begin
-  Result := TMCPSettings.CreateDefaults;
-  try
-    CopyFieldsTo(Result);
-  except
-    Result.Free;
-    raise;
-  end;
-end;
-
-procedure TMCPSettings.CopyFieldsTo(const Target: TMCPSettings);
-begin
-  var Context := TRttiContext.Create;
-  try
-    const SettingsType = Context.GetType(TMCPSettings);
-    for var Field in SettingsType.GetFields do
-    begin
-      {$WARN UNSAFE_CAST OFF}
-      const Value = Field.GetValue(Self);
-      Field.SetValue(Target, Value);
-      {$WARN UNSAFE_CAST ON}
-    end;
-  finally
-    Context.Free;
-  end;
 end;
 
 procedure TMCPSettings.LoadDefaults;

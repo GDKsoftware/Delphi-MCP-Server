@@ -59,7 +59,6 @@ type
     type
       TRequestRunner = class(TInterfacedObject)
       strict private
-        FSettings: TMCPSettings;
         FJsonRpcProcessor: TMCPJsonRpcProcessor;
         FLegacySession: TMCPLegacySession;
         FTracker: TMCPStdioRequestTracker;
@@ -635,8 +634,7 @@ end;
 constructor TMCPStdioTransport.TRequestRunner.Create(const ManagerRegistry: IMCPManagerRegistry; const Settings: TMCPSettings; const OutputStream: TStream);
 begin
   inherited Create;
-  FSettings         := Settings.Clone;
-  FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(ManagerRegistry, FSettings);
+  FJsonRpcProcessor := TMCPJsonRpcProcessor.Create(ManagerRegistry, Settings);
   FLegacySession    := TMCPLegacySession.Create;
   FTracker          := TMCPStdioRequestTracker.Create;
   FTrackerLifetime  := FTracker;
@@ -652,7 +650,6 @@ begin
   FLegacySession.Free;
   FTrackerLifetime := nil;
   FWriterLifetime  := nil;
-  FSettings.Free;
   inherited;
 end;
 
