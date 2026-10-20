@@ -107,6 +107,12 @@ were booleans), sets and dynamic arrays as arrays, `nil` objects as `null`
 and `TDateTime` as an ISO 8601 string. The `logs://recent` timestamps and the
 `server://status` times are strings now.
 
+**A `TDate` or `TTime` value is a string**, in a result and in an argument:
+`2026-10-18` or `14:30:00`. A client that read the number Delphi stores
+reads that text instead. The schema of a `TTime` carries a `pattern` for
+`hh:mm`, `hh:mm:ss` and `hh:mm:ss.fff` rather than `format: time`, so a time
+with a zone offset is refused.
+
 **Tools and resources are listed in registration order.** Anything that
 depended on the previous dictionary order should use the names instead.
 
@@ -134,10 +140,19 @@ tools that report progress (`test_tool_with_progress` is the example); this
 is new traffic on stdout a client that does not expect it should tolerate,
 since it was already required by the specification.
 
-**The server exits promptly when stdin closes**, even with a request still
-running: it waits `[Server] MaxConcurrentRequests`-many workers up to 2
-seconds (configurable via `TMCPStdioTransport.ShutdownDrainMs` for a library
-consumer), then cancels what is left rather than blocking forever.
+**The server exits promptly when stdin closes, and answers every request
+first**, even with a request still running: it lets the requests it already
+read finish for up to `[Server] StdioShutdownDrainMs` (2000 by default;
+`TMCPStdioTransport.ShutdownDrainMs`, when a library consumer sets it, wins
+over the setting), then cancels what is left rather than blocking forever.
+What it cancels that way, and what was still queued, is answered with
+`-32603` "Server is shutting down", so a client that waited for no response
+to those requests receives one. A request the client cancelled gets none.
+
+**A stdio run takes a copy of the settings when it starts.** The transport's
+own answers use that copy, so a change to the settings during `RunStdio` or
+`RunStdioWith` reaches only the managers, such as the one that answers
+`initialize`. Set the settings before the run.
 
 **A duplicate request id while the first is still in flight is `-32600`**,
 answered immediately, instead of being silently queued behind it.

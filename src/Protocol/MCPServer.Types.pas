@@ -134,6 +134,11 @@ const
 
   SCHEMA_FIELD_VISIBILITIES = [mvPublic, mvPublished];
 
+  ISO_TIME_OF_DAY_PATTERN = '([01][0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9])(?:\.([0-9]+))?)?';
+  ISO_TIME_OF_DAY_TEXT    = 'hh:mm, hh:mm:ss or hh:mm:ss.fff, without a zone offset';
+
+  CALENDAR_KIND_NOT_SUPPORTED = 'Unsupported calendar kind: %d';
+
 type
   TMCPProtocolVersion = record
     class function IsLegacy(const Version: string): Boolean; static;
@@ -294,7 +299,13 @@ type
   TMCPProtocolEra = (Legacy, Modern);
 
   TMCPRequestIdKind = (None, Null, Text, Number, Invalid);
+
+  TMCPCalendarKind = (None, DateTime, Date, Time);
   {$SCOPEDENUMS OFF}
+
+  TMCPCalendarKindHelper = record helper for TMCPCalendarKind
+    class function FromType(const TypeHandle: PTypeInfo): TMCPCalendarKind; static;
+  end;
 
   TMCPRequestId = record
     Kind: TMCPRequestIdKind;
@@ -577,6 +588,22 @@ begin
     Difference := Difference or (Left xor Right);
   end;
   Result := Difference = 0;
+end;
+
+class function TMCPCalendarKindHelper.FromType(const TypeHandle: PTypeInfo): TMCPCalendarKind;
+begin
+  const IsDateTime = (TypeHandle = TypeInfo(TDateTime));
+  const IsDate     = (TypeHandle = TypeInfo(TDate));
+  const IsTime     = (TypeHandle = TypeInfo(TTime));
+
+  if IsDateTime then
+    Result := TMCPCalendarKind.DateTime
+  else if IsDate then
+    Result := TMCPCalendarKind.Date
+  else if IsTime then
+    Result := TMCPCalendarKind.Time
+  else
+    Result := TMCPCalendarKind.None;
 end;
 
 function IsJsonString(const Value: TJSONValue): Boolean;

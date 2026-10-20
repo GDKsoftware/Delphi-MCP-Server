@@ -26,6 +26,8 @@ type
     class function GuidSchema: TJSONObject;
     class function ItemsSchema(const Site: string; const ElementType: TRttiType; Depth: Integer): TJSONObject;
     class procedure DescribeFloat(RttiType: TRttiType; const Schema: TJSONObject);
+    class procedure DescribeFormattedString(const Schema: TJSONObject; const FormatName: string);
+    class procedure DescribeTimeOfDay(const Schema: TJSONObject);
     class procedure DescribeSet(RttiType: TRttiType; const Schema: TJSONObject);
     class function ClassSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
     class function RecordSchema(RttiType: TRttiType; Depth: Integer): TJSONObject;
@@ -70,6 +72,12 @@ const
   SCHEMA_KEY_REQUIRED = 'required';
   SCHEMA_KEY_RESULT = 'result';
   SCHEMA_FORMAT_UUID = 'uuid';
+  SCHEMA_KEY_PATTERN = 'pattern';
+
+  SCHEMA_FORMAT_DATE_TIME        = 'date-time';
+  SCHEMA_FORMAT_DATE             = 'date';
+  SCHEMA_PATTERN_TIME_OF_DAY     = '^' + ISO_TIME_OF_DAY_PATTERN + '$';
+  SCHEMA_DESCRIPTION_TIME_OF_DAY = 'A time of day as ' + ISO_TIME_OF_DAY_TEXT;
 
   DEPTH_ABOVE_ROOT = -1;
 
@@ -293,25 +301,28 @@ end;
 
 class procedure TMCPSchemaGenerator.DescribeFloat(RttiType: TRttiType; const Schema: TJSONObject);
 begin
-  if RttiType.Handle = TypeInfo(TDateTime) then
-  begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
-    Schema.AddPair(SCHEMA_KEY_FORMAT, 'date-time');
-  end
-  else if RttiType.Handle = TypeInfo(TDate) then
-  begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
-    Schema.AddPair(SCHEMA_KEY_FORMAT, 'date');
-  end
-  else if RttiType.Handle = TypeInfo(TTime) then
-  begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
-    Schema.AddPair(SCHEMA_KEY_FORMAT, 'time');
-  end
+  const Kind = TMCPCalendarKind.FromType(RttiType.Handle);
+  case Kind of
+    TMCPCalendarKind.None     : Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_NUMBER);
+    TMCPCalendarKind.DateTime : DescribeFormattedString(Schema, SCHEMA_FORMAT_DATE_TIME);
+    TMCPCalendarKind.Date     : DescribeFormattedString(Schema, SCHEMA_FORMAT_DATE);
+    TMCPCalendarKind.Time     : DescribeTimeOfDay(Schema);
   else
-  begin
-    Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_NUMBER);
+    raise ENotSupportedException.CreateFmt(CALENDAR_KIND_NOT_SUPPORTED, [Ord(Kind)]);
   end;
+end;
+
+class procedure TMCPSchemaGenerator.DescribeFormattedString(const Schema: TJSONObject; const FormatName: string);
+begin
+  Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+  Schema.AddPair(SCHEMA_KEY_FORMAT, FormatName);
+end;
+
+class procedure TMCPSchemaGenerator.DescribeTimeOfDay(const Schema: TJSONObject);
+begin
+  Schema.AddPair(MCP_KEY_TYPE, SCHEMA_TYPE_STRING);
+  Schema.AddPair(SCHEMA_KEY_PATTERN, SCHEMA_PATTERN_TIME_OF_DAY);
+  Schema.AddPair(MCP_KEY_DESCRIPTION, SCHEMA_DESCRIPTION_TIME_OF_DAY);
 end;
 
 class procedure TMCPSchemaGenerator.DescribeSet(RttiType: TRttiType; const Schema: TJSONObject);
@@ -461,7 +472,10 @@ begin
   for var Attr in Member.GetAttributes do
   begin
     if Attr is SchemaDescriptionAttribute then
-      MemberSchema.AddPair(MCP_KEY_DESCRIPTION, SchemaDescriptionAttribute(Attr).Description)
+    begin
+      MemberSchema.RemovePair(MCP_KEY_DESCRIPTION).Free;
+      MemberSchema.AddPair(MCP_KEY_DESCRIPTION, SchemaDescriptionAttribute(Attr).Description);
+    end
     else if Attr is SchemaTitleAttribute then
       MemberSchema.AddPair(MCP_KEY_TITLE, SchemaTitleAttribute(Attr).Title)
     else if Attr is SchemaFormatAttribute then
@@ -488,7 +502,10 @@ begin
     else if Attr is SchemaMaxLengthAttribute then
       MemberSchema.AddPair('maxLength', TJSONNumber.Create(SchemaMaxLengthAttribute(Attr).MaxLength))
     else if Attr is SchemaPatternAttribute then
-      MemberSchema.AddPair('pattern', SchemaPatternAttribute(Attr).Pattern)
+    begin
+      MemberSchema.RemovePair(SCHEMA_KEY_PATTERN).Free;
+      MemberSchema.AddPair(SCHEMA_KEY_PATTERN, SchemaPatternAttribute(Attr).Pattern);
+    end
     else if Attr is SchemaDefaultAttribute then
     begin
       var DefaultValue := TJSONObject.ParseJSONValue(SchemaDefaultAttribute(Attr).Json);

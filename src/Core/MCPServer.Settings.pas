@@ -35,6 +35,7 @@ type
     FMaxJsonDepth: Integer;
     FMaxConnections: Integer;
     FMaxConcurrentRequests: Integer;
+    FStdioShutdownDrainMs: Integer;
     FSecurityAllowedOrigins: string;
     FAllowedHosts: string;
     FExposeDiagnosticsResources: Boolean;
@@ -54,6 +55,7 @@ type
 
     procedure LoadDefaults;
     procedure CreateDefaultSettingsFile;
+    procedure CopyFieldsTo(const Target: TMCPSettings);
   public
     constructor Create(const ASettingsFile: string = ''; const ACreateFile: Boolean = True);
     constructor CreateDefaults;
@@ -61,6 +63,7 @@ type
 
     procedure LoadFromFile;
     procedure SaveToFile;
+    function Clone: TMCPSettings;
 
     property Port: Integer read FPort write FPort;
     property Host: string read FHost write FHost;
@@ -91,6 +94,7 @@ type
     property MaxJsonDepth: Integer read FMaxJsonDepth write FMaxJsonDepth;
     property MaxConnections: Integer read FMaxConnections write FMaxConnections;
     property MaxConcurrentRequests: Integer read FMaxConcurrentRequests write FMaxConcurrentRequests;
+    property StdioShutdownDrainMs: Integer read FStdioShutdownDrainMs write FStdioShutdownDrainMs;
     property SecurityAllowedOrigins: string read FSecurityAllowedOrigins write FSecurityAllowedOrigins;
     property AllowedOrigins: string read GetAllowedOrigins;
     property AllowedHosts: string read FAllowedHosts write FAllowedHosts;
@@ -114,6 +118,7 @@ type
     const DEFAULT_MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024;
     const DEFAULT_MAX_JSON_DEPTH = 64;
     const DEFAULT_MAX_CONCURRENT_REQUESTS = 1;
+    const DEFAULT_STDIO_SHUTDOWN_DRAIN_MS = 2000;
     const DEFAULT_REQUEST_STATE_TTL_SECONDS = 600;
     const DEFAULT_MAX_RUNNING_TASKS = 8;
     const DEFAULT_TASK_TTL_MS = 60 * 60 * 1000;
@@ -123,6 +128,7 @@ type
 implementation
 
 uses
+  System.Rtti,
   MCPServer.Logger;
 
 const
@@ -137,6 +143,7 @@ const
   KEY_MAX_RUNNING_TASKS = 'MaxRunningTasks';
   KEY_TASK_TTL_MS = 'TtlMs';
   KEY_TASK_POLL_INTERVAL_MS = 'PollIntervalMs';
+  KEY_STDIO_SHUTDOWN_DRAIN_MS = 'StdioShutdownDrainMs';
 
 
 { TMCPSettings }
@@ -173,6 +180,34 @@ begin
   inherited;
 end;
 
+function TMCPSettings.Clone: TMCPSettings;
+begin
+  Result := TMCPSettings.CreateDefaults;
+  try
+    CopyFieldsTo(Result);
+  except
+    Result.Free;
+    raise;
+  end;
+end;
+
+procedure TMCPSettings.CopyFieldsTo(const Target: TMCPSettings);
+begin
+  var Context := TRttiContext.Create;
+  try
+    const SettingsType = Context.GetType(TMCPSettings);
+    for var Field in SettingsType.GetFields do
+    begin
+      {$WARN UNSAFE_CAST OFF}
+      const Value = Field.GetValue(Self);
+      Field.SetValue(Target, Value);
+      {$WARN UNSAFE_CAST ON}
+    end;
+  finally
+    Context.Free;
+  end;
+end;
+
 procedure TMCPSettings.LoadDefaults;
 begin
   FPort := 3000;
@@ -198,6 +233,7 @@ begin
   FMaxRequestBodyBytes := DEFAULT_MAX_REQUEST_BODY_BYTES;
   FMaxJsonDepth := DEFAULT_MAX_JSON_DEPTH;
   FMaxConcurrentRequests := DEFAULT_MAX_CONCURRENT_REQUESTS;
+  FStdioShutdownDrainMs := DEFAULT_STDIO_SHUTDOWN_DRAIN_MS;
   FMaxConnections := 0;
   FSecurityAllowedOrigins := '';
   FAllowedHosts := '';
@@ -284,6 +320,8 @@ begin
     IniFile.WriteInteger(SECTION_SERVER, 'MaxJsonDepth', FMaxJsonDepth);
     IniFile.WriteInteger(SECTION_SERVER, 'MaxConcurrentRequests', FMaxConcurrentRequests);
     IniFile.WriteInteger(SECTION_SERVER, 'MaxConnections', FMaxConnections);
+    IniFile.WriteString(SECTION_SERVER, '; Once stdin closes: how long requests may still run before the rest is answered with an error', '');
+    IniFile.WriteInteger(SECTION_SERVER, KEY_STDIO_SHUTDOWN_DRAIN_MS, FStdioShutdownDrainMs);
     IniFile.WriteString(SECTION_SERVER, '; Serve logs://recent, logs://{level} and server://status (0 = keep diagnostics private)', '');
     IniFile.WriteBool(SECTION_SERVER, 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
 
@@ -352,6 +390,7 @@ begin
     FMaxJsonDepth := IniFile.ReadInteger(SECTION_SERVER, 'MaxJsonDepth', FMaxJsonDepth);
     FMaxConcurrentRequests := IniFile.ReadInteger(SECTION_SERVER, 'MaxConcurrentRequests', FMaxConcurrentRequests);
     FMaxConnections := IniFile.ReadInteger(SECTION_SERVER, 'MaxConnections', FMaxConnections);
+    FStdioShutdownDrainMs := IniFile.ReadInteger(SECTION_SERVER, KEY_STDIO_SHUTDOWN_DRAIN_MS, FStdioShutdownDrainMs);
 
     FSecurityAllowedOrigins := IniFile.ReadString(SECTION_SECURITY, 'AllowedOrigins', FSecurityAllowedOrigins);
     FAllowedHosts := IniFile.ReadString(SECTION_SECURITY, 'AllowedHosts', FAllowedHosts);
@@ -423,6 +462,7 @@ begin
     IniFile.WriteInteger(SECTION_SERVER, 'MaxJsonDepth', FMaxJsonDepth);
     IniFile.WriteInteger(SECTION_SERVER, 'MaxConcurrentRequests', FMaxConcurrentRequests);
     IniFile.WriteInteger(SECTION_SERVER, 'MaxConnections', FMaxConnections);
+    IniFile.WriteInteger(SECTION_SERVER, KEY_STDIO_SHUTDOWN_DRAIN_MS, FStdioShutdownDrainMs);
     IniFile.WriteBool(SECTION_SERVER, 'ExposeDiagnosticsResources', FExposeDiagnosticsResources);
 
     IniFile.WriteString(SECTION_SECURITY, 'AllowedOrigins', FSecurityAllowedOrigins);

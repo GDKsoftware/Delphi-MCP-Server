@@ -109,10 +109,14 @@
         <DCCReference Include="..\src\Managers\MCPServer.SubscriptionsManager.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioTransport.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.StdioChannel.pas"/>
+        <DCCReference Include="..\src\Server\MCPServer.StdioHost.pas"/>
         <DCCReference Include="..\src\Server\MCPServer.Host.pas"/>
         <DCCReference Include="MCPServer.Tests.StdioChannel.pas"/>
         <DCCReference Include="MCPServer.Tests.Cancellation.pas"/>
+        <DCCReference Include="MCPServer.Tests.StdioDoubles.pas"/>
+        <DCCReference Include="MCPServer.Tests.StdioRequestTracker.pas"/>
         <DCCReference Include="MCPServer.Tests.Stdio.pas"/>
+        <DCCReference Include="MCPServer.Tests.StdioHost.pas"/>
         <DCCReference Include="MCPServer.Tests.SchemaValidator.pas"/>
         <DCCReference Include="MCPServer.Tests.Prompt.pas"/>
         <DCCReference Include="MCPServer.Tests.Mrtr.pas"/>
