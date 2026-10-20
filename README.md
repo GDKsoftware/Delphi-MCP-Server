@@ -189,18 +189,20 @@ transport does both:
    value counts as 0). A library consumer that sets
    `TMCPStdioTransport.ShutdownDrainMs` overrides the setting, whichever of
    the two it sets first.
-2. What is still running or queued after that is answered with `-32603`
-   "Server is shutting down", and the running ones are cancelled. A queued
-   request is never started, so it has no side effects. The same goes for a
-   `subscriptions/listen` that has not closed by then.
+2. What is still running or queued after that, a `subscriptions/listen` that
+   has not closed included, is answered with `-32603` "Server is shutting
+   down", and the running ones are cancelled. A queued request is never
+   started, so it has no side effects.
 3. A request the client cancelled with `notifications/cancelled` gets no
    answer, as the cancellation rules ask.
 
 Every request gets exactly one answer, also when a handler ignores its
 cancellation: the transport answers it with the error after a short grace and
-drops the result the handler produces later, even when that comes after the
-transport and its host are freed. A handler that cancels itself while the
-server keeps running gets `-32603` "Request was cancelled".
+drops the result the handler produces later. Each run keeps its own copy of
+the settings and its own state until the last handler returns, so that late
+result is safe even after the transport, the host and their settings are
+freed. A handler that cancels itself while the server keeps running gets
+`-32603` "Request was cancelled".
 
 The default bound suits a client that closes stdin to stop the server and
 waits only briefly before it terminates the process. For a client that pipes
@@ -378,11 +380,12 @@ both its IPv4 and its IPv6 binding, so `localhost` reaches it whichever family
 the client resolves first. `StartHttp` and `Stop` are both idempotent.
 
 **Transports.** `TMCPServerHost` serves both, `TMCPStdioHost` stdio only.
-`RunStdio` blocks and is a console entry point only: the stdio
-transport claims stdout and redirects the logger to stderr for the whole
-process, so a GUI application must never call it. `RunStdioWith(Input, Output)`
-runs the same dispatch over two streams, which is how a test drives one line in
-and reads one line out.
+`RunStdio` blocks and is a console entry point only: the stdio transport
+claims stdout and redirects the logger to stderr for the whole process, so a
+GUI application must never call it. `RunStdioWith(Input, Output)` runs the
+same dispatch over two streams, which is how a test drives one line in and
+reads one line out. A stdio run answers its requests with a copy of the
+settings taken when it starts (`TMCPSettings.Clone`).
 
 Composing the managers by hand still works, and is what to do when you need a
 manager the host does not build:
