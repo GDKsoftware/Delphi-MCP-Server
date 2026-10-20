@@ -506,10 +506,13 @@ their schema announces:
 
 | Delphi type | Schema | Written as | Read from |
 |---|---|---|---|
-| `TDateTime` | `string`, `format: date-time` | `2026-10-18T14:30:00.000+02:00` | an ISO 8601 date-time; without an offset it is read as UTC |
+| `TDateTime` | `string`, `format: date-time` | `2026-10-18T14:30:00.000+02:00` | an ISO 8601 date-time; without an offset it is local time |
 | `TDate` | `string`, `format: date` | `2026-10-18` | `yyyy-mm-dd` only |
 | `TTime` | `string` with a `pattern` and a description | `14:30:00`, or `14:30:00.250` | `hh:mm`, `hh:mm:ss`, `hh:mm:ss.fff` |
 
+A `TDateTime` with `Z` or an offset is converted to the local time of the
+server; one without keeps the clock time it was sent with, so
+`2026-10-18T14:30:00` arrives as 14:30 and goes back out with the local offset.
 A `TDate` is written without its time of day and a `TTime` without its date.
 A `TTime` carries no zone, so it is written without an offset, and a time with
 `Z` or an offset is refused rather than read as something it is not. That is
