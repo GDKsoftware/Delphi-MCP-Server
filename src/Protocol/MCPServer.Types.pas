@@ -135,6 +135,9 @@ const
   SCHEMA_FIELD_VISIBILITIES = [mvPublic, mvPublished];
 
   ISO_TIME_OF_DAY_PATTERN = '([01][0-9]|2[0-3]):([0-5][0-9])(?::([0-5][0-9])(?:\.([0-9]+))?)?';
+  ISO_TIME_OF_DAY_TEXT    = 'hh:mm, hh:mm:ss or hh:mm:ss.fff, without a zone offset';
+
+  CALENDAR_KIND_NOT_SUPPORTED = 'Unsupported calendar kind: %d';
 
 type
   TMCPProtocolVersion = record

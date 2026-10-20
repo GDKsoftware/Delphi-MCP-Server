@@ -123,9 +123,9 @@ end;
 
 procedure TStdioRequestTrackerTests.ClaimUnanswered_ReturnsOnlyTheRequestsStillOwedAnAnswer;
 begin
-  const Answered = TMCPRequestId.FromNumber(FIRST_ID);
+  const Answered  = TMCPRequestId.FromNumber(FIRST_ID);
   const Cancelled = TMCPRequestId.FromNumber(SECOND_ID);
-  const Waiting = TMCPRequestId.FromNumber(THIRD_ID);
+  const Waiting   = TMCPRequestId.FromNumber(THIRD_ID);
   FTracker.Reserve(Answered);
   FTracker.Reserve(Cancelled);
   FTracker.Reserve(Waiting);
@@ -135,9 +135,11 @@ begin
   const Unanswered = FTracker.ClaimUnanswered;
 
   const UnansweredCount = Length(Unanswered);
-  const Claimed = Unanswered[0];
+  const Claimed         = Unanswered[0];
+  const ExpectedId      = Waiting.AsText;
+  const ClaimedId       = Claimed.AsText;
   Assert.AreEqual<NativeInt>(1, UnansweredCount);
-  Assert.AreEqual(Waiting.AsText, Claimed.AsText);
+  Assert.AreEqual(ExpectedId, ClaimedId);
 end;
 
 procedure TStdioRequestTrackerTests.ClaimUnanswered_SecondCall_ReturnsNothing;

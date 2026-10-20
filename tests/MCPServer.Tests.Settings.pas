@@ -3,14 +3,22 @@ unit MCPServer.Tests.Settings;
 interface
 
 uses
-  DUnitX.TestFramework;
+  DUnitX.TestFramework,
+  System.Rtti,
+  MCPServer.Settings;
 
 type
   [TestFixture]
   TMCPSettingsTest = class
   private
     FDirectory: string;
+    FContext: TRttiContext;
     function TempSettingsPath: string;
+    function SettingsFields: TArray<TRttiField>;
+    procedure GiveEveryFieldItsOwnValue(const Settings: TMCPSettings);
+    function DistinctValue(const Field: TRttiField; const Settings: TMCPSettings; const Number: Integer): TValue;
+    function NextOrdinal(const Field: TRttiField; const Settings: TMCPSettings): TValue;
+    function ValueOf(const Field: TRttiField; const Settings: TMCPSettings): TValue;
   public
     [Setup]
     procedure Setup;
@@ -63,6 +71,9 @@ type
     procedure ScopesSupportedList_TwoScopes_ReturnsBothScopes;
 
     [Test]
+    procedure Clone_EveryField_IsCopiedByValue;
+
+    [Test]
     procedure Clone_CopiesEverySetting;
 
     [Test]
@@ -73,9 +84,14 @@ implementation
 
 uses
   System.SysUtils,
+  System.TypInfo,
   System.IniFiles,
-  System.IOUtils,
-  MCPServer.Settings;
+  System.IOUtils;
+
+const
+  VALUE_COPIED_KINDS    = [tkInteger, tkInt64, tkEnumeration, tkUString];
+  FIRST_DISTINCT_NUMBER = 100000;
+  CHANGED_SERVER_NAME   = 'changed copy';
 
 { TMCPSettingsTest }
 
@@ -83,10 +99,12 @@ procedure TMCPSettingsTest.Setup;
 begin
   FDirectory := TPath.Combine(TPath.GetTempPath, 'mcp-settings-' + TGuid.NewGuid.ToString);
   TDirectory.CreateDirectory(FDirectory);
+  FContext := TRttiContext.Create;
 end;
 
 procedure TMCPSettingsTest.TearDown;
 begin
+  FContext.Free;
   if TDirectory.Exists(FDirectory) then
     TDirectory.Delete(FDirectory, True);
 end;
@@ -94,6 +112,58 @@ end;
 function TMCPSettingsTest.TempSettingsPath: string;
 begin
   Result := TPath.Combine(FDirectory, 'settings.ini');
+end;
+
+function TMCPSettingsTest.SettingsFields: TArray<TRttiField>;
+begin
+  const SettingsType = FContext.GetType(TMCPSettings);
+  Result := SettingsType.GetFields;
+end;
+
+procedure TMCPSettingsTest.GiveEveryFieldItsOwnValue(const Settings: TMCPSettings);
+begin
+  var Number := FIRST_DISTINCT_NUMBER;
+  for var Field in SettingsFields do
+  begin
+    const Value = DistinctValue(Field, Settings, Number);
+    {$WARN UNSAFE_CAST OFF}
+    Field.SetValue(Settings, Value);
+    {$WARN UNSAFE_CAST ON}
+    Inc(Number);
+  end;
+end;
+
+function TMCPSettingsTest.DistinctValue(const Field: TRttiField; const Settings: TMCPSettings; const Number: Integer): TValue;
+begin
+  const FieldType = Field.FieldType;
+  case FieldType.TypeKind of
+    tkInteger, tkInt64 : Result := TValue.FromOrdinal(FieldType.Handle, Number);
+    tkEnumeration      : Result := NextOrdinal(Field, Settings);
+    tkUString          : Result := Format('value %d', [Number]);
+  else
+    raise ENotSupportedException.CreateFmt('No distinct value for a %s', [FieldType.Name]);
+  end;
+end;
+
+function TMCPSettingsTest.NextOrdinal(const Field: TRttiField; const Settings: TMCPSettings): TValue;
+begin
+  const EnumType = Field.FieldType as TRttiEnumerationType;
+  const Current = ValueOf(Field, Settings);
+  const Ordinal = Current.AsOrdinal;
+  const IsLast = (Ordinal = EnumType.MaxValue);
+
+  var Next := Ordinal + 1;
+  if IsLast then
+    Next := EnumType.MinValue;
+
+  Result := TValue.FromOrdinal(EnumType.Handle, Next);
+end;
+
+function TMCPSettingsTest.ValueOf(const Field: TRttiField; const Settings: TMCPSettings): TValue;
+begin
+  {$WARN UNSAFE_CAST OFF}
+  Result := Field.GetValue(Settings);
+  {$WARN UNSAFE_CAST ON}
 end;
 
 procedure TMCPSettingsTest.Create_WithoutFile_LoadsExpectedDefaults;
@@ -344,24 +414,36 @@ begin
   end;
 end;
 
+procedure TMCPSettingsTest.Clone_EveryField_IsCopiedByValue;
+begin
+  const Fields = SettingsFields;
+
+  for var Field in Fields do
+  begin
+    const FieldType = Field.FieldType;
+    const IsCopiedByValue = (FieldType.TypeKind in VALUE_COPIED_KINDS);
+    const Reason = Format('TMCPSettings.%s is a %s: Clone copies objects, interfaces and arrays by reference, ' +
+                          'and this test knows integers, enumerations and strings only', [Field.Name, FieldType.Name]);
+    Assert.IsTrue(IsCopiedByValue, Reason);
+  end;
+end;
+
 procedure TMCPSettingsTest.Clone_CopiesEverySetting;
 begin
   const Original = TMCPSettings.Create(TempSettingsPath, False);
   try
-    Original.ServerName := 'cloned';
-    Original.Port := 8124;
-    Original.LenientModernPing := True;
-    Original.StdioShutdownDrainMs := 15000;
-    Original.RequestStateKey := 'secret';
+    GiveEveryFieldItsOwnValue(Original);
 
     const Cloned = Original.Clone;
     try
-      Assert.AreEqual('cloned', Cloned.ServerName);
-      Assert.AreEqual<Integer>(8124, Cloned.Port);
-      Assert.IsTrue(Cloned.LenientModernPing);
-      Assert.AreEqual<Integer>(15000, Cloned.StdioShutdownDrainMs);
-      Assert.AreEqual('secret', Cloned.RequestStateKey);
-      Assert.AreEqual(Original.SettingsFile, Cloned.SettingsFile);
+      for var Field in SettingsFields do
+      begin
+        const Expected = ValueOf(Field, Original);
+        const Actual = ValueOf(Field, Cloned);
+        const ExpectedText = Expected.ToString;
+        const ActualText = Actual.ToString;
+        Assert.AreEqual(ExpectedText, ActualText, Field.Name);
+      end;
     finally
       Cloned.Free;
     end;
@@ -376,9 +458,9 @@ begin
   try
     const Cloned = Original.Clone;
     try
-      Cloned.ServerName := 'changed copy';
+      Cloned.ServerName := CHANGED_SERVER_NAME;
 
-      Assert.AreNotEqual('changed copy', Original.ServerName);
+      Assert.AreNotEqual(CHANGED_SERVER_NAME, Original.ServerName);
     finally
       Cloned.Free;
     end;

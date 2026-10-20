@@ -167,7 +167,14 @@ end;
 function TStubbornAskingTool.Finish: TValue;
 begin
   const Requests = TMCPInputRequests.Create;
-  const State = TJSONObject.Create;
+  var State: TJSONObject;
+  try
+    State := TJSONObject.Create;
+  except
+    Requests.Free;
+    raise;
+  end;
+
   raise EMCPInputRequired.Create(Requests, State);
 end;
 
@@ -206,7 +213,8 @@ end;
 function TStubbornListenManager.ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
 begin
   FGate.Pass;
-  Result := TValue.From<TJSONObject>(TJSONObject.Create);
+  const Answer = TJSONObject.Create;
+  Result := TValue.From<TJSONObject>(Answer);
 end;
 
 { TPoisonedSettings }

@@ -47,10 +47,10 @@ begin
   if not Assigned(FServer) then
     FServer := TMCPIdHTTPServer.Create(nil);
 
-  FServer.Settings := Settings;
+  FServer.Settings        := Settings;
   FServer.ManagerRegistry := ManagerRegistry;
-  FServer.CoreManager := CoreManager;
-  FServer.Authorizer := FAuthorizer;
+  FServer.CoreManager     := CoreManager;
+  FServer.Authorizer      := FAuthorizer;
   FServer.Start;
   FActive := True;
 end;

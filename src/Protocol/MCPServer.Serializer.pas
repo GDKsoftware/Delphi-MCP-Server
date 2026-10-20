@@ -28,7 +28,7 @@ type
     class function ConvertJsonToTime(const JsonValue: TJSONValue): TValue;
     class function TryParseIsoDate(const Text: string; out Value: TDate): Boolean;
     class function TryParseIsoTime(const Text: string; out Value: TTime): Boolean;
-    class function GroupNumber(const Match: TMatch; const Index: Integer): Word;
+    class function CapturedNumber(const Match: TMatch; const Index: Integer): Word;
     class function GroupText(const Match: TMatch; const Index: Integer): string;
     class function FractionToMilliseconds(const Fraction: string): Word;
     class function ConvertJsonToClass(const JsonValue: TJSONValue; const RttiType: TRttiType): TValue;
@@ -99,9 +99,7 @@ const
   MESSAGE_EXPECTED_UUID      = 'expected a UUID string';
   MESSAGE_EXPECTED_DATE_TIME = 'expected an ISO 8601 date-time';
   MESSAGE_EXPECTED_DATE      = 'expected an ISO 8601 date (yyyy-mm-dd)';
-  MESSAGE_EXPECTED_TIME      = 'expected an ISO 8601 time of day (hh:mm:ss), without a zone offset';
-
-  MESSAGE_UNSUPPORTED_CALENDAR_KIND = 'Unsupported calendar kind: %d';
+  MESSAGE_EXPECTED_TIME      = 'expected an ISO 8601 time of day as ' + ISO_TIME_OF_DAY_TEXT;
 
   ISO_DATE_FORMAT                   = 'yyyy"-"mm"-"dd';
   ISO_TIME_FORMAT                   = 'hh":"nn":"ss';
@@ -421,7 +419,7 @@ begin
     TMCPCalendarKind.Date     : Result := ConvertJsonToDate(JsonValue);
     TMCPCalendarKind.Time     : Result := ConvertJsonToTime(JsonValue);
   else
-    raise ENotSupportedException.CreateFmt(MESSAGE_UNSUPPORTED_CALENDAR_KIND, [Ord(Kind)]);
+    raise ENotSupportedException.CreateFmt(CALENDAR_KIND_NOT_SUPPORTED, [Ord(Kind)]);
   end;
 end;
 
@@ -474,9 +472,9 @@ begin
   if not Match.Success then
     Exit(False);
 
-  const Year  = GroupNumber(Match, ISO_YEAR_GROUP);
-  const Month = GroupNumber(Match, ISO_MONTH_GROUP);
-  const Day   = GroupNumber(Match, ISO_DAY_GROUP);
+  const Year  = CapturedNumber(Match, ISO_YEAR_GROUP);
+  const Month = CapturedNumber(Match, ISO_MONTH_GROUP);
+  const Day   = CapturedNumber(Match, ISO_DAY_GROUP);
 
   var Encoded: TDateTime;
   Result := TryEncodeDate(Year, Month, Day, Encoded);
@@ -491,9 +489,9 @@ begin
   if not Match.Success then
     Exit(False);
 
-  const Hour         = GroupNumber(Match, ISO_HOUR_GROUP);
-  const Minute       = GroupNumber(Match, ISO_MINUTE_GROUP);
-  const Second       = GroupNumber(Match, ISO_SECOND_GROUP);
+  const Hour         = CapturedNumber(Match, ISO_HOUR_GROUP);
+  const Minute       = CapturedNumber(Match, ISO_MINUTE_GROUP);
+  const Second       = CapturedNumber(Match, ISO_SECOND_GROUP);
   const Fraction     = GroupText(Match, ISO_FRACTION_GROUP);
   const Milliseconds = FractionToMilliseconds(Fraction);
 
@@ -503,7 +501,7 @@ begin
     Value := Encoded;
 end;
 
-class function TMCPSerializer.GroupNumber(const Match: TMatch; const Index: Integer): Word;
+class function TMCPSerializer.CapturedNumber(const Match: TMatch; const Index: Integer): Word;
 begin
   const Digits = GroupText(Match, Index);
   const Number = StrToIntDef(Digits, 0);
@@ -867,7 +865,7 @@ begin
     TMCPCalendarKind.Date     : Text := IsoDateText(Value);
     TMCPCalendarKind.Time     : Text := IsoTimeText(Value);
   else
-    raise ENotSupportedException.CreateFmt(MESSAGE_UNSUPPORTED_CALENDAR_KIND, [Ord(Kind)]);
+    raise ENotSupportedException.CreateFmt(CALENDAR_KIND_NOT_SUPPORTED, [Ord(Kind)]);
   end;
 
   Result := (Kind <> TMCPCalendarKind.None);

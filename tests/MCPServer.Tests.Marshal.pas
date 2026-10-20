@@ -530,7 +530,7 @@ procedure TMarshalTests.Time_NotAnIsoTime_Raises(const Json: string);
 begin
   const TimeType = RttiTypeOf(TypeInfo(TTime));
 
-  ExpectArgumentError(Json, TimeType, 'expected an ISO 8601 time of day (hh:mm:ss)');
+  ExpectArgumentError(Json, TimeType, 'expected an ISO 8601 time of day as ' + ISO_TIME_OF_DAY_TEXT);
 end;
 
 procedure TMarshalTests.WrongType_MessagesKeepTheirShape;

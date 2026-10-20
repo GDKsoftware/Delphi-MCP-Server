@@ -77,7 +77,7 @@ const
   SCHEMA_FORMAT_DATE_TIME        = 'date-time';
   SCHEMA_FORMAT_DATE             = 'date';
   SCHEMA_PATTERN_TIME_OF_DAY     = '^' + ISO_TIME_OF_DAY_PATTERN + '$';
-  SCHEMA_DESCRIPTION_TIME_OF_DAY = 'A time of day as hh:mm, hh:mm:ss or hh:mm:ss.fff, without a zone offset';
+  SCHEMA_DESCRIPTION_TIME_OF_DAY = 'A time of day as ' + ISO_TIME_OF_DAY_TEXT;
 
   DEPTH_ABOVE_ROOT = -1;
 
@@ -308,7 +308,7 @@ begin
     TMCPCalendarKind.Date     : DescribeFormattedString(Schema, SCHEMA_FORMAT_DATE);
     TMCPCalendarKind.Time     : DescribeTimeOfDay(Schema);
   else
-    raise ENotSupportedException.CreateFmt('Unsupported calendar kind: %d', [Ord(Kind)]);
+    raise ENotSupportedException.CreateFmt(CALENDAR_KIND_NOT_SUPPORTED, [Ord(Kind)]);
   end;
 end;
 

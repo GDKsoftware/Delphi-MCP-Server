@@ -198,10 +198,9 @@ transport does both:
 
 Every request gets exactly one answer, also when a handler ignores its
 cancellation: the transport answers it with the error after a short grace and
-drops the result the handler produces later. Each run keeps its own copy of
-the settings and its own state until the last handler returns, so that late
-result is safe even after the transport, the host and their settings are
-freed. A handler that cancels itself while the server keeps running gets
+drops the result the handler produces later. Each run keeps its state and its
+copy of the settings until the last handler returns, so that late result is
+safe even after the transport, the host and their settings are freed. A handler that cancels itself while the server keeps running gets
 `-32603` "Request was cancelled".
 
 The default bound suits a client that closes stdin to stop the server and
@@ -384,8 +383,10 @@ the client resolves first. `StartHttp` and `Stop` are both idempotent.
 claims stdout and redirects the logger to stderr for the whole process, so a
 GUI application must never call it. `RunStdioWith(Input, Output)` runs the
 same dispatch over two streams, which is how a test drives one line in and
-reads one line out. A stdio run answers its requests with a copy of the
-settings taken when it starts (`TMCPSettings.Clone`).
+reads one line out. The transport's own part of a stdio run (error answers,
+`_meta.serverInfo`, request state) works on a copy of the settings taken when
+the run starts (`TMCPSettings.Clone`); the managers, such as the one that
+answers `initialize`, read the host's settings.
 
 Composing the managers by hand still works, and is what to do when you need a
 manager the host does not build:
@@ -505,7 +506,7 @@ their schema announces:
 
 | Delphi type | Schema | Written as | Read from |
 |---|---|---|---|
-| `TDateTime` | `string`, `format: date-time` | `2026-10-18T14:30:00.000+02:00` | any ISO 8601 date-time |
+| `TDateTime` | `string`, `format: date-time` | `2026-10-18T14:30:00.000+02:00` | an ISO 8601 date-time; without an offset it is read as UTC |
 | `TDate` | `string`, `format: date` | `2026-10-18` | `yyyy-mm-dd` only |
 | `TTime` | `string` with a `pattern` and a description | `14:30:00`, or `14:30:00.250` | `hh:mm`, `hh:mm:ss`, `hh:mm:ss.fff` |
 

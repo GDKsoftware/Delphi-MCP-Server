@@ -24,8 +24,8 @@ type
         Context: IMCPRequestContext;
         IsReserved: Boolean;
         Cancelled: Boolean;
-        CancelledByClient: Boolean;
-        Answered: Boolean;
+        IsCancelledByClient: Boolean;
+        IsAnswered: Boolean;
         function IsOwedAnAnswer: Boolean;
       end;
     var
@@ -70,7 +70,7 @@ type
         FWorkersDone: TCountdownEvent;
         FStartedWorkers: Integer;
         FListeners: Integer;
-        FAborting: Boolean;
+        FIsAborting: Boolean;
         procedure WorkerLoop;
         procedure RunListener(const Message: TJSONValue);
         procedure ProcessQueued(const Message: TJSONValue);
@@ -109,13 +109,15 @@ type
       FRunnerLifetime: IInterface;
       FShutdownDrainMs: Integer;
       FHasShutdownDrainMs: Boolean;
+    class function DeadlineAfter(const TimeoutMs: Integer): UInt64; static;
+    class function HasPassed(const Deadline: UInt64): Boolean; static;
     procedure StartRunner(const OutputStream: TStream);
     procedure ReleaseRunner;
     function WorkerCount: Integer;
     procedure ReadLoop(const InputStream: TStream);
     procedure DispatchLine(const Message: TJSONValue);
     procedure DrainAndStop;
-    procedure CloseSubscriptions(const DrainMs: Integer);
+    procedure CloseSubscriptions(const Deadline: UInt64);
     procedure AbortOutstandingRequests;
     procedure SetSettings(const Value: TMCPSettings);
     function GetShutdownDrainMs: Integer;
@@ -175,7 +177,7 @@ end;
 
 function TMCPStdioRequestTracker.TEntry.IsOwedAnAnswer: Boolean;
 begin
-  Result := (not Answered and not CancelledByClient);
+  Result := (not IsAnswered and not IsCancelledByClient);
 end;
 
 { TMCPStdioRequestTracker }
@@ -283,10 +285,10 @@ begin
     Result := FEntries.TryGetValue(KeyOf(RequestId), Entry);
     if Result then
     begin
-      Entry.Cancelled := True;
-      Entry.CancelledByClient := True;
+      Entry.Cancelled            := True;
+      Entry.IsCancelledByClient  := True;
       FEntries[KeyOf(RequestId)] := Entry;
-      Context := Entry.Context;
+      Context                    := Entry.Context;
     end;
   finally
     FLock.Leave;
@@ -342,8 +344,8 @@ begin
       Exit(True);
 
     Result := Entry.IsOwedAnAnswer;
-    Entry.Answered := True;
-    FEntries[Key]  := Entry;
+    Entry.IsAnswered := True;
+    FEntries[Key]    := Entry;
   finally
     FLock.Leave;
   end;
@@ -356,7 +358,7 @@ begin
   FLock.Enter;
   try
     const IsKnown = FEntries.TryGetValue(Key, Entry);
-    Result := (IsKnown and Entry.CancelledByClient);
+    Result := (IsKnown and Entry.IsCancelledByClient);
   finally
     FLock.Leave;
   end;
@@ -374,9 +376,9 @@ begin
       var Entry := FEntries[Key];
       if Entry.IsOwedAnAnswer then
       begin
-        Entry.Answered := True;
-        FEntries[Key]  := Entry;
-        Result := Result + [Entry.RequestId];
+        Entry.IsAnswered := True;
+        FEntries[Key]    := Entry;
+        Result           := Result + [Entry.RequestId];
       end;
     end;
   finally
@@ -385,6 +387,18 @@ begin
 end;
 
 { TMCPStdioTransport }
+
+class function TMCPStdioTransport.DeadlineAfter(const TimeoutMs: Integer): UInt64;
+begin
+  const Ticks = TThread.GetTickCount64;
+  Result := Ticks + UInt64(TimeoutMs);
+end;
+
+class function TMCPStdioTransport.HasPassed(const Deadline: UInt64): Boolean;
+begin
+  const Ticks = TThread.GetTickCount64;
+  Result := (Ticks >= Deadline);
+end;
 
 constructor TMCPStdioTransport.Create(const ManagerRegistry: IMCPManagerRegistry; const CoreManager: IMCPCapabilityManager);
 begin
@@ -423,7 +437,8 @@ procedure TMCPStdioTransport.RunWith(const InputStream, OutputStream: TStream);
 begin
   StartRunner(OutputStream);
   try
-    FRunner.StartWorkers(WorkerCount);
+    const Workers = WorkerCount;
+    FRunner.StartWorkers(Workers);
     try
       ReadLoop(InputStream);
       TLogger.Info('STDIO transport: stdin closed');
@@ -555,30 +570,30 @@ end;
 
 procedure TMCPStdioTransport.DrainAndStop;
 begin
-  const DrainMs = Max(ShutdownDrainMs, 0);
+  const DrainMs  = Max(ShutdownDrainMs, 0);
+  const Deadline = DeadlineAfter(DrainMs);
 
   FRunner.StopWorkersWhenIdle;
   const WorkersDrained = FRunner.WaitForWorkers(DrainMs);
-  CloseSubscriptions(DrainMs);
+  CloseSubscriptions(Deadline);
 
   const IsEverythingAnswered = (WorkersDrained and not FRunner.HasRunningListeners);
   if not IsEverythingAnswered then
     AbortOutstandingRequests;
 end;
 
-procedure TMCPStdioTransport.CloseSubscriptions(const DrainMs: Integer);
+procedure TMCPStdioTransport.CloseSubscriptions(const Deadline: UInt64);
 var
   Hub: IMCPSubscriptionHub;
 begin
   Supports(FManagerRegistry.GetManagerForMethod(MCP_METHOD_SUBSCRIPTIONS_LISTEN), IMCPSubscriptionHub, Hub);
-  const Deadline = TThread.GetTickCount64 + UInt64(DrainMs);
   repeat
     if Assigned(Hub) then
       Hub.CloseAll(REASON_STDIN_CLOSED);
     if not FRunner.HasRunningListeners then
       Break;
     Sleep(LISTENER_POLL_MS);
-  until TThread.GetTickCount64 >= Deadline;
+  until HasPassed(Deadline);
 end;
 
 procedure TMCPStdioTransport.AbortOutstandingRequests;
@@ -718,15 +733,15 @@ end;
 
 procedure TMCPStdioTransport.TRequestRunner.AbortRequests(const Reason: string);
 begin
-  FAborting := True;
+  FIsAborting := True;
   FTracker.CancelAll(Reason);
 end;
 
 function TMCPStdioTransport.TRequestRunner.WaitUntilStopped(const TimeoutMs: Integer): Boolean;
 begin
-  const Deadline = TThread.GetTickCount64 + UInt64(TimeoutMs);
+  const Deadline       = DeadlineAfter(TimeoutMs);
   const WorkersStopped = WaitForWorkers(TimeoutMs);
-  while HasRunningListeners and (TThread.GetTickCount64 < Deadline) do
+  while HasRunningListeners and not HasPassed(Deadline) do
   begin
     Sleep(LISTENER_POLL_MS);
   end;
@@ -788,7 +803,7 @@ begin
   const IdValue = TJSONObject(Message).GetValue(MCP_KEY_ID);
   const RequestId = TMCPRequestId.FromJson(IdValue);
   try
-    if FAborting then
+    if FIsAborting then
       SendErrorOnce(RequestId, MESSAGE_SHUTTING_DOWN)
     else
       AnswerRequest(Message, RequestId);
@@ -811,7 +826,7 @@ begin
   const IsClientCancellation = FTracker.WasCancelledByClient(RequestId);
   if IsClientCancellation then
     TLogger.Info('No response for cancelled request %s', [RequestId.AsText])
-  else if FAborting then
+  else if FIsAborting then
     SendErrorOnce(RequestId, MESSAGE_SHUTTING_DOWN)
   else
     SendErrorOnce(RequestId, MESSAGE_REQUEST_CANCELLED);

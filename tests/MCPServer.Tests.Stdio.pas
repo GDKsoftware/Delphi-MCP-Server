@@ -122,17 +122,22 @@ const
   INITIALIZED          = '{"jsonrpc":"2.0","method":"notifications/initialized"}';
   SLOW_CALL            = '{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"test_tool_with_progress","arguments":{"steps":%d,"stepMs":100}}}';
   ECHO_CALL            = '{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"echo","arguments":{"message":"quick"}}}';
-  STUBBORN_CALL        = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{}}}';
-  SELF_CANCELLING_CALL = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"' + SELF_CANCELLING_TOOL_NAME + '","arguments":{}}}';
+  ARGUMENTLESS_CALL    = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"%s","arguments":{}}}';
   STUBBORN_LISTEN      = '{"jsonrpc":"2.0","id":9,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true},' +
                          TMCPTestMeta.MODERN_MEMBER + '}}';
-  FIRST_TEXT_PATH      = 'result.content[0].text';
+  ERROR_CODE_PATH      = 'error.code';
   OUTPUT_SEPARATOR     = ' | ';
   SHUTTING_DOWN        = 'shutting down';
   REQUEST_CANCELLED    = 'Request was cancelled';
   LONG_STEPS           = 600;
-  LISTENER_DRAIN_MS    = 200;
+  THREE_STEPS_DONE     = 'Completed 3 steps';
   QUICK_ANSWER         = 'Echo: quick';
+  NO_DRAIN_MS          = 0;
+  SHORT_DRAIN_MS       = 100;
+  LISTENER_DRAIN_MS    = 200;
+  QUICK_DRAIN_MS       = 500;
+  LONG_DRAIN_MS        = 10000;
+  PROMPT_RETURN_MS     = 3000;
 
 { TStdioTransportTests }
 
@@ -209,7 +214,7 @@ procedure TStdioTransportTests.AssertErrorAnswer(const Lines: TArray<string>; co
 begin
   const Answer = GetById(Lines, Id);
   try
-    const Code = Answer.GetValue<Integer>('error.code');
+    const Code = Answer.GetValue<Integer>(ERROR_CODE_PATH);
     const ErrorMessage = Answer.GetValue<string>('error.message');
     const AnswerText = Answer.ToJSON;
     Assert.AreEqual(JSONRPC_INTERNAL_ERROR, Code, AnswerText);
@@ -282,7 +287,7 @@ begin
   var Echo := GetById(Lines, '3');
   try
     const Expected = Format('Echo: %s', [Probe]);
-    const Text = Echo.GetValue<string>(FIRST_TEXT_PATH);
+    const Text = Echo.GetValue<string>(TMCPTestJson.FIRST_TEXT_PATH);
     Assert.AreEqual(Expected, Text);
   finally
     Echo.Free;
@@ -314,7 +319,8 @@ begin
   var Error := ParseLine(Lines[0]);
   try
     Assert.IsTrue(Error.GetValue('id') is TJSONNull);
-    Assert.AreEqual(JSONRPC_PARSE_ERROR, Error.GetValue<Integer>('error.code'));
+    const Code = Error.GetValue<Integer>(ERROR_CODE_PATH);
+    Assert.AreEqual(JSONRPC_PARSE_ERROR, Code);
   finally
     Error.Free;
   end;
@@ -335,7 +341,8 @@ begin
   var First := ParseLine(Lines[0]);
   var Second := ParseLine(Lines[1]);
   try
-    Assert.AreEqual(JSONRPC_INVALID_REQUEST, First.GetValue<Integer>('error.code'), 'the duplicate is refused at once');
+    const FirstCode = First.GetValue<Integer>(ERROR_CODE_PATH);
+    Assert.AreEqual(JSONRPC_INVALID_REQUEST, FirstCode, 'the duplicate is refused at once');
     Assert.IsNotNull(Second.GetValue('result'), 'the first request still completes');
   finally
     First.Free;
@@ -364,7 +371,9 @@ begin
   const Tool: IMCPTool = TSelfCancellingTool.Create;
   FHarness.ToolsManager.AddTool(Tool);
 
-  const Lines = Run([SELF_CANCELLING_CALL]);
+  const SelfCancellingCall = Format(ARGUMENTLESS_CALL, [SELF_CANCELLING_TOOL_NAME]);
+
+  const Lines = Run([SelfCancellingCall]);
 
   AssertLineCount(Lines, 1, 'a request nobody cancelled still gets an answer');
   AssertErrorAnswer(Lines, '1', REQUEST_CANCELLED);
@@ -385,7 +394,8 @@ begin
       if I = High(Lines) then
       begin
         Assert.AreEqual('8', Json.GetValue('id').Value, 'the response comes last');
-        Assert.AreEqual('Completed 3 steps', Json.GetValue<string>(FIRST_TEXT_PATH));
+        const Text = Json.GetValue<string>(TMCPTestJson.FIRST_TEXT_PATH);
+        Assert.AreEqual(THREE_STEPS_DONE, Text);
       end
       else
       begin
@@ -421,18 +431,18 @@ procedure TStdioTransportTests.Eof_WithRunningRequest_IsAnsweredWithAnErrorAfter
 begin
   const Running = Format(SLOW_CALL, [4, LONG_STEPS]);
 
-  const Lines = Run([Running], 300);
+  const Lines = Run([Running], SHORT_DRAIN_MS);
 
   AssertLineCount(Lines, 1, 'the request still running at the bound gets an answer');
   AssertErrorAnswer(Lines, '4', SHUTTING_DOWN);
-  const ReturnedSoon = (FElapsedMs < 3000);
+  const ReturnedSoon = (FElapsedMs < PROMPT_RETURN_MS);
   const Elapsed = Format('Run returned after the drain timeout: %d ms', [FElapsedMs]);
   Assert.IsTrue(ReturnedSoon, Elapsed);
 end;
 
 procedure TStdioTransportTests.Eof_QueuedRequestsWithinTheBound_AreAllAnswered;
 begin
-  FHarness.Settings.StdioShutdownDrainMs := 10000;
+  FHarness.Settings.StdioShutdownDrainMs := LONG_DRAIN_MS;
   const First = Format(SLOW_CALL, [1, 3]);
   const Second = Format(SLOW_CALL, [2, 3]);
   const Third = Format(SLOW_CALL, [3, 3]);
@@ -444,8 +454,8 @@ begin
   begin
     const Answer = GetById(Lines, Id);
     try
-      const Text = Answer.GetValue<string>(FIRST_TEXT_PATH);
-      Assert.AreEqual('Completed 3 steps', Text);
+      const Text = Answer.GetValue<string>(TMCPTestJson.FIRST_TEXT_PATH);
+      Assert.AreEqual(THREE_STEPS_DONE, Text);
     finally
       Answer.Free;
     end;
@@ -458,12 +468,12 @@ begin
   const Long = Format(SLOW_CALL, [2, LONG_STEPS]);
   const Queued = Format(ECHO_CALL, [3]);
 
-  const Lines = Run([Quick, Long, Queued], 500);
+  const Lines = Run([Quick, Long, Queued], QUICK_DRAIN_MS);
 
   AssertLineCount(Lines, 3, 'every request gets exactly one answer');
   const Finished = GetById(Lines, '1');
   try
-    const Text = Finished.GetValue<string>(FIRST_TEXT_PATH);
+    const Text = Finished.GetValue<string>(TMCPTestJson.FIRST_TEXT_PATH);
     Assert.AreEqual(QUICK_ANSWER, Text);
   finally
     Finished.Free;
@@ -477,7 +487,7 @@ begin
   const Long = Format(SLOW_CALL, [5, 50]);
   const Cancel = '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":5}}';
 
-  const Lines = Run([Long, Cancel], 0);
+  const Lines = Run([Long, Cancel], NO_DRAIN_MS);
 
   AssertLineCount(Lines, 0, 'a request the client cancelled is never answered');
 end;
@@ -487,11 +497,12 @@ begin
   const Gate: IStubbornGate = TStubbornGate.Create;
   const Tool: IMCPTool = TStubbornTool.Create(Gate);
   FHarness.ToolsManager.AddTool(Tool);
+  const StubbornCall = Format(ARGUMENTLESS_CALL, [STUBBORN_TOOL_NAME]);
   const Log = TMCPTestLogWatch.Create;
   try
     const Output = TBytesStream.Create;
     try
-      RunInto(Output, FHarness.ManagerRegistry, STUBBORN_CALL, 100);
+      RunInto(Output, FHarness.ManagerRegistry, StubbornCall, SHORT_DRAIN_MS);
       const AtShutdown = ReadOutput(Output);
       Gate.Release;
       const HasReturned = Gate.WaitUntilReturned;
@@ -552,15 +563,15 @@ end;
 
 procedure TStdioTransportTests.ShutdownDrainMs_SetBeforeTheSettings_IsKept;
 begin
-  FHarness.Settings.StdioShutdownDrainMs := 10000;
+  FHarness.Settings.StdioShutdownDrainMs := LONG_DRAIN_MS;
   const Transport = TMCPStdioTransport.Create(FHarness.ManagerRegistry, FHarness.CoreManager);
   try
-    Transport.ShutdownDrainMs := 100;
+    Transport.ShutdownDrainMs := SHORT_DRAIN_MS;
 
     Transport.Settings := FHarness.Settings;
 
     const DrainMs = Transport.ShutdownDrainMs;
-    Assert.AreEqual(100, DrainMs, 'a bound set in code wins over the setting');
+    Assert.AreEqual(SHORT_DRAIN_MS, DrainMs, 'a bound set in code wins over the setting');
   finally
     Transport.Free;
   end;
@@ -568,13 +579,13 @@ end;
 
 procedure TStdioTransportTests.ShutdownDrainMs_NotSet_FollowsTheSettings;
 begin
-  FHarness.Settings.StdioShutdownDrainMs := 10000;
+  FHarness.Settings.StdioShutdownDrainMs := LONG_DRAIN_MS;
   const Transport = TMCPStdioTransport.Create(FHarness.ManagerRegistry, FHarness.CoreManager);
   try
     Transport.Settings := FHarness.Settings;
 
     const DrainMs = Transport.ShutdownDrainMs;
-    Assert.AreEqual(10000, DrainMs, 'without a bound in code the setting applies');
+    Assert.AreEqual(LONG_DRAIN_MS, DrainMs, 'without a bound in code the setting applies');
   finally
     Transport.Free;
   end;

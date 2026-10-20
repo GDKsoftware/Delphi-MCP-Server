@@ -15,6 +15,8 @@ type
   end;
 
   TMCPTestJson = record
+  public const
+    FIRST_TEXT_PATH = 'result.content[0].text';
   public
     class function ParseObject(const Text: string): TJSONObject; static;
   end;

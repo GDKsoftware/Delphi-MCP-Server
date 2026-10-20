@@ -57,7 +57,6 @@ const
   STUBBORN_MODERN_CALL = '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{},' +
                          TMCPTestMeta.MODERN_MEMBER + '}}';
   ECHO_ANSWER          = 'Echo: over stdio';
-  FIRST_TEXT           = 'result.content[0].text';
   ACCESS_VIOLATION     = 'Access violation';
   SHORT_DRAIN_MS       = 100;
 
@@ -133,7 +132,7 @@ begin
 
   const Json = TMCPTestJson.ParseObject(Answer);
   try
-    const Text = Json.GetValue<string>(FIRST_TEXT);
+    const Text = Json.GetValue<string>(TMCPTestJson.FIRST_TEXT_PATH);
     Assert.AreEqual(ECHO_ANSWER, Text);
   finally
     Json.Free;
@@ -200,8 +199,8 @@ begin
 
     const Json = TMCPTestJson.ParseObject(Answer);
     try
-      const Text = Json.GetValue<string>(FIRST_TEXT);
-      Assert.AreEqual(ECHO_ANSWER, Text, 'the HTTP host keeps serving stdio');
+      const Text = Json.GetValue<string>(TMCPTestJson.FIRST_TEXT_PATH);
+      Assert.AreEqual(ECHO_ANSWER, Text, 'the HTTP host serves stdio too');
     finally
       Json.Free;
     end;

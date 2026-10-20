@@ -149,6 +149,11 @@ What it cancels that way, and what was still queued, is answered with
 `-32603` "Server is shutting down", so a client that waited for no response
 to those requests receives one. A request the client cancelled gets none.
 
+**A stdio run takes a copy of the settings when it starts.** The transport's
+own answers use that copy, so a change to the settings during `RunStdio` or
+`RunStdioWith` reaches only the managers, such as the one that answers
+`initialize`. Set the settings before the run.
+
 **A duplicate request id while the first is still in flight is `-32600`**,
 answered immediately, instead of being silently queued behind it.
 

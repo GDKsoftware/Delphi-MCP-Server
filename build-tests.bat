@@ -91,10 +91,10 @@ if errorlevel 1 exit /b 1
 endlocal
 exit /b 0
 
-REM A program that serves stdio only must build without TaurusTLS and link no
-REM Indy unit. tests\StdioOnly\StdioOnlyHost.dpr is built with no TaurusTLS on
-REM the search path, and its detailed map file must name no Indy or TaurusTLS
-REM unit.
+REM A program that serves stdio only must build without TaurusTLS, link no
+REM Indy unit and answer over stdio. tests\StdioOnly\StdioOnlyHost.dpr is built
+REM with no TaurusTLS on the search path, its detailed map file must name no
+REM Indy or TaurusTLS unit, and the program must answer an echo call.
 :StdioOnlyCheck
 set STDIO_ONLY_DIR=%OUTPUT_DIR%\StdioOnly
 if not exist %STDIO_ONLY_DIR% mkdir %STDIO_ONLY_DIR%
@@ -117,4 +117,11 @@ if not errorlevel 1 (
 )
 
 echo Stdio-only host check: no Indy and no TaurusTLS unit linked
+
+%STDIO_ONLY_DIR%\StdioOnlyHost.exe
+if errorlevel 1 (
+    echo Stdio-only host check FAILED: the stdio-only host did not answer
+    exit /b 1
+)
+
 exit /b 0

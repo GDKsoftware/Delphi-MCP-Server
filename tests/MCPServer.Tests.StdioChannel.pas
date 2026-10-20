@@ -206,24 +206,6 @@ begin
   end;
 end;
 
-procedure TStdioChannelTests.Writer_AfterClose_WritesNothing;
-begin
-  const Stream = TMemoryStream.Create;
-  try
-    const Writer = TMCPLineWriter.Create(Stream);
-    const Sink: IMCPMessageSink = Writer;
-    Sink.Send('{"before":1}');
-
-    Writer.Close;
-    Sink.Send('{"after":2}');
-
-    const Written = Stream.Size;
-    Assert.AreEqual<Int64>(13, Written, 'only the line sent before Close reaches the stream');
-  finally
-    Stream.Free;
-  end;
-end;
-
 procedure TStdioChannelTests.Writer_ConcurrentSends_DoNotInterleave;
 const
   THREADS = 4;
@@ -267,6 +249,28 @@ begin
     Assert.AreEqual(THREADS * MESSAGES_PER_THREAD, Count);
   finally
     Done.Free;
+    Stream.Free;
+  end;
+end;
+
+procedure TStdioChannelTests.Writer_AfterClose_WritesNothing;
+begin
+  const BeforeClose = '{"before":1}';
+  const SentLine = BeforeClose + #10;
+  const Stream = TMemoryStream.Create;
+  try
+    const Writer = TMCPLineWriter.Create(Stream);
+    const Sink: IMCPMessageSink = Writer;
+    Sink.Send(BeforeClose);
+
+    Writer.Close;
+    Sink.Send('{"after":2}');
+
+    const SentBytes = TEncoding.UTF8.GetBytes(SentLine);
+    const Expected = Length(SentBytes);
+    const Written = Stream.Size;
+    Assert.AreEqual<Int64>(Expected, Written, 'only the line sent before Close reaches the stream');
+  finally
     Stream.Free;
   end;
 end;
