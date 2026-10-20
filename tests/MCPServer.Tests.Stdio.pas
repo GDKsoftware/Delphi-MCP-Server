@@ -281,7 +281,9 @@ begin
     '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"' + Probe + '"}}}']);
   var Echo := GetById(Lines, '3');
   try
-    Assert.AreEqual('Echo: ' + Probe, Echo.GetValue<string>(FIRST_TEXT_PATH));
+    const Expected = Format('Echo: %s', [Probe]);
+    const Text = Echo.GetValue<string>(FIRST_TEXT_PATH);
+    Assert.AreEqual(Expected, Text);
   finally
     Echo.Free;
   end;
@@ -485,7 +487,7 @@ begin
   const Gate: IStubbornGate = TStubbornGate.Create;
   const Tool: IMCPTool = TStubbornTool.Create(Gate);
   FHarness.ToolsManager.AddTool(Tool);
-  const LateAnswers = TMCPTestLogWatch.Create(LATE_ANSWER_LOG_FRAGMENT);
+  const Log = TMCPTestLogWatch.Create;
   try
     const Output = TBytesStream.Create;
     try
@@ -493,7 +495,7 @@ begin
       const AtShutdown = ReadOutput(Output);
       Gate.Release;
       const HasReturned = Gate.WaitUntilReturned;
-      const IsDropped = LateAnswers.WaitForMatch;
+      const IsDropped = Log.WaitFor(LATE_ANSWER_LOG_FRAGMENT);
       const AfterItReturned = ReadOutput(Output);
 
       Assert.IsTrue(HasReturned, 'the stubborn tool returned once it was released');
@@ -505,7 +507,7 @@ begin
       Output.Free;
     end;
   finally
-    LateAnswers.Free;
+    Log.Free;
   end;
 end;
 
@@ -517,14 +519,14 @@ begin
   const Registry: IMCPManagerRegistry = TMCPManagerRegistry.Create;
   Registry.RegisterManager(CoreManager);
   Registry.RegisterManager(ListenManager);
-  const LateAnswers = TMCPTestLogWatch.Create(LATE_ANSWER_LOG_FRAGMENT);
+  const Log = TMCPTestLogWatch.Create;
   try
     const Output = TBytesStream.Create;
     try
       RunInto(Output, Registry, STUBBORN_LISTEN, LISTENER_DRAIN_MS);
       const AtShutdown = ReadOutput(Output);
       Gate.Release;
-      const IsDropped = LateAnswers.WaitForMatch;
+      const IsDropped = Log.WaitFor(LATE_ANSWER_LOG_FRAGMENT);
 
       AssertLineCount(AtShutdown, 1, 'a listener that does not close in time is answered');
       AssertErrorAnswer(AtShutdown, '9', SHUTTING_DOWN);
@@ -533,7 +535,7 @@ begin
       Output.Free;
     end;
   finally
-    LateAnswers.Free;
+    Log.Free;
   end;
 end;
 
@@ -640,13 +642,14 @@ end;
 procedure TStdioTransportTests.UnsetRequestStateKey_IsNotWarnedAbout;
 begin
   FHarness.Settings.RequestStateKey := '';
-  const Warnings = TMCPTestLogWatch.Create(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
+  const Log = TMCPTestLogWatch.Create;
   try
     Run([INITIALIZE]);
 
-    Assert.AreEqual(0, Warnings.MatchCount, 'a stdio server lives exactly as long as its one client');
+    const Warnings = Log.CountOf(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
+    Assert.AreEqual(0, Warnings, 'a stdio server lives exactly as long as its one client');
   finally
-    Warnings.Free;
+    Log.Free;
   end;
 end;
 

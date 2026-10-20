@@ -8,6 +8,7 @@ uses
   System.SyncObjs,
   System.JSON,
   MCPServer.Types,
+  MCPServer.Settings,
   MCPServer.Tool.Base;
 
 const
@@ -39,21 +40,30 @@ type
     function WaitUntilReturned: Boolean;
   end;
 
-  TStubbornTool = class(TMCPToolBase)
+  TArgumentlessTool = class(TMCPToolBase)
+  protected
+    function BuildSchema: TJSONObject; override;
+  end;
+
+  TStubbornTool = class(TArgumentlessTool)
   strict private
     FGate: IStubbornGate;
 
   protected
-    function BuildSchema: TJSONObject; override;
     function DoExecute(const Arguments: TJSONObject): TValue; override;
+    function Finish: TValue; virtual;
 
   public
     constructor Create(const Gate: IStubbornGate); reintroduce;
   end;
 
-  TSelfCancellingTool = class(TMCPToolBase)
+  TStubbornAskingTool = class(TStubbornTool)
   protected
-    function BuildSchema: TJSONObject; override;
+    function Finish: TValue; override;
+  end;
+
+  TSelfCancellingTool = class(TArgumentlessTool)
+  protected
     function DoExecute(const Arguments: TJSONObject): TValue; override;
 
   public
@@ -72,10 +82,21 @@ type
     function ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
   end;
 
+  TPoisonedSettings = class(TMCPSettings)
+  strict private
+    const POISON = $FF;
+    class var FPoisonedBlocks: TArray<Pointer>;
+
+  public
+    procedure FreeInstance; override;
+    class procedure ReleasePoisonedMemory; static;
+  end;
+
 implementation
 
 uses
-  MCPServer.Errors;
+  MCPServer.Errors,
+  MCPServer.Mrtr;
 
 const
   EMPTY_OBJECT_SCHEMA = '{"type":"object","properties":{},"additionalProperties":false}';
@@ -113,6 +134,13 @@ begin
   Result := (Outcome = TWaitResult.wrSignaled);
 end;
 
+{ TArgumentlessTool }
+
+function TArgumentlessTool.BuildSchema: TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(EMPTY_OBJECT_SCHEMA) as TJSONObject;
+end;
+
 { TStubbornTool }
 
 constructor TStubbornTool.Create(const Gate: IStubbornGate);
@@ -123,15 +151,24 @@ begin
   FGate        := Gate;
 end;
 
-function TStubbornTool.BuildSchema: TJSONObject;
-begin
-  Result := TJSONObject.ParseJSONValue(EMPTY_OBJECT_SCHEMA) as TJSONObject;
-end;
-
 function TStubbornTool.DoExecute(const Arguments: TJSONObject): TValue;
 begin
   FGate.Pass;
+  Result := Finish;
+end;
+
+function TStubbornTool.Finish: TValue;
+begin
   Result := TValue.From<string>('finished late');
+end;
+
+{ TStubbornAskingTool }
+
+function TStubbornAskingTool.Finish: TValue;
+begin
+  const Requests = TMCPInputRequests.Create;
+  const State = TJSONObject.Create;
+  raise EMCPInputRequired.Create(Requests, State);
 end;
 
 { TSelfCancellingTool }
@@ -141,11 +178,6 @@ begin
   inherited Create;
   FName        := SELF_CANCELLING_TOOL_NAME;
   FDescription := 'A tool that reports itself cancelled while nobody cancelled it';
-end;
-
-function TSelfCancellingTool.BuildSchema: TJSONObject;
-begin
-  Result := TJSONObject.ParseJSONValue(EMPTY_OBJECT_SCHEMA) as TJSONObject;
 end;
 
 function TSelfCancellingTool.DoExecute(const Arguments: TJSONObject): TValue;
@@ -175,6 +207,27 @@ function TStubbornListenManager.ExecuteMethod(const Method: string; const Params
 begin
   FGate.Pass;
   Result := TValue.From<TJSONObject>(TJSONObject.Create);
+end;
+
+{ TPoisonedSettings }
+
+procedure TPoisonedSettings.FreeInstance;
+begin
+  CleanupInstance;
+  {$WARN UNSAFE_CAST OFF}
+  const Block = Pointer(Self);
+  {$WARN UNSAFE_CAST ON}
+  FillChar(Block^, InstanceSize, POISON);
+  FPoisonedBlocks := FPoisonedBlocks + [Block];
+end;
+
+class procedure TPoisonedSettings.ReleasePoisonedMemory;
+begin
+  for var Block in FPoisonedBlocks do
+  begin
+    FreeMem(Block);
+  end;
+  FPoisonedBlocks := nil;
 end;
 
 end.

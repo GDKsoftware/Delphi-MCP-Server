@@ -591,13 +591,14 @@ end;
 procedure THttpTransportTests.Start_WithoutRequestStateKey_WarnsOnce;
 begin
   FSettings.RequestStateKey := '';
-  const Warnings = TMCPTestLogWatch.Create(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
+  const Log = TMCPTestLogWatch.Create;
   try
     StartServer;
 
-    Assert.AreEqual(1, Warnings.MatchCount, 'an HTTP server can be restarted or balanced, so it says so once');
+    const Warnings = Log.CountOf(TMCPRequestStateSealer.EPHEMERAL_KEY_WARNING);
+    Assert.AreEqual(1, Warnings, 'an HTTP server can be restarted or balanced, so it says so once');
   finally
-    Warnings.Free;
+    Log.Free;
   end;
 end;
 

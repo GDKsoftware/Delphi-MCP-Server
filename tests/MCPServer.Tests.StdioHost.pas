@@ -4,7 +4,9 @@ interface
 
 uses
   DUnitX.TestFramework,
-  MCPServer.StdioHost;
+  MCPServer.Settings,
+  MCPServer.StdioHost,
+  MCPServer.Tests.StdioDoubles;
 
 type
   [TestFixture]
@@ -12,6 +14,7 @@ type
   private
     FHost: TMCPStdioHost;
     function AnswerOverStdio(const Host: TMCPStdioHost; const Request: string): string;
+    procedure RunAskingToolAndFreeTheHost(const Settings: TMCPSettings; const Gate: IStubbornGate);
 
   public
     [Setup]
@@ -29,6 +32,9 @@ type
     procedure RunStdioWith_HandlerThatOutlivesTheTransport_DropsItsLateResult;
 
     [Test]
+    procedure RunStdioWith_HandlerThatOutlivesTheHostAndItsSettings_ReadsNeither;
+
+    [Test]
     procedure ServerHost_RunStdioWith_AnswersOverStdio;
   end;
 
@@ -42,16 +48,18 @@ uses
   MCPServer.Tool.Base,
   MCPServer.Host,
   MCPServer.Tool.Echo,
-  MCPServer.Tests.Support,
-  MCPServer.Tests.StdioDoubles;
+  MCPServer.Tests.Support;
 
 const
-  TOOLS_LIST     = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}';
-  ECHO_CALL      = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"over stdio"}}}';
-  STUBBORN_CALL  = '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{}}}';
-  ECHO_ANSWER    = 'Echo: over stdio';
-  FIRST_TEXT     = 'result.content[0].text';
-  SHORT_DRAIN_MS = 100;
+  TOOLS_LIST           = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}';
+  ECHO_CALL            = '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"over stdio"}}}';
+  STUBBORN_CALL        = '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{}}}';
+  STUBBORN_MODERN_CALL = '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"' + STUBBORN_TOOL_NAME + '","arguments":{},' +
+                         TMCPTestMeta.MODERN_MEMBER + '}}';
+  ECHO_ANSWER          = 'Echo: over stdio';
+  FIRST_TEXT           = 'result.content[0].text';
+  ACCESS_VIOLATION     = 'Access violation';
+  SHORT_DRAIN_MS       = 100;
 
 { TStdioHostTests }
 
@@ -84,6 +92,23 @@ begin
     end;
   finally
     Input.Free;
+  end;
+end;
+
+procedure TStdioHostTests.RunAskingToolAndFreeTheHost(const Settings: TMCPSettings; const Gate: IStubbornGate);
+begin
+  try
+    Settings.StdioShutdownDrainMs := SHORT_DRAIN_MS;
+    const Host = TMCPStdioHost.Create(Settings);
+    try
+      const AskingTool: IMCPTool = TStubbornAskingTool.Create(Gate);
+      Host.AddTool(AskingTool);
+      AnswerOverStdio(Host, STUBBORN_MODERN_CALL);
+    finally
+      Host.Free;
+    end;
+  finally
+    Settings.Free;
   end;
 end;
 
@@ -121,12 +146,12 @@ begin
   const Gate: IStubbornGate = TStubbornGate.Create;
   const StubbornTool: IMCPTool = TStubbornTool.Create(Gate);
   FHost.AddTool(StubbornTool);
-  const LateAnswers = TMCPTestLogWatch.Create(LATE_ANSWER_LOG_FRAGMENT);
+  const Log = TMCPTestLogWatch.Create;
   try
     const Answer = AnswerOverStdio(FHost, STUBBORN_CALL);
     Gate.Release;
     const HasReturned = Gate.WaitUntilReturned;
-    const IsDropped = LateAnswers.WaitForMatch;
+    const IsDropped = Log.WaitFor(LATE_ANSWER_LOG_FRAGMENT);
 
     const Json = TMCPTestJson.ParseObject(Answer);
     try
@@ -138,7 +163,29 @@ begin
       Json.Free;
     end;
   finally
-    LateAnswers.Free;
+    Log.Free;
+  end;
+end;
+
+procedure TStdioHostTests.RunStdioWith_HandlerThatOutlivesTheHostAndItsSettings_ReadsNeither;
+begin
+  const Gate: IStubbornGate = TStubbornGate.Create;
+  const Log = TMCPTestLogWatch.Create;
+  try
+    const Settings = TPoisonedSettings.CreateDefaults;
+    try
+      RunAskingToolAndFreeTheHost(Settings, Gate);
+      Gate.Release;
+      const IsDropped = Log.WaitFor(LATE_ANSWER_LOG_FRAGMENT);
+      const Violations = Log.CountOf(ACCESS_VIOLATION);
+
+      Assert.IsTrue(IsDropped, 'the handler asked for input after the host and its settings were gone');
+      Assert.AreEqual(0, Violations, 'building that late answer reads nothing the host or its settings held');
+    finally
+      TPoisonedSettings.ReleasePoisonedMemory;
+    end;
+  finally
+    Log.Free;
   end;
 end;
 

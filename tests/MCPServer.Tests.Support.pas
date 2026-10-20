@@ -30,17 +30,16 @@ type
 
   TMCPTestLogWatch = class
   strict private
-    FFragment: string;
-    FMatchCount: Integer;
-    FMatched: TEvent;
+    FLock: TCriticalSection;
+    FLines: TArray<string>;
     procedure Observe(const Message: string);
 
   public
-    constructor Create(const Fragment: string);
+    constructor Create;
     destructor Destroy; override;
 
-    function WaitForMatch(const TimeoutMs: Cardinal = TMCPTestWait.DEFAULT_TIMEOUT_MS): Boolean;
-    function MatchCount: Integer;
+    function CountOf(const Fragment: string): Integer;
+    function WaitFor(const Fragment: string; const TimeoutMs: Cardinal = TMCPTestWait.DEFAULT_TIMEOUT_MS): Boolean;
   end;
 
 implementation
@@ -80,40 +79,55 @@ end;
 
 { TMCPTestLogWatch }
 
-constructor TMCPTestLogWatch.Create(const Fragment: string);
+constructor TMCPTestLogWatch.Create;
 begin
   inherited Create;
-  FFragment := Fragment;
-  FMatched  := TEvent.Create(nil, True, False, '');
+  FLock := TCriticalSection.Create;
   TLogger.OnLogMessage := Observe;
 end;
 
 destructor TMCPTestLogWatch.Destroy;
 begin
   TLogger.OnLogMessage := nil;
-  FMatched.Free;
+  FLock.Free;
   inherited;
 end;
 
-function TMCPTestLogWatch.WaitForMatch(const TimeoutMs: Cardinal): Boolean;
+function TMCPTestLogWatch.CountOf(const Fragment: string): Integer;
 begin
-  const Outcome = FMatched.WaitFor(TimeoutMs);
-  Result := (Outcome = TWaitResult.wrSignaled);
+  Result := 0;
+  FLock.Enter;
+  try
+    for var Line in FLines do
+    begin
+      const IsMatch = Line.Contains(Fragment);
+      if IsMatch then
+        Inc(Result);
+    end;
+  finally
+    FLock.Leave;
+  end;
 end;
 
-function TMCPTestLogWatch.MatchCount: Integer;
+function TMCPTestLogWatch.WaitFor(const Fragment: string; const TimeoutMs: Cardinal): Boolean;
 begin
-  Result := AtomicCmpExchange(FMatchCount, 0, 0);
+  Result := TMCPTestWait.UntilTrue(
+    function: Boolean
+    begin
+      const Matches = CountOf(Fragment);
+      Result := (Matches > 0);
+    end,
+    TimeoutMs);
 end;
 
 procedure TMCPTestLogWatch.Observe(const Message: string);
 begin
-  const IsMatch = Message.Contains(FFragment);
-  if not IsMatch then
-    Exit;
-
-  AtomicIncrement(FMatchCount);
-  FMatched.SetEvent;
+  FLock.Enter;
+  try
+    FLines := FLines + [Message];
+  finally
+    FLock.Leave;
+  end;
 end;
 
 end.

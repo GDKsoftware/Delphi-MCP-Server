@@ -61,6 +61,12 @@ type
 
     [Test]
     procedure ScopesSupportedList_TwoScopes_ReturnsBothScopes;
+
+    [Test]
+    procedure Clone_CopiesEverySetting;
+
+    [Test]
+    procedure Clone_ChangedCopy_LeavesTheOriginalAlone;
   end;
 
 implementation
@@ -335,6 +341,49 @@ begin
     Assert.AreEqual('mcp:write', Scopes[1]);
   finally
     Settings.Free;
+  end;
+end;
+
+procedure TMCPSettingsTest.Clone_CopiesEverySetting;
+begin
+  const Original = TMCPSettings.Create(TempSettingsPath, False);
+  try
+    Original.ServerName := 'cloned';
+    Original.Port := 8124;
+    Original.LenientModernPing := True;
+    Original.StdioShutdownDrainMs := 15000;
+    Original.RequestStateKey := 'secret';
+
+    const Cloned = Original.Clone;
+    try
+      Assert.AreEqual('cloned', Cloned.ServerName);
+      Assert.AreEqual<Integer>(8124, Cloned.Port);
+      Assert.IsTrue(Cloned.LenientModernPing);
+      Assert.AreEqual<Integer>(15000, Cloned.StdioShutdownDrainMs);
+      Assert.AreEqual('secret', Cloned.RequestStateKey);
+      Assert.AreEqual(Original.SettingsFile, Cloned.SettingsFile);
+    finally
+      Cloned.Free;
+    end;
+  finally
+    Original.Free;
+  end;
+end;
+
+procedure TMCPSettingsTest.Clone_ChangedCopy_LeavesTheOriginalAlone;
+begin
+  const Original = TMCPSettings.Create(TempSettingsPath, False);
+  try
+    const Cloned = Original.Clone;
+    try
+      Cloned.ServerName := 'changed copy';
+
+      Assert.AreNotEqual('changed copy', Original.ServerName);
+    finally
+      Cloned.Free;
+    end;
+  finally
+    Original.Free;
   end;
 end;
 
