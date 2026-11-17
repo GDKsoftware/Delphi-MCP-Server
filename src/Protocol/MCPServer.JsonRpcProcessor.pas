@@ -68,6 +68,7 @@ type
       const Hints: TMCPTransportHints);
     function ProcessNotification(const Method: string; const Params: TJSONObject;
       const Hints: TMCPTransportHints): TMCPProcessResult;
+    procedure RunNotification(const Method: string; const Params: TJSONObject);
     procedure HandleCancelled(const Params: TJSONObject; const Hints: TMCPTransportHints);
     function CancelledResult(Era: TMCPProtocolEra): TMCPProcessResult;
     function DispatchRequest(const Context: IMCPRequestContext; const Params: TJSONObject): TValue;
@@ -126,6 +127,8 @@ const
   INPUT_REQUIRED_METHODS: array[0..2] of string = (MCP_METHOD_TOOLS_CALL, MCP_METHOD_RESOURCES_READ, MCP_METHOD_PROMPTS_GET);
   PARAM_INPUT_RESPONSES = 'inputResponses';
   PARAM_REQUEST_STATE = 'requestState';
+  NOTIFICATION_METHOD_PREFIX = 'notifications/';
+  MESSAGE_REQUEST_WITHOUT_ID = 'Ignored %s: it is a request method and arrived without an id';
   MESSAGE_NOTIFICATION_RECEIVED = 'Notification received: %s';
   MESSAGE_NOTIFICATION_FAILED = 'Notification %s failed: %s';
 
@@ -479,12 +482,16 @@ end;
 function TMCPJsonRpcProcessor.ProcessNotification(const Method: string; const Params: TJSONObject;
   const Hints: TMCPTransportHints): TMCPProcessResult;
 begin
-  Result := Default(TMCPProcessResult);
-  Result.HttpStatus := HTTP_STATUS_ACCEPTED;
-  Result.Era := EraFromHeaders(Hints);
-  Result.IsNotification := True;
+  Result := AcceptedResult(EraFromHeaders(Hints));
 
   const LoggedMethod = TLogger.ExternalText(Method);
+  const IsNotificationMethod = Method.StartsWith(NOTIFICATION_METHOD_PREFIX);
+  if not IsNotificationMethod then
+  begin
+    TLogger.Warning(MESSAGE_REQUEST_WITHOUT_ID, [LoggedMethod]);
+    Exit;
+  end;
+
   TLogger.Info(MESSAGE_NOTIFICATION_RECEIVED, [LoggedMethod]);
 
   const IsMcpMethodNotificationsCancelled = (Method = MCP_METHOD_NOTIFICATIONS_CANCELLED);
@@ -494,6 +501,11 @@ begin
     Exit;
   end;
 
+  RunNotification(Method, Params);
+end;
+
+procedure TMCPJsonRpcProcessor.RunNotification(const Method: string; const Params: TJSONObject);
+begin
   var Manager: IMCPCapabilityManager := nil;
   if Assigned(FManagerRegistry) then
     Manager := FManagerRegistry.GetManagerForMethod(Method);
@@ -501,10 +513,16 @@ begin
     Exit;
 
   try
-    Manager.ExecuteMethod(Method, Params);
+    const IgnoredResult = Manager.ExecuteMethod(Method, Params);
+    if IgnoredResult.IsObject then
+    begin
+      const IgnoredObject = IgnoredResult.AsObject;
+      IgnoredObject.Free;
+    end;
   except
     on E: Exception do
     begin
+      const LoggedMethod = TLogger.ExternalText(Method);
       const LoggedReason = TLogger.ExternalText(E.Message);
       TLogger.Error(MESSAGE_NOTIFICATION_FAILED, [LoggedMethod, LoggedReason]);
     end;
