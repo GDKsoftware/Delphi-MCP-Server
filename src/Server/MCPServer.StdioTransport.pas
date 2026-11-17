@@ -210,11 +210,13 @@ begin
     Exit;
   if Assigned(Context) then
     Context.Cancel;
+  const LoggedRequestId = TLogger.ExternalText(RequestId.AsText);
+  const LoggedReason = TLogger.ExternalText(Reason);
   const HasReason = (Reason <> '');
   if HasReason then
-    TLogger.Info(Format('Request %s cancelled by the client: %s', [RequestId.AsText, Reason]))
+    TLogger.Info('Request %s cancelled by the client: %s', [LoggedRequestId, LoggedReason])
   else
-    TLogger.Info(Format('Request %s cancelled by the client', [RequestId.AsText]));
+    TLogger.Info('Request %s cancelled by the client', [LoggedRequestId]);
 end;
 
 function TMCPStdioRequestTracker.CancelAll(const Reason: string): Integer;
@@ -301,7 +303,7 @@ begin
   if Body = '' then
     Exit;
   FWriter.Send(Body);
-  TLogger.Debug('Sent: ' + TLogger.RedactJson(Body));
+  TLogger.DebugJson('Sent', Body);
 end;
 
 procedure TMCPStdioTransport.SendError(const RequestId: TMCPRequestId; Code: Integer; const Message: string);
@@ -379,9 +381,14 @@ begin
   try
     var Outcome := FJsonRpcProcessor.ProcessRequestEx(Message, Hints);
     if Outcome.Cancelled then
-      TLogger.Info('No response for cancelled request ' + RequestId.AsText)
+    begin
+      const LoggedRequestId = TLogger.ExternalText(RequestId.AsText);
+      TLogger.Info('No response for cancelled request %s', [LoggedRequestId]);
+    end
     else
+    begin
       SendResponse(Outcome.Body);
+    end;
   finally
     FTracker.Release(RequestId);
     Message.Free;
@@ -505,7 +512,7 @@ begin
         else
           if Line.Text.Trim = '' then
             Continue;
-          TLogger.Debug('Received: ' + TLogger.RedactJson(Line.Text));
+          TLogger.DebugJson('Received', Line.Text);
           DispatchLine(TJSONObject.ParseJSONValue(Line.Text));
         end;
       except

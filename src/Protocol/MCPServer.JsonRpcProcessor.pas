@@ -126,6 +126,8 @@ const
   INPUT_REQUIRED_METHODS: array[0..2] of string = (MCP_METHOD_TOOLS_CALL, MCP_METHOD_RESOURCES_READ, MCP_METHOD_PROMPTS_GET);
   PARAM_INPUT_RESPONSES = 'inputResponses';
   PARAM_REQUEST_STATE = 'requestState';
+  MESSAGE_NOTIFICATION_RECEIVED = 'Notification received: %s';
+  MESSAGE_NOTIFICATION_FAILED = 'Notification %s failed: %s';
 
 { TMCPJsonRpcProcessor }
 
@@ -482,7 +484,8 @@ begin
   Result.Era := EraFromHeaders(Hints);
   Result.IsNotification := True;
 
-  TLogger.Info('Notification received: ' + Method);
+  const LoggedMethod = TLogger.ExternalText(Method);
+  TLogger.Info(MESSAGE_NOTIFICATION_RECEIVED, [LoggedMethod]);
 
   const IsMcpMethodNotificationsCancelled = (Method = MCP_METHOD_NOTIFICATIONS_CANCELLED);
   if IsMcpMethodNotificationsCancelled then
@@ -501,7 +504,10 @@ begin
     Manager.ExecuteMethod(Method, Params);
   except
     on E: Exception do
-      TLogger.Error('Notification ' + Method + ' failed: ' + E.Message);
+    begin
+      const LoggedReason = TLogger.ExternalText(E.Message);
+      TLogger.Error(MESSAGE_NOTIFICATION_FAILED, [LoggedMethod, LoggedReason]);
+    end;
   end;
 end;
 
@@ -523,7 +529,10 @@ begin
     Reason := TJSONString(ReasonValue).Value;
 
   if not Hints.Tracker.TryCancel(RequestId, Reason) then
-    TLogger.Debug('notifications/cancelled for unknown or finished request ' + RequestId.AsText);
+  begin
+    const LoggedRequestId = TLogger.ExternalText(RequestId.AsText);
+    TLogger.Debug('notifications/cancelled for unknown or finished request %s', [LoggedRequestId]);
+  end;
 end;
 
 function TMCPJsonRpcProcessor.CancelledResult(Era: TMCPProtocolEra): TMCPProcessResult;
@@ -726,7 +735,8 @@ end;
 function TMCPJsonRpcProcessor.ErrorResult(Era: TMCPProtocolEra; const RequestId: TMCPRequestId;
   const Error: EMCPError): TMCPProcessResult;
 begin
-  TLogger.Error('Error processing request: ' + Error.Message);
+  const LoggedMessage = TLogger.ExternalText(Error.Message);
+  TLogger.Error('Error processing request: %s', [LoggedMessage]);
   var RequiredScope := '';
   const IsHttpStatusForbidden = (Error.HttpStatus = HTTP_STATUS_FORBIDDEN);
   if IsHttpStatusForbidden then

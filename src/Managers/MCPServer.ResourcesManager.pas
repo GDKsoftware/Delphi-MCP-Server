@@ -437,7 +437,8 @@ begin
     raise EMCPError.InvalidParams('params.uri is required and must be a non-empty string');
   var URI := TJSONString(URIValue).Value;
 
-  TLogger.Info('MCP ReadResource called for URI: ' + URI);
+  const LoggedUri = TLogger.ExternalText(URI);
+  TLogger.Info('MCP ReadResource called for URI: %s', [LoggedUri]);
 
   Resource := FindResource(URI);
   if not Assigned(Resource) then

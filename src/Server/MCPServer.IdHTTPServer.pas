@@ -526,7 +526,8 @@ begin
   if TMCPOriginPolicy.IsAllowed(Origin, AllowedOrigins) then
     Exit(True);
 
-  TLogger.Warning('Origin not allowed: ' + Origin);
+  const LoggedOrigin = TLogger.ExternalText(Origin);
+  TLogger.Warning('Origin not allowed: %s', [LoggedOrigin]);
   SendJsonRpcError(ResponseInfo, HTTP_FORBIDDEN, JSONRPC_INVALID_REQUEST, 'Origin not allowed');
   Result := False;
 end;
@@ -536,7 +537,8 @@ begin
   if not Assigned(FSettings) or TMCPHostPolicy.IsAllowed(RequestInfo.Host, FSettings.AllowedHostList) then
     Exit(True);
 
-  TLogger.Warning('Host not allowed: ' + RequestInfo.Host);
+  const LoggedHost = TLogger.ExternalText(RequestInfo.Host);
+  TLogger.Warning('Host not allowed: %s', [LoggedHost]);
   SendJsonRpcError(ResponseInfo, HTTP_FORBIDDEN, JSONRPC_INVALID_REQUEST, 'Host not allowed');
   Result := False;
 end;
@@ -733,9 +735,9 @@ procedure TMCPIdHTTPServer.HandlePostRequest(Context: TIdContext; RequestInfo: T
   ResponseInfo: TIdHTTPResponseInfo; const Principal: TMCPPrincipal);
 begin
   const RequestBody = ReadBody(RequestInfo);
-  TLogger.Debug('Request: ' + TLogger.RedactJson(RequestBody));
   if not IsBodyWithinLimits(RequestInfo, ResponseInfo, RequestBody) then
     Exit;
+  TLogger.DebugJson('Request', RequestBody);
 
   const AcceptsEventStream = TMCPAcceptHeader.Accepts(HeaderValue(RequestInfo, HEADER_ACCEPT), MEDIA_TYPE_EVENT_STREAM);
   var Hints := BuildTransportHints(RequestInfo);
@@ -763,7 +765,7 @@ begin
   const IsStreamed = (Assigned(Stream) and Stream.Opened);
   if IsStreamed then
   begin
-    TLogger.Debug('Response (streamed): ' + TLogger.RedactJson(Outcome.Body));
+    TLogger.DebugJson('Response (streamed)', Outcome.Body);
     Stream.Finish(Outcome.Body);
     Exit;
   end;
@@ -830,7 +832,7 @@ begin
     Exit;
   end;
 
-  TLogger.Debug('Response: ' + TLogger.RedactJson(Outcome.Body));
+  TLogger.DebugJson('Response', Outcome.Body);
 
   const AsEventStream = ((Outcome.HttpStatus = HTTP_STATUS_OK) and AcceptsEventStream);
   if AsEventStream then

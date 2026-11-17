@@ -199,7 +199,8 @@ begin
   if not (ArgumentValueValue is TJSONString) then
     raise EMCPError.InvalidParams('params.argument.value is required and must be a string');
 
-  TLogger.Info('MCP Complete called for argument: ' + TJSONString(ArgumentNameValue).Value);
+  const LoggedArgumentName = TLogger.ExternalText(TJSONString(ArgumentNameValue).Value);
+  TLogger.Info('MCP Complete called for argument: %s', [LoggedArgumentName]);
 
   var Target := ResolveTarget(TJSONObject(RefValue), Era);
   var Completion: TMCPCompletion;
