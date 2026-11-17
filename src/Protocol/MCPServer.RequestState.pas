@@ -12,18 +12,30 @@ type
     const DEFAULT_TTL_SECONDS = 600;
     const TOKEN_VERSION = 1;
   strict private
+    type
+      TMember = record
+        Name: string;
+        Position: Integer;
+        Value: TJSONValue;
+      end;
+  strict private
     FKey: TBytes;
     FTtlSeconds: Integer;
     FKeyIsEphemeral: Boolean;
     function Signature(const Payload: TBytes): TBytes;
     class function QuotedName(const Value: string): string; static;
     class function CanonicalJson(const Value: TJSONValue): string; static;
+    class function CanonicalObject(const Source: TJSONObject): string; static;
+    class function MembersByName(const Source: TJSONObject): TArray<TMember>; static;
+    class function CanonicalArray(const Source: TJSONArray): string; static;
     class function TryDecodeBase64Url(const Text: string; out Bytes: TBytes): Boolean; static;
   public
     constructor Create(const Key: string; TtlSeconds: Integer = DEFAULT_TTL_SECONDS);
 
     function Seal(const State: TJSONObject; const Method, ArgumentDigest, Principal: string): string;
-    function Open(const Token, Method, ArgumentDigest, Principal: string): TJSONObject;
+    function Open(const Token, Method, ArgumentDigest, Principal: string): TJSONObject; overload;
+    function Open(const Token, Method: string; const ArgumentDigest: TFunc<string>;
+      const Principal: string): TJSONObject; overload;
 
     class function DigestOf(const Params: TJSONObject): string; static;
 
@@ -110,60 +122,85 @@ end;
 class function TMCPRequestStateSealer.CanonicalJson(const Value: TJSONValue): string;
 begin
   if Value is TJSONObject then
-  begin
-    var Names := TList<string>.Create;
-    try
-      for var Pair in TJSONObject(Value) do
-      begin
-        Names.Add(Pair.JsonString.Value);
-      end;
-      Names.Sort(TComparer<string>.Construct(
-        function(const Left, Right: string): Integer
-        begin
-          Result := CompareStr(Left, Right);
-        end));
-      var Parts := TStringBuilder.Create;
-      try
-        Parts.Append('{');
-        for var I := 0 to Names.Count - 1 do
-        begin
-          if I > 0 then
-            Parts.Append(',');
-          const Member = TJSONObject(Value).GetValue(Names[I]);
-          Parts.Append(QuotedName(Names[I]));
-          Parts.Append(':');
-          Parts.Append(CanonicalJson(Member));
-        end;
-        Parts.Append('}');
-        Result := Parts.ToString;
-      finally
-        Parts.Free;
-      end;
-    finally
-      Names.Free;
-    end;
-  end
+    Result := CanonicalObject(TJSONObject(Value))
   else if Value is TJSONArray then
-  begin
-    var Parts := TStringBuilder.Create;
-    try
-      Parts.Append('[');
-      for var I := 0 to TJSONArray(Value).Count - 1 do
-      begin
-        if I > 0 then
-          Parts.Append(',');
-        Parts.Append(CanonicalJson(TJSONArray(Value).Items[I]));
-      end;
-      Parts.Append(']');
-      Result := Parts.ToString;
-    finally
-      Parts.Free;
-    end;
-  end
+    Result := CanonicalArray(TJSONArray(Value))
   else if Assigned(Value) then
     Result := Value.ToJSON
   else
     Result := 'null';
+end;
+
+class function TMCPRequestStateSealer.CanonicalObject(const Source: TJSONObject): string;
+begin
+  const Members = MembersByName(Source);
+
+  const Parts = TStringBuilder.Create;
+  try
+    Parts.Append('{');
+    var FirstValueOfName: TJSONValue := nil;
+    for var Index := 0 to High(Members) do
+    begin
+      const IsFirstMember = (Index = 0);
+      const RepeatsName = ((not IsFirstMember) and (Members[Index].Name = Members[Index - 1].Name));
+      if not RepeatsName then
+        FirstValueOfName := Members[Index].Value;
+
+      const Name = QuotedName(Members[Index].Name);
+      const Value = CanonicalJson(FirstValueOfName);
+      if not IsFirstMember then
+        Parts.Append(',');
+      Parts.Append(Name);
+      Parts.Append(':');
+      Parts.Append(Value);
+    end;
+    Parts.Append('}');
+    Result := Parts.ToString;
+  finally
+    Parts.Free;
+  end;
+end;
+
+class function TMCPRequestStateSealer.MembersByName(const Source: TJSONObject): TArray<TMember>;
+begin
+  SetLength(Result, Source.Count);
+  for var Position := 0 to Source.Count - 1 do
+  begin
+    const Pair = Source.Pairs[Position];
+    Result[Position].Name     := Pair.JsonString.Value;
+    Result[Position].Position := Position;
+    Result[Position].Value    := Pair.JsonValue;
+  end;
+
+  const ByNameThenPosition = TComparer<TMember>.Construct(
+    function(const Left, Right: TMember): Integer
+    begin
+      Result := CompareStr(Left.Name, Right.Name);
+      const HasSameName = (Result = 0);
+      if HasSameName then
+        Result := Left.Position - Right.Position;
+    end);
+  TArray.Sort<TMember>(Result, ByNameThenPosition);
+end;
+
+class function TMCPRequestStateSealer.CanonicalArray(const Source: TJSONArray): string;
+begin
+  const Parts = TStringBuilder.Create;
+  try
+    Parts.Append('[');
+    for var Index := 0 to Source.Count - 1 do
+    begin
+      const IsFirstItem = (Index = 0);
+      const Item = CanonicalJson(Source.Items[Index]);
+      if not IsFirstItem then
+        Parts.Append(',');
+      Parts.Append(Item);
+    end;
+    Parts.Append(']');
+    Result := Parts.ToString;
+  finally
+    Parts.Free;
+  end;
 end;
 
 class function TMCPRequestStateSealer.DigestOf(const Params: TJSONObject): string;
@@ -211,6 +248,17 @@ begin
 end;
 
 function TMCPRequestStateSealer.Open(const Token, Method, ArgumentDigest, Principal: string): TJSONObject;
+begin
+  const KnownDigest: TFunc<string> =
+    function: string
+    begin
+      Result := ArgumentDigest;
+    end;
+  Result := Open(Token, Method, KnownDigest, Principal);
+end;
+
+function TMCPRequestStateSealer.Open(const Token, Method: string; const ArgumentDigest: TFunc<string>;
+  const Principal: string): TJSONObject;
 var
   PayloadBytes, SignatureBytes: TBytes;
 begin
@@ -234,7 +282,9 @@ begin
       raise EMCPError.InvalidParams('requestState has an unsupported version');
     if Payload.GetValue<string>(PAYLOAD_METHOD, '') <> Method then
       raise EMCPError.InvalidParams('requestState belongs to another method');
-    if Payload.GetValue<string>(PAYLOAD_DIGEST, '') <> ArgumentDigest then
+    const SealedDigest = Payload.GetValue<string>(PAYLOAD_DIGEST, '');
+    const IsSameRequest = (SealedDigest = ArgumentDigest());
+    if not IsSameRequest then
       raise EMCPError.InvalidParams('requestState belongs to another request');
     if Payload.GetValue<string>(PAYLOAD_PRINCIPAL, '') <> Principal then
       raise EMCPError.InvalidParams('requestState belongs to another principal');

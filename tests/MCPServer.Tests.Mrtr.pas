@@ -37,6 +37,28 @@ type
     procedure DigestOf_IgnoresMetaInputResponsesAndRequestState;
 
     [Test]
+    [TestCase('empty object', '{}|44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a', '|')]
+    [TestCase('nested members out of order',
+      '{"name":"t","arguments":{"b":1,"a":[1,2]}}|3a24e56fd40b43449c28e2c8def643b1125e1084a051b1c52ccb46acb90a3dff', '|')]
+    [TestCase('excluded members, escapes, literals and an empty name',
+      '{"z":null,"name":"t\n/x","_meta":{"x":1},"arguments":{"B":true,"a":[{"y":2,"x":1.50},"s"],"":false},"requestState":"s"}' +
+      '|6b99946abc4554303ffa3759881295a75ac513788753db8996232ce91c91657f', '|')]
+    [TestCase('repeated member names',
+      '{"a":1,"a":2,"b":{"k":"v","k":"w"}}|0dd6bcf2293a6f47bd6aeb26eeb27f60dc3369184da486f12472d6dcd638347d', '|')]
+    [TestCase('names in ordinal order',
+      '{"b":1,"A":2,"a":3,"~":4,"aa":5,"a/b":[]}|804337b4fc2dae4315c75f3928025d65c2077af11d22fe2c4ebf5e4b85bcf300', '|')]
+    procedure DigestOf_KnownParams_KeepsItsDigest(const ParamsJson, Expected: string);
+
+    [Test]
+    procedure DigestOf_NoParams_EqualsEmptyParams;
+
+    [Test]
+    procedure Open_BrokenSignature_DoesNotAskForTheDigest;
+
+    [Test]
+    procedure Open_ValidToken_AsksForTheDigestOnce;
+
+    [Test]
     procedure EmptyKey_IsEphemeral;
 
     [Test]
@@ -269,6 +291,78 @@ begin
     Plain.Free;
     Reordered.Free;
     Different.Free;
+  end;
+end;
+
+procedure TRequestStateSealerTests.DigestOf_KnownParams_KeepsItsDigest(const ParamsJson, Expected: string);
+begin
+  const Params = TJSONObject.ParseJSONValue(ParamsJson) as TJSONObject;
+  try
+    const Actual = TMCPRequestStateSealer.DigestOf(Params);
+
+    Assert.AreEqual(Expected, Actual);
+  finally
+    Params.Free;
+  end;
+end;
+
+procedure TRequestStateSealerTests.DigestOf_NoParams_EqualsEmptyParams;
+begin
+  const EmptyParams = TJSONObject.Create;
+  try
+    const Expected = TMCPRequestStateSealer.DigestOf(EmptyParams);
+
+    const Actual = TMCPRequestStateSealer.DigestOf(nil);
+
+    Assert.AreEqual(Expected, Actual);
+  finally
+    EmptyParams.Free;
+  end;
+end;
+
+procedure TRequestStateSealerTests.Open_BrokenSignature_DoesNotAskForTheDigest;
+begin
+  const Sealer = TMCPRequestStateSealer.Create(SEALER_KEY);
+  try
+    const Token = Sealer.Seal(nil, 'tools/call', DIGEST_A, PRINCIPAL_A);
+    var DigestRequests := 0;
+    const CountedDigest: TFunc<string> =
+      function: string
+      begin
+        Inc(DigestRequests);
+        Result := DIGEST_A;
+      end;
+
+    Assert.WillRaise(
+      procedure
+      begin
+        Sealer.Open(Token + '-TAMPERED', 'tools/call', CountedDigest, PRINCIPAL_A).Free;
+      end, EMCPError);
+
+    Assert.AreEqual(0, DigestRequests);
+  finally
+    Sealer.Free;
+  end;
+end;
+
+procedure TRequestStateSealerTests.Open_ValidToken_AsksForTheDigestOnce;
+begin
+  const Sealer = TMCPRequestStateSealer.Create(SEALER_KEY);
+  try
+    const Token = Sealer.Seal(nil, 'tools/call', DIGEST_A, PRINCIPAL_A);
+    var DigestRequests := 0;
+    const CountedDigest: TFunc<string> =
+      function: string
+      begin
+        Inc(DigestRequests);
+        Result := DIGEST_A;
+      end;
+
+    Sealer.Open(Token, 'tools/call', CountedDigest, PRINCIPAL_A).Free;
+
+    Assert.AreEqual(1, DigestRequests);
+  finally
+    Sealer.Free;
   end;
 end;
 

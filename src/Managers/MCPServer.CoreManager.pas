@@ -143,8 +143,13 @@ begin
 
   var ClientName := TJSONObject(ClientInfo).GetValue(MCP_KEY_NAME);
   var ClientVersion := TJSONObject(ClientInfo).GetValue(MCP_KEY_VERSION);
-  if Assigned(ClientName) and Assigned(ClientVersion) then
-    TLogger.Info(Format('Client: %s v%s', [ClientName.Value, ClientVersion.Value]));
+  const HasNameAndVersion = (Assigned(ClientName) and Assigned(ClientVersion));
+  if not HasNameAndVersion then
+    Exit;
+
+  const LoggedName = TLogger.ExternalText(ClientName.Value);
+  const LoggedVersion = TLogger.ExternalText(ClientVersion.Value);
+  TLogger.Info('Client: %s v%s', [LoggedName, LoggedVersion]);
 end;
 
 procedure TMCPCoreManager.WarnAboutDeprecatedClientCapabilities(const Capabilities: TJSONValue);

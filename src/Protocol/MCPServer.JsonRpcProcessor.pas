@@ -68,6 +68,7 @@ type
       const Hints: TMCPTransportHints);
     function ProcessNotification(const Method: string; const Params: TJSONObject;
       const Hints: TMCPTransportHints): TMCPProcessResult;
+    procedure RunNotification(const Method: string; const Params: TJSONObject);
     procedure HandleCancelled(const Params: TJSONObject; const Hints: TMCPTransportHints);
     function CancelledResult(Era: TMCPProtocolEra): TMCPProcessResult;
     function DispatchRequest(const Context: IMCPRequestContext; const Params: TJSONObject): TValue;
@@ -126,6 +127,10 @@ const
   INPUT_REQUIRED_METHODS: array[0..2] of string = (MCP_METHOD_TOOLS_CALL, MCP_METHOD_RESOURCES_READ, MCP_METHOD_PROMPTS_GET);
   PARAM_INPUT_RESPONSES = 'inputResponses';
   PARAM_REQUEST_STATE = 'requestState';
+  NOTIFICATION_METHOD_PREFIX = 'notifications/';
+  MESSAGE_REQUEST_WITHOUT_ID = 'Ignored %s: it is a request method and arrived without an id';
+  MESSAGE_NOTIFICATION_RECEIVED = 'Notification received: %s';
+  MESSAGE_NOTIFICATION_FAILED = 'Notification %s failed: %s';
 
 { TMCPJsonRpcProcessor }
 
@@ -256,7 +261,14 @@ begin
   if not IsJsonString(Value) then
     raise EMCPError.InvalidParams(Format('params.%s must be a string', [PARAM_REQUEST_STATE]));
 
-  Result := FStateSealer.Open(TJSONString(Value).Value, Method, TMCPRequestStateSealer.DigestOf(Params), Hints.Principal);
+  const Token = TJSONString(Value).Value;
+  const Principal = Hints.Principal;
+  const DigestOfParams: TFunc<string> =
+    function: string
+    begin
+      Result := TMCPRequestStateSealer.DigestOf(Params);
+    end;
+  Result := FStateSealer.Open(Token, Method, DigestOfParams, Principal);
 end;
 
 function TMCPJsonRpcProcessor.EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
@@ -477,12 +489,17 @@ end;
 function TMCPJsonRpcProcessor.ProcessNotification(const Method: string; const Params: TJSONObject;
   const Hints: TMCPTransportHints): TMCPProcessResult;
 begin
-  Result := Default(TMCPProcessResult);
-  Result.HttpStatus := HTTP_STATUS_ACCEPTED;
-  Result.Era := EraFromHeaders(Hints);
-  Result.IsNotification := True;
+  Result := AcceptedResult(EraFromHeaders(Hints));
 
-  TLogger.Info('Notification received: ' + Method);
+  const LoggedMethod = TLogger.ExternalText(Method);
+  const IsNotificationMethod = Method.StartsWith(NOTIFICATION_METHOD_PREFIX);
+  if not IsNotificationMethod then
+  begin
+    TLogger.Warning(MESSAGE_REQUEST_WITHOUT_ID, [LoggedMethod]);
+    Exit;
+  end;
+
+  TLogger.Info(MESSAGE_NOTIFICATION_RECEIVED, [LoggedMethod]);
 
   const IsMcpMethodNotificationsCancelled = (Method = MCP_METHOD_NOTIFICATIONS_CANCELLED);
   if IsMcpMethodNotificationsCancelled then
@@ -491,6 +508,11 @@ begin
     Exit;
   end;
 
+  RunNotification(Method, Params);
+end;
+
+procedure TMCPJsonRpcProcessor.RunNotification(const Method: string; const Params: TJSONObject);
+begin
   var Manager: IMCPCapabilityManager := nil;
   if Assigned(FManagerRegistry) then
     Manager := FManagerRegistry.GetManagerForMethod(Method);
@@ -498,10 +520,19 @@ begin
     Exit;
 
   try
-    Manager.ExecuteMethod(Method, Params);
+    const IgnoredResult = Manager.ExecuteMethod(Method, Params);
+    if IgnoredResult.IsObject then
+    begin
+      const IgnoredObject = IgnoredResult.AsObject;
+      IgnoredObject.Free;
+    end;
   except
     on E: Exception do
-      TLogger.Error('Notification ' + Method + ' failed: ' + E.Message);
+    begin
+      const LoggedMethod = TLogger.ExternalText(Method);
+      const LoggedReason = TLogger.ExternalText(E.Message);
+      TLogger.Error(MESSAGE_NOTIFICATION_FAILED, [LoggedMethod, LoggedReason]);
+    end;
   end;
 end;
 
@@ -523,7 +554,10 @@ begin
     Reason := TJSONString(ReasonValue).Value;
 
   if not Hints.Tracker.TryCancel(RequestId, Reason) then
-    TLogger.Debug('notifications/cancelled for unknown or finished request ' + RequestId.AsText);
+  begin
+    const LoggedRequestId = TLogger.ExternalText(RequestId.AsText);
+    TLogger.Debug('notifications/cancelled for unknown or finished request %s', [LoggedRequestId]);
+  end;
 end;
 
 function TMCPJsonRpcProcessor.CancelledResult(Era: TMCPProtocolEra): TMCPProcessResult;
@@ -726,7 +760,8 @@ end;
 function TMCPJsonRpcProcessor.ErrorResult(Era: TMCPProtocolEra; const RequestId: TMCPRequestId;
   const Error: EMCPError): TMCPProcessResult;
 begin
-  TLogger.Error('Error processing request: ' + Error.Message);
+  const LoggedMessage = TLogger.ExternalText(Error.Message);
+  TLogger.Error('Error processing request: %s', [LoggedMessage]);
   var RequiredScope := '';
   const IsHttpStatusForbidden = (Error.HttpStatus = HTTP_STATUS_FORBIDDEN);
   if IsHttpStatusForbidden then

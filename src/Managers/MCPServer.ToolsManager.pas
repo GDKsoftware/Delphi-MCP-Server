@@ -492,7 +492,8 @@ begin
     raise EMCPError.UnknownTool(ToolName);
   CheckRequiredScopes(Tool);
 
-  TLogger.Info('MCP CallTool called for tool: ' + ToolName);
+  const LoggedToolName = TLogger.ExternalText(ToolName);
+  TLogger.Info('MCP CallTool called for tool: %s', [LoggedToolName]);
   if ShouldRunAsTask(Tool, Context) then
   begin
     const CreatedTask = CallToolAsTask(Tool, Arguments, Context);

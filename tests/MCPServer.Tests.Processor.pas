@@ -27,6 +27,27 @@ type
     property SeenCurrent: IMCPRequestContext read FSeenCurrent write FSeenCurrent;
   end;
 
+  TCountingManager = class(TInterfacedObject, IMCPCapabilityManager)
+  private
+    FCalls: Integer;
+    FReleasedResults: Integer;
+  public
+    function GetCapabilityName: string;
+    function HandlesMethod(const Method: string): Boolean;
+    function ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
+    procedure ResultReleased;
+    property Calls: Integer read FCalls;
+    property ReleasedResults: Integer read FReleasedResults;
+  end;
+
+  TTrackedResult = class
+  private
+    FOwner: TCountingManager;
+  public
+    constructor Create(const Owner: TCountingManager);
+    destructor Destroy; override;
+  end;
+
   [TestFixture]
   TProcessorTests = class
   private
@@ -81,6 +102,24 @@ type
     procedure Notification_Returns202WithoutBody;
 
     [Test]
+    [TestCase('tools/list', 'tools/list')]
+    [TestCase('tools/call', 'tools/call')]
+    [TestCase('resources/list', 'resources/list')]
+    [TestCase('resources/read', 'resources/read')]
+    [TestCase('prompts/get', 'prompts/get')]
+    [TestCase('initialize', 'initialize')]
+    [TestCase('ping', 'ping')]
+    [TestCase('server/discover', 'server/discover')]
+    [TestCase('notification in the wrong case', 'Notifications/initialized')]
+    procedure RequestMethodWithoutId_IsAcceptedButNotRun(const Method: string);
+
+    [Test]
+    procedure Notification_IsRun_AndItsResultObjectIsFreed;
+
+    [Test]
+    procedure ToolsListWithoutId_OnTheBuiltInManagers_Returns202WithoutBody;
+
+    [Test]
     procedure ClientResponse_Legacy_IsIgnored_Modern_IsRejected;
 
     [Test]
@@ -129,6 +168,43 @@ begin
   FSeenContext := Context;
   FSeenCurrent := TMCPRequestContext.Current;
   Result := TValue.From<TJSONObject>(TJSONObject.Create);
+end;
+
+{ TCountingManager }
+
+function TCountingManager.GetCapabilityName: string;
+begin
+  Result := 'counting';
+end;
+
+function TCountingManager.HandlesMethod(const Method: string): Boolean;
+begin
+  Result := True;
+end;
+
+function TCountingManager.ExecuteMethod(const Method: string; const Params: TJSONObject): TValue;
+begin
+  Inc(FCalls);
+  Result := TValue.From<TTrackedResult>(TTrackedResult.Create(Self));
+end;
+
+procedure TCountingManager.ResultReleased;
+begin
+  Inc(FReleasedResults);
+end;
+
+{ TTrackedResult }
+
+constructor TTrackedResult.Create(const Owner: TCountingManager);
+begin
+  inherited Create;
+  FOwner := Owner;
+end;
+
+destructor TTrackedResult.Destroy;
+begin
+  FOwner.ResultReleased;
+  inherited;
 end;
 
 { TProcessorTests }
@@ -321,6 +397,53 @@ end;
 procedure TProcessorTests.Notification_Returns202WithoutBody;
 begin
   var Outcome := Run('{"jsonrpc":"2.0","method":"notifications/initialized"}', TMCPTransportHints.None);
+  Assert.AreEqual('', Outcome.Body);
+  Assert.AreEqual(202, Outcome.HttpStatus);
+  Assert.IsTrue(Outcome.IsNotification);
+end;
+
+procedure TProcessorTests.RequestMethodWithoutId_IsAcceptedButNotRun(const Method: string);
+begin
+  const Counting = TCountingManager.Create;
+  const Registry: IMCPManagerRegistry = TMCPManagerRegistry.Create;
+  Registry.RegisterManager(Counting);
+  const Processor = TMCPJsonRpcProcessor.Create(Registry, FSettings);
+  try
+    const Message = Format('{"jsonrpc":"2.0","method":"%s","params":{}}', [Method]);
+
+    const Outcome = Processor.ProcessRequestEx(Message, TMCPTransportHints.None);
+
+    Assert.AreEqual(0, Counting.Calls);
+    Assert.AreEqual('', Outcome.Body);
+    Assert.AreEqual(202, Outcome.HttpStatus);
+    Assert.IsTrue(Outcome.IsNotification);
+  finally
+    Processor.Free;
+  end;
+end;
+
+procedure TProcessorTests.Notification_IsRun_AndItsResultObjectIsFreed;
+begin
+  const Counting = TCountingManager.Create;
+  const Registry: IMCPManagerRegistry = TMCPManagerRegistry.Create;
+  Registry.RegisterManager(Counting);
+  const Processor = TMCPJsonRpcProcessor.Create(Registry, FSettings);
+  try
+    const Outcome = Processor.ProcessRequestEx('{"jsonrpc":"2.0","method":"notifications/probe"}', TMCPTransportHints.None);
+
+    Assert.AreEqual(1, Counting.Calls);
+    Assert.AreEqual(1, Counting.ReleasedResults);
+    Assert.AreEqual('', Outcome.Body);
+    Assert.AreEqual(202, Outcome.HttpStatus);
+  finally
+    Processor.Free;
+  end;
+end;
+
+procedure TProcessorTests.ToolsListWithoutId_OnTheBuiltInManagers_Returns202WithoutBody;
+begin
+  const Outcome = Run('{"jsonrpc":"2.0","method":"tools/list"}', TMCPTransportHints.None);
+
   Assert.AreEqual('', Outcome.Body);
   Assert.AreEqual(202, Outcome.HttpStatus);
   Assert.IsTrue(Outcome.IsNotification);

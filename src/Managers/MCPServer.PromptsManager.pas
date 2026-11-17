@@ -309,7 +309,8 @@ begin
     if not TryGetPrompt(PromptName, Prompt) then
       raise EMCPError.UnknownPrompt(PromptName);
 
-    TLogger.Info('MCP GetPrompt called for prompt: ' + PromptName);
+    const LoggedPromptName = TLogger.ExternalText(PromptName);
+    TLogger.Info('MCP GetPrompt called for prompt: %s', [LoggedPromptName]);
 
     var Messages := TMCPPromptMessages.Create;
     try

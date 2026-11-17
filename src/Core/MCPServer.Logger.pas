@@ -61,6 +61,7 @@ type
 
     class procedure Debug(const Message: string); overload;
     class procedure Debug(const Format: string; const Args: array of const); overload;
+    class procedure DebugJson(const Caption, Json: string);
 
     class procedure Info(const Message: string); overload;
     class procedure Info(const Format: string; const Args: array of const); overload;
@@ -75,6 +76,7 @@ type
     class function IsSensitiveKey(const Key: string): Boolean;
     class procedure RedactValue(const Value: TJSONValue);
     class function RedactJson(const Json: string): string;
+    class function ExternalText(const Value: string): string;
 
     class property LogToConsole: Boolean read GetLogToConsole write SetLogToConsole;
     class property LogToFile: Boolean read GetLogToFile write SetLogToFile;
@@ -87,14 +89,21 @@ type
 
 implementation
 
-{$IFDEF MSWINDOWS}
 uses
-  Winapi.Windows;
-{$ENDIF}
+  {$IFDEF MSWINDOWS}
+  Winapi.Windows,
+  {$ENDIF}
+  System.Character;
 
 const
   LOG_LEVEL_NAMES: array[TLogLevel] of string = ('DEBUG', 'INFO', 'WARN', 'ERROR');
   LOG_LEVEL_COLORS: array[TLogLevel] of Word = (7, 15, 14, 12);
+  MAX_EXTERNAL_TEXT_LENGTH = 200;
+  EXTERNAL_TEXT_CUT_FORMAT = '%s... <cut, %d characters>';
+  CAPTIONED_FORMAT = '%s: %s';
+  CONTROL_CHARACTER_REPLACEMENT = ' ';
+  FIRST_PRINTABLE_CHARACTER = ' ';
+  DELETE_CHARACTER = #127;
 
 { TLogger }
 
@@ -257,6 +266,16 @@ begin
   Instance.DoWriteLog(TLogLevel.Debug, System.SysUtils.Format(Format, Args));
 end;
 
+class procedure TLogger.DebugJson(const Caption, Json: string);
+begin
+  const IsDebugLogged = (TLogLevel.Debug >= Instance.FMinLogLevel);
+  if not IsDebugLogged then
+    Exit;
+
+  const Redacted = RedactJson(Json);
+  Debug(CAPTIONED_FORMAT, [Caption, Redacted]);
+end;
+
 class procedure TLogger.Info(const Message: string);
 begin
   Instance.DoWriteLog(TLogLevel.Info, Message);
@@ -340,6 +359,31 @@ begin
   finally
     Parsed.Free;
   end;
+end;
+
+class function TLogger.ExternalText(const Value: string): string;
+begin
+  var KeptLength := Length(Value);
+  const IsCut = (KeptLength > MAX_EXTERNAL_TEXT_LENGTH);
+  if IsCut then
+  begin
+    KeptLength := MAX_EXTERNAL_TEXT_LENGTH;
+    const LastKept = Value[Low(Value) + KeptLength - 1];
+    const SplitsSurrogatePair = LastKept.IsHighSurrogate;
+    if SplitsSurrogatePair then
+      Dec(KeptLength);
+  end;
+
+  Result := Value.Substring(0, KeptLength);
+  for var Index := Low(Result) to High(Result) do
+  begin
+    const IsControlCharacter = ((Result[Index] < FIRST_PRINTABLE_CHARACTER) or (Result[Index] = DELETE_CHARACTER));
+    if IsControlCharacter then
+      Result[Index] := CONTROL_CHARACTER_REPLACEMENT;
+  end;
+
+  if IsCut then
+    Result := Format(EXTERNAL_TEXT_CUT_FORMAT, [Result, Length(Value)]);
 end;
 
 class function TLogger.GetLogToConsole: Boolean;

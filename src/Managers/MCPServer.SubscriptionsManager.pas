@@ -311,17 +311,18 @@ begin
   if Assigned(Notifications) and not (Notifications is TJSONObject) then
     raise EMCPError.InvalidParams(Format('params.%s must be an object', [PARAM_NOTIFICATIONS]));
 
+  const LoggedRequestId = TLogger.ExternalText(Context.RequestId.AsText);
   const Subscription = NewSubscription(Context, Notifications);
   Add(Subscription);
   try
     Acknowledge(Subscription);
-    TLogger.Info(Format('Subscription %s opened', [Context.RequestId.AsText]));
+    TLogger.Info('Subscription %s opened', [LoggedRequestId]);
     WaitUntilClosed(Context, Subscription);
   finally
     Remove(Subscription);
   end;
 
-  TLogger.Info(Format('Subscription %s closed', [Context.RequestId.AsText]));
+  TLogger.Info('Subscription %s closed', [LoggedRequestId]);
   Result := TValue.From<TJSONObject>(CompletionResult(Subscription));
 end;
 
