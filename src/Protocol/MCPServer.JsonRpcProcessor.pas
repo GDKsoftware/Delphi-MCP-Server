@@ -261,7 +261,14 @@ begin
   if not IsJsonString(Value) then
     raise EMCPError.InvalidParams(Format('params.%s must be a string', [PARAM_REQUEST_STATE]));
 
-  Result := FStateSealer.Open(TJSONString(Value).Value, Method, TMCPRequestStateSealer.DigestOf(Params), Hints.Principal);
+  const Token = TJSONString(Value).Value;
+  const Principal = Hints.Principal;
+  const DigestOfParams: TFunc<string> =
+    function: string
+    begin
+      Result := TMCPRequestStateSealer.DigestOf(Params);
+    end;
+  Result := FStateSealer.Open(Token, Method, DigestOfParams, Principal);
 end;
 
 function TMCPJsonRpcProcessor.EraFromHeaders(const Hints: TMCPTransportHints): TMCPProtocolEra;
